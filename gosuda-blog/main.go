@@ -27,7 +27,7 @@ func main() {
 	flag.StringVar(&serverURL, "server-url", "http://relaydns.gosuda.org", "RelayDNS admin base URL to fetch multiaddrs from /health")
 	flag.IntVar(&port, "port", 8081, "Local HTTP port to serve the static site")
 	flag.StringVar(&name, "name", "gosuda-blog", "Display name shown on RelayDNS server UI")
-	flag.StringVar(&dir, "dir", "dist", "Directory to serve (built static files)")
+	flag.StringVar(&dir, "dir", "./gosuda-blog/dist", "Directory to serve (built static files)")
 	flag.Parse()
 
 	if _, err := os.Stat(dir); err != nil {
