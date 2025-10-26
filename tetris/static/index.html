@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>RelayDNS Tetris</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Lobby Screen -->
+    <div id="lobbyScreen" class="screen">
+        <div class="container">
+            <h1>🎮 RelayDNS Tetris</h1>
+
+            <div class="lobby-content">
+                <div class="create-room-section">
+                    <h2>Create Room</h2>
+                    <input type="text" id="roomNameInput" placeholder="Room Name" maxlength="20">
+                    <input type="text" id="nicknameInput" placeholder="Your Nickname" maxlength="15">
+                    <select id="maxPlayersSelect">
+                        <option value="2">2 Players</option>
+                        <option value="4">4 Players</option>
+                        <option value="6">6 Players</option>
+                        <option value="8" selected>8 Players</option>
+                    </select>
+                    <button id="createRoomBtn" class="btn-primary">Create Room</button>
+                </div>
+
+                <div class="room-list-section">
+                    <h2>Available Rooms</h2>
+                    <button id="refreshRoomsBtn" class="btn-secondary">🔄 Refresh</button>
+                    <div id="roomList" class="room-list"></div>
+                </div>
+            </div>
+
+            <div id="lobbyStatus" class="status">Connecting...</div>
+        </div>
+    </div>
+
+    <!-- Room Screen -->
+    <div id="roomScreen" class="screen hidden">
+        <div class="container">
+            <div class="room-header">
+                <h1 id="roomTitle">Room</h1>
+                <button id="leaveRoomBtn" class="btn-danger">Leave Room</button>
+            </div>
+
+            <div class="room-content">
+                <div class="players-panel">
+                    <h3>Players</h3>
+                    <div id="roomPlayerList" class="room-players"></div>
+                    <button id="readyBtn" class="btn-primary">Ready</button>
+                    <button id="startGameBtn" class="btn-primary hidden" style="margin-top: 10px;">Start Game</button>
+                </div>
+
+                <div class="chat-panel">
+                    <h3>Chat</h3>
+                    <div id="chatMessages" class="chat-messages"></div>
+                    <div class="chat-input-container">
+                        <input type="text" id="chatInput" placeholder="Type a message..." maxlength="200">
+                        <button id="sendChatBtn" class="btn-secondary">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Screen -->
+    <div id="gameScreen" class="screen hidden">
+        <div class="container-game">
+            <div class="game-layout">
+                <div class="game-main">
+                    <div class="game-info">
+                        <div class="match-info">
+                            <div class="player-info" id="player1Info">
+                                <span class="player-name">Player 1</span>
+                                <span class="player-score">Score: 0</span>
+                            </div>
+                            <div class="vs">VS</div>
+                            <div class="player-info" id="player2Info">
+                                <span class="player-name">Player 2</span>
+                                <span class="player-score">Score: 0</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="canvases">
+                        <div class="canvas-container">
+                            <h4 id="myGameLabel">Your Game</h4>
+                            <canvas id="myCanvas" width="300" height="600"></canvas>
+                            <div id="myOverlay" class="game-overlay hidden">
+                                <div class="overlay-text" id="myOverlayText">Get Ready!</div>
+                            </div>
+                        </div>
+
+                        <div class="canvas-container">
+                            <h4 id="opponentGameLabel">Opponent</h4>
+                            <canvas id="opponentCanvas" width="300" height="600"></canvas>
+                        </div>
+
+                        <div class="sidebar-stats">
+                            <div class="panel">
+                                <h3>Next</h3>
+                                <canvas id="nextCanvas" width="120" height="120"></canvas>
+                            </div>
+                            <div class="panel">
+                                <h3>Score</h3>
+                                <div class="stat-value" id="score">0</div>
+                            </div>
+                            <div class="panel">
+                                <h3>Level</h3>
+                                <div class="stat-value" id="level">1</div>
+                            </div>
+                            <div class="panel">
+                                <h3>Lines</h3>
+                                <div class="stat-value" id="lines">0</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="game-sidebar">
+                    <div class="spectators-panel">
+                        <h3>Players & Spectators</h3>
+                        <div id="gamePlayerList" class="game-players"></div>
+                    </div>
+
+                    <div class="game-chat-panel">
+                        <h3>Chat</h3>
+                        <div id="gameChatMessages" class="chat-messages"></div>
+                        <div class="chat-input-container">
+                            <input type="text" id="gameChatInput" placeholder="Chat..." maxlength="200">
+                            <button id="sendGameChatBtn" class="btn-secondary">Send</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mobile Controls -->
+                <div class="mobile-controls">
+                    <div class="mobile-controls-row">
+                        <button id="mobileRotate" class="mobile-btn mobile-btn-action">↻<br><span>Rotate</span></button>
+                    </div>
+                    <div class="mobile-controls-row">
+                        <button id="mobileLeft" class="mobile-btn">⬅<br><span>Left</span></button>
+                        <button id="mobileDown" class="mobile-btn">⬇<br><span>Down</span></button>
+                        <button id="mobileRight" class="mobile-btn">➡<br><span>Right</span></button>
+                    </div>
+                    <div class="mobile-controls-row">
+                        <button id="mobileHardDrop" class="mobile-btn mobile-btn-danger">⚡<br><span>Drop</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
