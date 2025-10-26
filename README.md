@@ -1,5 +1,5 @@
 # relaydns-toys
-RelayDNS-Toys is a collection of simple demos that demonstrate how to build, publish, and interact with decentralized services through the RelayDNS network.
+relaydns-toys is a collection of simple demos that demonstrate how to build, publish, and interact with decentralized services through the [relaydns](https://github.com/gosuda/relaydns) network.
 Each toy app can be generated or modified easily using LLMs allowing rapid prototyping and experimentation.
 
 ## Quick Start (Using LLM)
@@ -11,12 +11,12 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 4) 동작을 확인합니다.
 `localhost:8081` 또는 `http://relaydns.gosuda.org`
 
-## 예제 목록
-- `simple-chat`
-- `music-recommand`
-- `http-backend` 
-- `gosuda-blog`
-- `chatter-bbs`
+## Examples
+- [simple-chat](./simple-chat/)
+- [music-recommand](./music-recommand/)
+- [http-backend](./http-backend/)
+- [gosuda-blog](./gosuda-blog/)
+- [chatter-bbs](./chatter-bbs/)
 
 ## Tips
 - 기본 RelayDNS 서버 URL은 예제마다 `http://relaydns.gosuda.org`로 되어 있습니다. 디도스 공격이 되지 않도록 유의해주세요.
