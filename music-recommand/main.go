@@ -18,7 +18,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "relaydns-paint",
-	Short: "RelayDNS demo: collaborative music recommand",
+	Short: "RelayDNS demo: collaborative youtube chat",
 	RunE:  runPaint,
 }
 
@@ -32,7 +32,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
 	flags.IntVar(&flagPort, "port", 8094, "local paint HTTP port")
-	flags.StringVar(&flagName, "name", "youtube-music", "backend display name")
+	flags.StringVar(&flagName, "name", "youtube-chat", "backend display name")
 }
 
 func main() {

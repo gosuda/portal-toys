@@ -292,6 +292,18 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     <div class="status">RelayDNS — {{.Name}}</div>
   </div>
 
+  <!-- YouTube IFrame API Loader -->
+  <script>
+  // YouTube IFrame API loader (Promise)
+  const YT_API_READY = new Promise((resolve) => {
+    if (window.YT && window.YT.Player) return resolve();
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = () => resolve();
+  });
+  </script>
+
   <script>
   (function(){
     // Elements
@@ -318,7 +330,6 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     nickEl.addEventListener('change', saveNick);
     rollBtn.addEventListener('click', ()=>{ nickEl.value = randomNick(); saveNick(); nickEl.focus(); });
 
-    // Nickname helper
     function randomNick(){
       const words = ['gopher','rust','unix','docker','kube','vim','nvim','git','linux','bsd','wasm','grpc','lambda','net','proto','dns','relay','p2p','ipfs','webrtc'];
       const w = words[Math.floor(Math.random()*words.length)];
@@ -342,7 +353,10 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     function sendQClear(){ send({t:'ytq-clear', ts: Date.now()}); }
     function sendQDel(idx, id){ send({t:'ytq-del', idx, id, ts: Date.now()}); }
 
-    // YouTube helpers
+    // --- YouTube player state ---
+    let ytPlayerObj = null;
+    let ytMountId = null;
+
     function parseYouTubeId(u){
       try{
         const url = new URL(u);
@@ -358,17 +372,39 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
         return null;
       }catch{ return null; }
     }
+
     function showYouTube(id, original){
       if(!id){ ytStatus.textContent = '잘못된 YouTube URL'; return; }
-      ytPlayer.innerHTML = '';
-      const iframe = document.createElement('iframe');
-      iframe.width = '100%'; iframe.height = '100%';
-      iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-      iframe.referrerPolicy = 'strict-origin-when-cross-origin';
-      iframe.allowFullscreen = true;
-      iframe.src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1&mute=0&rel=0&playsinline=1';
-      ytPlayer.appendChild(iframe);
-      ytStatus.innerHTML = 'URL: <a target="_blank" rel="noopener" href="' + (original?original:'#') + '">' + (original||'') + '</a> — 모든 클라이언트에서 재생됩니다 (초기에는 음소거됨).';
+      ytStatus.innerHTML = 'URL: <a target="_blank" rel="noopener" href="' + (original?original:'#') + '">' + (original||'') + '</a>';
+
+      YT_API_READY.then(()=>{
+        try { if (ytPlayerObj) { ytPlayerObj.destroy(); ytPlayerObj = null; } } catch(_){}
+        ytPlayer.innerHTML = '';
+        ytMountId = 'ytMount_' + Date.now();
+        const mount = document.createElement('div');
+        mount.id = ytMountId;
+        mount.style.width = '100%';
+        mount.style.height = '100%';
+        ytPlayer.appendChild(mount);
+
+        ytPlayerObj = new YT.Player(ytMountId, {
+          width: '100%',
+          height: '100%',
+          videoId: id,
+          playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
+          events: {
+            onReady: (e) => { try { e.target.playVideo(); } catch(_){} },
+            onStateChange: (e) => {
+              // ✅ 자동재생: 처음(위, 0) → 아래(1,2,...)로 진행
+              if (e.data === YT.PlayerState.ENDED) {
+                if (currentIdx + 1 < playlist.length) {
+                  playIndex(currentIdx + 1);
+                }
+              }
+            }
+          }
+        });
+      });
     }
 
     // Chat helpers
@@ -385,9 +421,20 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       log.appendChild(p); log.scrollTop = log.scrollHeight;
     }
 
-    // Queue state
+    // Queue state (거꾸로 정렬: 최신이 위)
     const playlist = [];
     let currentIdx = -1;
+
+    let startTimer = null;
+    function scheduleStartFromTop(){
+      if (startTimer) clearTimeout(startTimer);
+      startTimer = setTimeout(() => {
+        if (currentIdx === -1 && playlist.length > 0) {
+          playIndex(0); // 최신(맨 위)부터 시작
+        }
+      }, 120);
+    }
+
     function renderQueue(){
       qList.innerHTML = '';
       playlist.forEach((it, i)=>{
@@ -403,24 +450,45 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
         qList.appendChild(row);
       });
     }
-    function playIndex(i){ if(i<0 || i>=playlist.length) return; currentIdx = i; const it = playlist[i]; showYouTube(it.id, it.url); renderQueue(); }
+
+    function playIndex(i){
+      if(i<0 || i>=playlist.length) return;
+      currentIdx = i;
+      const it = playlist[i];
+      showYouTube(it.id, it.url);
+      renderQueue();
+    }
 
     // Receive
     sock.onmessage = (ev)=>{
-      try{ const m = JSON.parse(ev.data);
+      try{
+        const m = JSON.parse(ev.data);
         switch(m.t){
-          case 'yt': showYouTube(m.id || parseYouTubeId(m.url||''), m.url||''); break;
-          case 'ytq-add':
+          case 'yt': {
+            showYouTube(m.id || parseYouTubeId(m.url||''), m.url||'');
+            break;
+          }
+          case 'ytq-add': {
             const id = m.id || parseYouTubeId(m.url||'');
             if(!id) break;
-            playlist.push({ id, url: m.url||'', by: m.by||'anon', ts: m.ts||Date.now() });
+
+            // 거꾸로 정렬: 새 항목을 앞에 추가(최신이 위)
+            playlist.unshift({ id, url: m.url||'', by: m.by||'anon', ts: m.ts||Date.now() });
+
+            // 재생 중이면 현재 곡 유지(앞에 끼어들어 +1 보정)
+            if (currentIdx !== -1) currentIdx++;
+
             renderQueue();
+
+            // 초기 진입: 히스토리 수신 종료 후 한 번만 맨 위에서 시작
+            scheduleStartFromTop();
             break;
-          // Note: no shared playback position; ignore any external 'now/next' commands
-          case 'ytq-clear':
+          }
+          case 'ytq-clear': {
             playlist.length = 0; currentIdx = -1; renderQueue(); ytPlayer.innerHTML=''; ytStatus.textContent='';
             break;
-          case 'ytq-del':
+          }
+          case 'ytq-del': {
             let di = (typeof m.idx === 'number') ? m.idx : -1;
             if (!(di >=0 && di < playlist.length) && m.id){ di = playlist.findIndex(it => it.id === m.id); }
             if (di >= 0 && di < playlist.length) {
@@ -439,7 +507,11 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
               renderQueue();
             }
             break;
-          case 'chat': addMsg(m.name||'익명', m.text||'', m.ts||Date.now()); break;
+          }
+          case 'chat': {
+            addMsg(m.name||'익명', m.text||'', m.ts||Date.now());
+            break;
+          }
         }
       }catch{}
     };
@@ -458,10 +530,10 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     msgEl.setAttribute('inputmode','text');
     msgEl.addEventListener('keydown', (e)=>{ if(e.isComposing||e.keyCode===229){return;} if(e.key==='Enter'){ e.preventDefault(); sendBtn.click(); } });
 
-    qNext.addEventListener('click', ()=>{ if(currentIdx >= -1 && currentIdx+1 < playlist.length){ playIndex(currentIdx+1); } });
+    qNext.addEventListener('click', ()=>{ if(currentIdx + 1 < playlist.length){ playIndex(currentIdx + 1); } });
     qClear.addEventListener('click', ()=>{ if(confirm('재생 목록을 모두 비울까요?')) sendQClear(); });
 
-    // Player size controls
+    // Player size controls (원본 유지)
     function isMobile(){ return window.matchMedia('(max-width: 900px)').matches; }
     function applySize(){
       const v = parseInt(sizeEl.value,10);
@@ -479,12 +551,10 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       ytPlayer.style.aspectRatio = r;
       try{ localStorage.setItem('ytchat.ratio', r); }catch(_){ }
     }
-    // Load persisted
     try{ const s = parseInt(localStorage.getItem('ytchat.size')||'2',10); if(s){ sizeEl.value=String(s); } }catch(_){ }
     try{ const rr = localStorage.getItem('ytchat.ratio')||'16/9'; ratioEl.value = rr; }catch(_){ }
     applySize(); applyRatio();
     sizeEl.addEventListener('input', applySize);
-    // Re-apply responsive layout on viewport changes
     window.addEventListener('resize', ()=>{ applySize(); });
     ratioEl.addEventListener('change', applyRatio);
   })();
