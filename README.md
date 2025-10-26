@@ -7,6 +7,7 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 2) 프롬프트로 예제 코드를 생성합니다. (~~ 하는 프로그램을 만들어줘. 다른 예시를 참고해줘 (또는 코드 복사))
 3) 코드를 실행합니다. (`go run . --port 8081 --server-url http://relaydns.gosuda.org --name my-demo`)
 4) 동작을 확인합니다. (`localhost:8081` 또는 `http://relaydns.gosuda.org`)
+5) 잘 돌아가면 저장소에 푸시합니다.
 
 ## Examples
 - [simple-chat](./simple-chat/)
