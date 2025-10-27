@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog/log"
 	sdk "github.com/gosuda/relaydns/sdk/go"
+	"github.com/rs/zerolog/log"
 )
 
 func main() {
@@ -50,4 +50,3 @@ func main() {
 	log.Info().Msg("[client] shutdown complete")
 	time.Sleep(time.Second)
 }
-

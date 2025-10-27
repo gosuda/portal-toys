@@ -74,15 +74,15 @@ type RoomInfo struct {
 }
 
 type PlayerState struct {
-	ID        string     `json:"id"`
-	Nickname  string     `json:"nickname"`
-	Ready     bool       `json:"ready"`
-	Score     int        `json:"score"`
-	Level     int        `json:"level"`
-	GameOver  bool       `json:"gameOver"`
-	IsPlaying bool       `json:"isPlaying"`
-	IsWinner  bool       `json:"isWinner"`
-	Board     [][]int    `json:"board,omitempty"`
+	ID        string  `json:"id"`
+	Nickname  string  `json:"nickname"`
+	Ready     bool    `json:"ready"`
+	Score     int     `json:"score"`
+	Level     int     `json:"level"`
+	GameOver  bool    `json:"gameOver"`
+	IsPlaying bool    `json:"isPlaying"`
+	IsWinner  bool    `json:"isWinner"`
+	Board     [][]int `json:"board,omitempty"`
 }
 
 type MatchInfo struct {
@@ -99,8 +99,8 @@ type Room struct {
 	maxPlayers   int
 	inGame       bool
 	players      map[string]*Player
-	playerQueue  []string      // Order players joined
-	currentMatch [2]string      // Player IDs of current match
+	playerQueue  []string  // Order players joined
+	currentMatch [2]string // Player IDs of current match
 }
 
 // Player represents a player in a room

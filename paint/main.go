@@ -45,7 +45,7 @@ func main() {
 
 // DrawMessage represents a drawing action
 type DrawMessage struct {
-	Type   string  `json:"type"`   // "draw", "shape", "text", or "clear"
+	Type   string  `json:"type"` // "draw", "shape", "text", or "clear"
 	X      float64 `json:"x,omitempty"`
 	Y      float64 `json:"y,omitempty"`
 	PrevX  float64 `json:"prevX,omitempty"`
@@ -54,8 +54,8 @@ type DrawMessage struct {
 	StartY float64 `json:"startY,omitempty"`
 	EndX   float64 `json:"endX,omitempty"`
 	EndY   float64 `json:"endY,omitempty"`
-	Mode   string  `json:"mode,omitempty"`   // "line", "circle", "rectangle"
-	Text   string  `json:"text,omitempty"`   // for text type
+	Mode   string  `json:"mode,omitempty"` // "line", "circle", "rectangle"
+	Text   string  `json:"text,omitempty"` // for text type
 	Color  string  `json:"color,omitempty"`
 	Width  int     `json:"width,omitempty"`
 	Canvas string  `json:"canvas,omitempty"` // for initial state
@@ -180,7 +180,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 
 	// Serve static files
-	fs := http.FileServer(http.Dir("./static"))
+	fs := http.FileServer(http.Dir("./paint/static"))
 	mux.Handle("/", fs)
 	mux.HandleFunc("/ws", canvas.handleWS)
 
