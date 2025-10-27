@@ -10,11 +10,16 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 5) 잘 돌아가면 저장소에 푸시합니다.
 
 ## Examples
-- [simple-chat](./simple-chat/)
-- [music-recommand](./music-recommand/)
-- [http-backend](./http-backend/)
-- [gosuda-blog](./gosuda-blog/)
+
 - [chatter-bbs](./chatter-bbs/)
+- [doom](./doom/)
+- [gosuda-blog](./gosuda-blog/)
+- [http-backend](./http-backend/)
+- [paint](./paint/)
+- [rolling-paper](./rolling-paper/)
+- [simple-chat](./simple-chat/)
+- [tetris](./tetris/)
+- [youtube-chat](./youtube-chat/)
 
 ## Tips
 - 기본 RelayDNS 서버 URL은 예제마다 `http://relaydns.gosuda.org`로 되어 있습니다. 디도스 공격이 되지 않도록 유의해주세요.
