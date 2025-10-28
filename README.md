@@ -10,7 +10,6 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 5) 잘 돌아가면 저장소에 푸시합니다.
 
 ## Examples
-
 - [chatter-bbs](./chatter-bbs/)
 - [doom](./doom/)
 - [gosuda-blog](./gosuda-blog/)

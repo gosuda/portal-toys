@@ -101,9 +101,10 @@ func (c *Canvas) broadcast(msg DrawMessage) {
 	defer c.mu.Unlock()
 
 	// Store in history
-	if msg.Type == "draw" || msg.Type == "shape" || msg.Type == "text" {
+	switch msg.Type {
+	case "draw", "shape", "text":
 		c.history = append(c.history, msg)
-	} else if msg.Type == "clear" {
+	case "clear":
 		c.history = make([]DrawMessage, 0)
 	}
 
