@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"net"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -16,7 +18,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 var rootCmd = &cobra.Command{
@@ -33,7 +35,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
+	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8093, "local tetris HTTP port")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
 }
@@ -604,65 +606,116 @@ func (s *Server) wait() {
 }
 
 func runTetris(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		return fmt.Errorf("listen tetris: %w", err)
-	}
+	// Cancellation context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	server := newServer()
 
+	// Router: static files + websocket
 	mux := http.NewServeMux()
-	fs := http.FileServer(http.Dir("./static"))
-	mux.Handle("/", fs)
-	mux.HandleFunc("/ws", server.handleWS)
-
-	httpSrv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
+	// Serve embedded static assets
+	sub, err := fs.Sub(embeddedStatic, "static")
+	if err != nil {
+		return fmt.Errorf("embed static: %w", err)
 	}
-
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("tetris http error")
+	staticFS := http.FileServer(http.FS(sub))
+	mux.HandleFunc("/ws", server.handleWS)
+	// Handle relay prefix like /peer/{id}/...
+	mux.HandleFunc("/peer/", func(w http.ResponseWriter, r *http.Request) {
+		// Handle paths like /peer/{id} and /peer/{id}/...
+		const prefix = "/peer/"
+		rest := strings.TrimPrefix(r.URL.Path, prefix)
+		// Find first slash after token
+		slash := strings.IndexByte(rest, '/')
+		if slash == -1 {
+			// No trailing slash: redirect to add "/" so relative URLs resolve under token
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+			return
 		}
-	}()
+		// Suffix after token
+		suffix := rest[slash:]
+		// Route ws specially
+		if suffix == "/ws" {
+			server.handleWS(w, r)
+			return
+		}
+		// Rewrite to suffix for static serving
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = suffix
+		staticFS.ServeHTTP(w, r2)
+	})
+	mux.Handle("/", staticFS)
 
-	log.Info().Msgf("[tetris] local server running on :%d", flagPort)
-
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
+	// Relay client (http-backend style)
+	cred, err := sdk.NewCredential()
+	if err != nil {
+		return fmt.Errorf("new credential: %w", err)
+	}
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
+	defer client.Close()
+
+	listener, err := client.Listen(cred, flagName, []string{"tetris"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[tetris] shutting down...")
+	// Serve over relay
+	go func() {
+		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[tetris] relay http error")
+		}
+	}()
 
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[tetris] client close error")
+	// Optional local HTTP
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		log.Info().Msgf("[tetris] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[tetris] local http stopped")
+			}
+		}()
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[tetris] http server shutdown error")
-	}
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Error().Err(err).Msg("[tetris] http server shutdown error")
+			}
+		}
+		server.closeAll()
+	}()
 
-	server.closeAll()
+	<-ctx.Done()
 	server.wait()
-
 	log.Info().Msg("[tetris] shutdown complete")
 	return nil
+}
+
+//go:embed static/*
+var embeddedStatic embed.FS
+
+// stripPeerPrefix removes "/peer/{token}/" from the start of a path if present.
+func stripPeerPrefix(p string) string {
+	const prefix = "/peer/"
+	if !strings.HasPrefix(p, prefix) {
+		return p
+	}
+	rest := strings.TrimPrefix(p, prefix)
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return "/" + rest[i+1:]
+	}
+	return "/"
 }

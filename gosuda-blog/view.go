@@ -176,8 +176,6 @@ func fileServerWithSPA(dir string) http.Handler {
 	})
 }
 
-// removed duplicated HTML/CSS serving helpers in favor of serveFileWithOptionalRewrite
-
 // calcRelPrefix computes how many "../" are needed from the current cleanURLPath
 // to reach the web root (dist). cleanURLPath has no leading '/'.
 func calcRelPrefix(cleanURLPath string, isDir bool) string {

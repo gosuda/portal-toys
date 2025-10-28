@@ -3,15 +3,31 @@ package main
 import (
 	"context"
 	"database/sql"
+	"embed"
 	"encoding/json"
-	"log"
+	"fmt"
+	"io/fs"
 	"net/http"
+	"os"
+	"os/signal"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
+
+	sdk "github.com/gosuda/relaydns/sdk"
 	_ "github.com/mattn/go-sqlite3"
+)
+
+//go:embed public
+var embeddedPublic embed.FS
+
+var (
+	publicSub     fs.FS
+	staticHandler http.Handler
 )
 
 var db *sql.DB
@@ -41,44 +57,116 @@ type APIResponse struct {
 	Message string `json:"message"`
 }
 
+var rootCmd = &cobra.Command{
+	Use:   "relaydns-rolling-paper",
+	Short: "RelayDNS demo: Rolling Paper (relay HTTP backend)",
+	RunE:  runRollingPaper,
+}
+
+var (
+	flagServerURL string
+	flagPort      int
+	flagName      string
+)
+
+func init() {
+	flags := rootCmd.PersistentFlags()
+	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relay websocket URL")
+	flags.IntVar(&flagPort, "port", 3000, "local HTTP port (optional)")
+	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
+}
+
 func main() {
-	ctx := context.Background()
-
-	cli, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      "썸고롤링페이퍼",
-		TargetTCP: "127.0.0.1:3000",
-		ServerURL: "http://relaydns.gosuda.org",
-	})
-	if err != nil {
-		log.Fatal(err)
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal().Err(err).Msg("execute rolling-paper command")
 	}
+}
 
-	if err := cli.Start(ctx); err != nil {
-		log.Fatal(err)
-	}
-	defer func() { _ = cli.Close() }()
+func runRollingPaper(cmd *cobra.Command, args []string) error {
+	// Cancellation context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	// Init DB
 	initDB()
 	defer db.Close()
 
-	http.HandleFunc("/", rootHandler)
+	// HTTP mux
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", rootHandler)
 
-	const port = "3000"
-	log.Printf("rollpaper server listening on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
+	// Prepare embedded static files
+	sub, err := fs.Sub(embeddedPublic, "public")
+	if err != nil {
+		return fmt.Errorf("embed sub FS: %w", err)
 	}
+	publicSub = sub
+	staticHandler = http.FileServer(http.FS(publicSub))
+
+	// Relay client using http-backend pattern
+	cred, err := sdk.NewCredential()
+	if err != nil {
+		return fmt.Errorf("new credential: %w", err)
+	}
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
+	})
+	if err != nil {
+		return fmt.Errorf("new client: %w", err)
+	}
+	defer client.Close()
+
+	listener, err := client.Listen(cred, flagName, []string{"rolling-paper"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
+	// Serve over relay
+	go func() {
+		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[rolling-paper] relay http serve error")
+		}
+	}()
+
+	// Optional local serve
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
+		log.Info().Msgf("[rolling-paper] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[rolling-paper] local http stopped")
+			}
+		}()
+	}
+
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Warn().Err(err).Msg("[rolling-paper] local http shutdown error")
+			}
+		}
+	}()
+
+	<-ctx.Done()
+	log.Info().Msg("[rolling-paper] shutdown complete")
+	return nil
 }
 
 func initDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "./rollpaper.db")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal().Err(err).Msg("open sqlite")
 	}
 
 	if _, err = db.Exec(createTableSQL); err != nil {
-		log.Fatalf("create table: %v", err)
+		log.Fatal().Err(err).Msg("create table")
 	}
 }
 
@@ -124,7 +212,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		time.Now(),
 	)
 	if err != nil {
-		log.Printf("db insert failed: %v", err)
+		log.Error().Err(err).Msg("db insert failed")
 		sendJSONError(w, "store failed", http.StatusInternalServerError)
 		return
 	}
@@ -140,7 +228,7 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.Query("SELECT nickname, content, timestamp FROM messages ORDER BY timestamp DESC")
 	if err != nil {
-		log.Printf("db query failed: %v", err)
+		log.Error().Err(err).Msg("db query failed")
 		sendJSONError(w, "query failed", http.StatusInternalServerError)
 		return
 	}
@@ -150,7 +238,7 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var dbMsg DBMessage
 		if err := rows.Scan(&dbMsg.Nickname, &dbMsg.Content, &dbMsg.Timestamp); err != nil {
-			log.Printf("scan failed: %v", err)
+			log.Warn().Err(err).Msg("scan failed")
 			continue
 		}
 
@@ -167,7 +255,7 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(messages); err != nil {
-		log.Printf("json encode failed: %v", err)
+		log.Error().Err(err).Msg("json encode failed")
 	}
 }
 
@@ -197,9 +285,17 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.HasPrefix(r.URL.Path, "/peer/") && r.URL.Path != "/peer/" {
-		http.ServeFile(w, r, "./public/index.html")
+		// SPA fallback to embedded index.html
+		b, err := fs.ReadFile(publicSub, "index.html")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(b)
 		return
 	}
 
-	http.FileServer(http.Dir("./public")).ServeHTTP(w, r)
+	// Serve embedded static files
+	staticHandler.ServeHTTP(w, r)
 }

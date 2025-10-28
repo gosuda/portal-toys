@@ -3,23 +3,23 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-paint",
-	Short: "RelayDNS demo: collaborative youtube chat",
-	RunE:  runPaint,
+	Use:   "relaydns-youtube-chat",
+	Short: "RelayDNS demo: collaborative youtube chat (relay HTTP backend)",
+	RunE:  runYouTubeChat,
 }
 
 var (
@@ -30,64 +30,97 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
-	flags.IntVar(&flagPort, "port", 8094, "local paint HTTP port")
+	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relay websocket URL")
+	flags.IntVar(&flagPort, "port", 8094, "optional local HTTP port (0 to disable)")
 	flags.StringVar(&flagName, "name", "youtube-chat", "backend display name")
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal().Err(err).Msg("execute paint command")
+		log.Fatal().Err(err).Msg("execute youtube-chat command")
 	}
 }
 
-func runPaint(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// 1) start local HTTP backend
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		return fmt.Errorf("listen paint: %w", err)
-	}
+func runYouTubeChat(cmd *cobra.Command, args []string) error {
+	// Cancellation context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	dh := newDrawHub()
-	handler := NewHandler(flagName, dh)
-	httpSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("paint http error")
-		}
-	}()
+	baseHandler := NewHandler(flagName, dh)
 
-	// 2) advertise over RelayDNS (HTTP tunneled via server /peer route)
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
+	// Wrap to handle relay /peer/{id}/ prefix for routes
+	stripPeer := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			const prefix = "/peer/"
+			if !strings.HasPrefix(r.URL.Path, prefix) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			rest := strings.TrimPrefix(r.URL.Path, prefix)
+			if i := strings.IndexByte(rest, '/'); i >= 0 {
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = rest[i:]
+				next.ServeHTTP(w, r2)
+				return
+			}
+			// No suffix after token -> redirect to add trailing slash for relative URLs
+			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		})
+	}
+	handler := stripPeer(baseHandler)
+
+	// Relay client (http-backend style)
+	cred, err := sdk.NewCredential()
+	if err != nil {
+		return fmt.Errorf("new credential: %w", err)
+	}
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
+	defer client.Close()
+
+	listener, err := client.Listen(cred, flagName, []string{"youtube-chat"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	// wait for termination
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[paint] shutting down...")
+	// Serve over relay
+	go func() {
+		if err := http.Serve(listener, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[ytchat] relay http error")
+		}
+	}()
 
-	// Shutdown sequence
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[paint] client close error")
+	// Optional local HTTP
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		log.Info().Msgf("[ytchat] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[ytchat] local http stopped")
+			}
+		}()
 	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[paint] http server shutdown error")
-	}
-	log.Info().Msg("[paint] shutdown complete")
+
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Error().Err(err).Msg("[ytchat] http server shutdown error")
+			}
+		}
+	}()
+
+	<-ctx.Done()
+	log.Info().Msg("[ytchat] shutdown complete")
 	return nil
 }

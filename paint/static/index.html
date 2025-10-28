@@ -6,6 +6,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <title>RelayDNS Paint</title>
+    <script>
+        // Set base URL for relative paths - must be before any relative resource loads
+        const base = document.createElement('base');
+        const path = window.location.pathname;
+        // Ensure trailing slash for proper relative path resolution
+        base.href = path.endsWith('/') ? path : (path + '/');
+        document.head.appendChild(base);
+        console.log('[Paint] Base path set to:', base.href);
+    </script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
