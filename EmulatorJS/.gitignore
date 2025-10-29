@@ -1,0 +1,16 @@
+node_modules/
+package-lock.json
+yarn.lock
+roms/
+data/emulator.min.js
+data/emulator.min.css
+data/cores/*
+!data/cores/README.md
+!data/cores/core-README.md
+!data/cores/package.json
+!data/cores/.npmignore
+.DS_Store
+.vscode/*
+*.tgz
+dist/
+jsdoc/
