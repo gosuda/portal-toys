@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,7 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 func main() {
@@ -24,8 +23,8 @@ func main() {
 		dir       string
 	)
 
-	flag.StringVar(&serverURL, "server-url", "http://relaydns.gosuda.org", "RelayDNS admin base URL to fetch multiaddrs from /health")
-	flag.IntVar(&port, "port", 8081, "Local HTTP port to serve the static site")
+	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "RelayDNS relay websocket URL")
+	flag.IntVar(&port, "port", 8081, "Optional local HTTP port to serve the static site (0 to disable)")
 	flag.StringVar(&name, "name", "gosuda-blog", "Display name shown on RelayDNS server UI")
 	flag.StringVar(&dir, "dir", "./gosuda-blog/dist", "Directory to serve (built static files)")
 	flag.Parse()
@@ -34,54 +33,64 @@ func main() {
 		log.Fatal().Err(err).Str("dir", dir).Msg("serve directory not found")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Context for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 1) Start local HTTP backend serving the static directory
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to listen")
-	}
+	// 1) Build HTTP mux serving the static directory
 	mux := http.NewServeMux()
 	// Minimal health endpoint
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// Quiet favicon 404s
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	// Serve static files (with SPA friendly behavior)
 	mux.Handle("/", fileServerWithSPA(dir))
 
-	httpSrv := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	go func() {
-		log.Info().Msgf("[relaydns-proxy] serving %s on http://127.0.0.1:%d", dir, port)
-		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("http server error")
-		}
-	}()
-
-	// 2) Start RelayDNS client advertising the local backend
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      name,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", port),
-		ServerURL: serverURL,
+	// 2) Start RelayDNS client and serve over a relay listener
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{serverURL}
 	})
 	if err != nil {
 		log.Fatal().Err(err).Msg("new relaydns client")
 	}
-	if err := client.Start(ctx); err != nil {
-		log.Fatal().Err(err).Msg("start relaydns client")
+	defer client.Close()
+
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, name, []string{"http/1.1"})
+	if err != nil {
+		log.Fatal().Err(err).Msg("listen over relay")
+	}
+	go func() {
+		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("relay http serve error")
+		}
+	}()
+
+	// 3) Optional local HTTP server on --port
+	var httpSrv *http.Server
+	if port > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		log.Info().Msgf("[blog] serving %s locally at http://127.0.0.1:%d", dir, port)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("local http stopped")
+			}
+		}()
 	}
 
-	// 3) Graceful shutdown
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[relaydns-proxy] shutting down...")
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Error().Err(err).Msg("http server shutdown error")
+			}
+		}
+	}()
 
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("client close error")
-	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("http server shutdown error")
-	}
-	log.Info().Msg("[relaydns-proxy] shutdown complete")
+	<-ctx.Done()
+	log.Info().Msg("[blog] shutdown complete")
 }

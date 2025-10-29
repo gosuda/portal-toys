@@ -49,6 +49,17 @@ func rewriteHTMLToRelative(b []byte, relPrefix string) []byte {
 	b = process(reAbsSrc, "src", b)
 	out := process(reHref, "href", b)
 	out = process(reSrc, "src", out)
+	// Inject a base tag script like paint to ensure proper relative resolution under /peer/{token}
+	// Do this only if there's no existing <base ...>
+	if !strings.Contains(strings.ToLower(string(out)), "<base ") {
+		inject := `<script>(function(){var b=document.createElement('base');var p=window.location.pathname;b.href=p.endsWith('/')?p:(p+'/');document.head.appendChild(b);})();</script>`
+		// Insert after first <head>
+		outStr := string(out)
+		if strings.Contains(outStr, "<head>") {
+			outStr = strings.Replace(outStr, "<head>", "<head>"+inject, 1)
+			return []byte(outStr)
+		}
+	}
 	return out
 }
 
@@ -113,8 +124,33 @@ func serveFileWithOptionalRewrite(w http.ResponseWriter, r *http.Request, p stri
 
 func fileServerWithSPA(dir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// If under /peer/{token} without trailing slash, redirect to add '/'
+		if strings.HasPrefix(r.URL.Path, "/peer/") {
+			rest := strings.TrimPrefix(r.URL.Path, "/peer/")
+			if !strings.Contains(rest, "/") {
+				http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+				return
+			}
+		}
+		// Normalize path; if under /peer/{token}/..., strip the prefix so assets map to dir
+		effectivePath := r.URL.Path
+		if strings.HasPrefix(effectivePath, "/peer/") {
+			rest := strings.TrimPrefix(effectivePath, "/peer/")
+			if i := strings.IndexByte(rest, '/'); i >= 0 {
+				// token := rest[:i]
+				suffix := rest[i:] // includes leading '/'
+				if suffix == "" {  // exact token only
+					effectivePath = "/"
+				} else {
+					effectivePath = suffix
+				}
+			} else {
+				// no trailing slash after token: treat as root
+				effectivePath = "/"
+			}
+		}
 		// Clean URL path using POSIX rules, then convert to OS path and strip leading '/'
-		cleanURLPath := path.Clean(r.URL.Path)
+		cleanURLPath := path.Clean(effectivePath)
 		if after, ok := strings.CutPrefix(cleanURLPath, "/"); ok {
 			cleanURLPath = after
 		}
@@ -175,8 +211,6 @@ func fileServerWithSPA(dir string) http.Handler {
 		http.NotFound(w, r)
 	})
 }
-
-// removed duplicated HTML/CSS serving helpers in favor of serveFileWithOptionalRewrite
 
 // calcRelPrefix computes how many "../" are needed from the current cleanURLPath
 // to reach the web root (dist). cleanURLPath has no leading '/'.

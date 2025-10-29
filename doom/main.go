@@ -1,22 +1,19 @@
 package main
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"io/fs"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path"
 	"syscall"
-	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 //go:embed doom/public/*
@@ -24,7 +21,7 @@ var doomAssets embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "relaydns-doom",
-	Short: "RelayDNS demo: Doom in Docker (static build)",
+	Short: "RelayDNS demo: Doom (served over relay HTTP backend)",
 	RunE:  runDoom,
 }
 
@@ -36,8 +33,8 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
-	flags.IntVar(&flagPort, "port", 8096, "local Doom HTTP port")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relayserver base URL")
+	flags.IntVar(&flagPort, "port", 8096, "local port")
 	flags.StringVar(&flagName, "name", "doom", "backend display name")
 }
 
@@ -48,62 +45,51 @@ func main() {
 }
 
 func runDoom(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(cmd.Context())
-	defer cancel()
-
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
+	// 1) Create SDK client and connect to relay(s)
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
+	})
 	if err != nil {
-		return fmt.Errorf("listen doom: %w", err)
+		return fmt.Errorf("new client: %w", err)
 	}
+	defer func() {
+		if err := client.Close(); err != nil {
+			log.Warn().Err(err).Msg("[doom] client close error")
+		}
+	}()
 
+	// 2) Register lease and obtain relay listener
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	defer listener.Close()
+
+	// 4) Build HTTP handler to serve embedded Doom assets
 	staticFS, err := fs.Sub(doomAssets, "doom/public")
 	if err != nil {
 		return fmt.Errorf("static assets: %w", err)
 	}
-
 	mux := http.NewServeMux()
-	mux.Handle("/healthz", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	}))
-	fileServer := http.FileServer(http.FS(staticFS))
-	mux.Handle("/", withStaticHeaders(fileServer))
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.Handle("/", withStaticHeaders(http.FileServer(http.FS(staticFS))))
 
-	httpSrv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	go func() {
-		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
-			log.Warn().Err(err).Msg("[doom] http serve error")
-		}
-	}()
+	// 5) Serve HTTP directly over the relay listener
+	log.Info().Msgf("[doom] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
+	srvErr := make(chan error, 1)
+	go func() { srvErr <- http.Serve(listener, mux) }()
 
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
-	})
-	if err != nil {
-		return fmt.Errorf("new relaydns client: %w", err)
-	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start relaydns client: %w", err)
-	}
-
+	// 6) Wait for termination or HTTP error
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[doom] shutting down...")
-
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[doom] relay client close error")
-	}
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil && err != context.Canceled {
-		log.Error().Err(err).Msg("[doom] http server shutdown error")
+	select {
+	case <-sig:
+		log.Info().Msg("[doom] shutting down...")
+	case err := <-srvErr:
+		if err != nil {
+			log.Error().Err(err).Msg("[doom] http serve error")
+		}
 	}
 
 	log.Info().Msg("[doom] shutdown complete")

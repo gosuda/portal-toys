@@ -6,6 +6,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <title>RelayDNS Tetris</title>
+    <script>
+        // Ensure relative assets resolve under current path (incl. /peer/{token})
+        (function(){
+            var base = document.createElement('base');
+            var p = window.location.pathname;
+            base.href = p.endsWith('/') ? p : (p + '/');
+            document.head.appendChild(base);
+        })();
+    </script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>

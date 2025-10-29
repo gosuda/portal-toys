@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
-	"net"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,8 +16,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	"github.com/gosuda/relaydns/sdk"
 )
+
+//go:embed static
+var staticFiles embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "relaydns-paint",
@@ -32,7 +36,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8092, "local paint HTTP port")
 	flags.StringVar(&flagName, "name", "example-paint", "backend display name")
 }
@@ -167,67 +171,78 @@ func (c *Canvas) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func runPaint(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Cancellation context for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 1) start local paint HTTP backend
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		return fmt.Errorf("listen paint: %w", err)
-	}
-
-	canvas := newCanvas()
-
-	mux := http.NewServeMux()
-
-	// Serve static files
-	fs := http.FileServer(http.Dir("./paint/static"))
-	mux.Handle("/", fs)
-	mux.HandleFunc("/ws", canvas.handleWS)
-
-	httpSrv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("paint http error")
-		}
-	}()
-
-	log.Info().Msgf("[paint] local server running on :%d", flagPort)
-
-	// 2) advertise over RelayDNS
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
+	// Create SDK client and connect to relay(s)
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
+	defer client.Close()
+
+	// Register lease and obtain a net.Listener that accepts relayed connections
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[paint] shutting down...")
+	// Setup HTTP handler
+	canvas := newCanvas()
+	mux := http.NewServeMux()
 
-	// Shutdown sequence
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[paint] client close error")
+	// Serve static files from embedded filesystem
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		return fmt.Errorf("create static fs: %w", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(staticFS)))
+	mux.HandleFunc("/ws", canvas.handleWS)
+
+	// 5) Serve HTTP over relay listener
+	log.Info().Msgf("[paint] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
+	go func() {
+		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[paint] http serve error")
+		}
+	}()
+
+	// Single watcher for shutdown
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+	}()
+
+	// Optional: also serve locally on --port like http-backend
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
+		log.Info().Msgf("[paint] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[paint] local http stopped")
+			}
+		}()
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[paint] http server shutdown error")
-	}
+	// One watcher that shuts down local server if started
+	go func() {
+		<-ctx.Done()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Warn().Err(err).Msg("[paint] local http shutdown error")
+			}
+		}
+	}()
 
+	// Block until canceled, then cleanup canvas
+	<-ctx.Done()
 	canvas.closeAll()
 	canvas.wait()
 

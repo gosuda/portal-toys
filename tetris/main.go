@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
-	"net"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -16,8 +18,11 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
+
+//go:embed static
+var embeddedStatic embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "relaydns-tetris",
@@ -33,7 +38,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8093, "local tetris HTTP port")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
 }
@@ -604,65 +609,127 @@ func (s *Server) wait() {
 }
 
 func runTetris(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		return fmt.Errorf("listen tetris: %w", err)
-	}
+	// Cancellation context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	server := newServer()
 
+	// Router: static files + websocket
 	mux := http.NewServeMux()
-	fs := http.FileServer(http.Dir("./static"))
-	mux.Handle("/", fs)
-	mux.HandleFunc("/ws", server.handleWS)
-
-	httpSrv := &http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       60 * time.Second,
+	// Serve embedded static assets
+	sub, err := fs.Sub(embeddedStatic, "static")
+	if err != nil {
+		return fmt.Errorf("embed static: %w", err)
 	}
-
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("tetris http error")
+	staticFS := http.FileServer(http.FS(sub))
+	mux.HandleFunc("/ws", server.handleWS)
+	// Handle relay prefix like /peer/{id}/...
+	mux.HandleFunc("/peer/", func(w http.ResponseWriter, r *http.Request) {
+		// Expected forms:
+		//  - /peer/{token}
+		//  - /peer/{token}/
+		//  - /peer/{token}/<asset>
+		const prefix = "/peer/"
+		rest := strings.TrimPrefix(r.URL.Path, prefix)
+		// Split token and optional suffix
+		token := rest
+		suffix := ""
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			token = rest[:i]
+			suffix = rest[i:]
 		}
-	}()
 
-	log.Info().Msgf("[tetris] local server running on :%d", flagPort)
+		// Basic token sanity: avoid treating paths like /peer/app.js as a token-only request
+		if token == "" || len(token) < 8 { // keep len low to be permissive, just avoid obviously wrong cases
+			http.NotFound(w, r)
+			return
+		}
 
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
+		// If no suffix, redirect to add trailing slash so relative assets resolve correctly
+		if suffix == "" {
+			http.Redirect(w, r, "/peer/"+token+"/", http.StatusMovedPermanently)
+			return
+		}
+		// Serve index explicitly when asking for folder root or index.html
+		if suffix == "/" || suffix == "/index.html" {
+			b, err := fs.ReadFile(sub, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(b)
+			return
+		}
+
+		// Route ws specially
+		if suffix == "/ws" {
+			server.handleWS(w, r)
+			return
+		}
+
+		// Rewrite to suffix for static serving
+		r2 := r.Clone(r.Context())
+		r2.URL.Path = suffix
+		staticFS.ServeHTTP(w, r2)
+	})
+	// Quiet favicon 404s
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.Handle("/", staticFS)
+
+	// Relay client (http-backend style)
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
+	defer client.Close()
+
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[tetris] shutting down...")
+	// Serve over relay
+	go func() {
+		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[tetris] relay http error")
+		}
+	}()
 
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[tetris] client close error")
+	// Optional local HTTP
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		log.Info().Msgf("[tetris] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[tetris] local http stopped")
+			}
+		}()
 	}
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[tetris] http server shutdown error")
-	}
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Error().Err(err).Msg("[tetris] http server shutdown error")
+			}
+		}
+		server.closeAll()
+	}()
 
-	server.closeAll()
+	<-ctx.Done()
 	server.wait()
-
 	log.Info().Msg("[tetris] shutdown complete")
 	return nil
 }

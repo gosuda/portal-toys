@@ -10,26 +10,15 @@ import (
 
 // serveClientHTTP builds the local backend router using chi.
 // getStatus should return a short string like "Connected" or "Connecting...".
-func NewHandler(addr string, name string, getStatus func() string) http.Handler {
+func NewHandler(name string) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		status := getStatus()
-		statusClass := "disconnected"
-		if status == "Connected" {
-			statusClass = "connected"
-		}
 		data := struct {
-			Now         string
-			Name        string
-			Addr        string
-			Status      string
-			StatusClass string
+			Now  string
+			Name string
 		}{
-			Now:         time.Now().Format(time.RFC1123),
-			Name:        name,
-			Addr:        addr,
-			Status:      status,
-			StatusClass: statusClass,
+			Now:  time.Now().Format(time.RFC1123),
+			Name: name,
 		}
 		_ = clientPage.Execute(w, data)
 	})
@@ -63,8 +52,7 @@ var clientPage = template.Must(template.New("index").Parse(`<!DOCTYPE html>
     <p>This page is served from the backend node.</p>
     <p>Current time: <b>{{.Now}}</b></p>
     <p>Name: <b>{{.Name}}</b></p>
-    <p>Server Status: <span class="stat {{.StatusClass}}"><span class="dot"></span>{{.Status}}</span></p>
   </div>
-  <footer>relaydns demo client — served locally at {{.Addr}}</footer>
+  <footer>relaydns demo client</footer>
 </body>
 </html>`))

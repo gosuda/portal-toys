@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 var rootCmd = &cobra.Command{
@@ -31,7 +30,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver base URL to auto-fetch multiaddrs from /health")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relayserver base URL to auto-fetch multiaddrs from /health")
 	flags.IntVar(&flagPort, "port", 8091, "local chat HTTP port")
 	flags.StringVar(&flagName, "name", "example-chat", "backend display name")
 	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
@@ -44,14 +43,10 @@ func main() {
 }
 
 func runChat(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Ensure context is cancelled on all exit paths
+	// Cancellation context for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 1) start local chat HTTP backend
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		return fmt.Errorf("listen chat: %w", err)
-	}
 	hub := newHub()
 
 	// Optional: open persistent store and preload history
@@ -71,57 +66,65 @@ func runChat(cmd *cobra.Command, args []string) error {
 			hub.attachStore(store)
 		}
 	}
-	// Build router and run server in main
+	// Build router
 	handler := NewHandler(flagName, hub)
-	httpSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("chat http error")
-		}
-	}()
 
-	// 2) advertise over RelayDNS (HTTP tunneled via server /peer route)
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
+	// RelayDNS client (http-backend style)
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
+		c.BootstrapServers = []string{flagServerURL}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
+	defer client.Close()
+
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[chat] shutting down...")
+	// Serve over relay
+	go func() {
+		if err := http.Serve(listener, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[chat] relay http error")
+		}
+	}()
 
-	// Shutdown sequence:
-	// 1. Close client (waits for goroutines, closes libp2p host)
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[chat] client close error")
+	// Optional local server on --port
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+		log.Info().Msgf("[chat] serving locally at http://127.0.0.1:%d", flagPort)
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[chat] local http stopped")
+			}
+		}()
 	}
 
-	// 2. Shutdown HTTP server with a fresh context (with timeout)
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[chat] http server shutdown error")
-	}
+	// Unified shutdown watcher
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Error().Err(err).Msg("[chat] http server shutdown error")
+			}
+		}
+	}()
 
-	// 3. Close all websocket connections and wait for handlers to finish
+	// Wait for cancel, then clean up hub/store
+	<-ctx.Done()
 	hub.closeAll()
 	hub.wait()
-
-	// 4. Close persistent store if opened
 	if store != nil {
 		if err := store.Close(); err != nil {
 			log.Warn().Err(err).Msg("[chat] store close error")
 		}
 	}
-
 	log.Info().Msg("[chat] shutdown complete")
 	return nil
 }

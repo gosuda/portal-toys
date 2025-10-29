@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk/go"
+	sdk "github.com/gosuda/relaydns/sdk"
 )
 
 var rootCmd = &cobra.Command{
@@ -30,8 +29,8 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "http://relaydns.gosuda.org", "relayserver admin base URL to auto-fetch multiaddrs from /health")
-	flags.IntVar(&flagPort, "port", 8081, "local backend HTTP port")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relayserver base URL")
+	flags.IntVar(&flagPort, "port", 0, "local backend HTTP port")
 	flags.StringVar(&flagName, "name", "example-backend", "backend display name shown on server UI")
 }
 
@@ -42,62 +41,61 @@ func main() {
 }
 
 func runClient(cmd *cobra.Command, args []string) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Ensure context is cancelled on all exit paths
+	// Context for graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 1) start local HTTP backend
-	var relayClient *sdk.RelayClient
-	httpLn, err := net.Listen("tcp", fmt.Sprintf(":%d", flagPort))
-	if err != nil {
-		log.Fatal().Err(err).Msg("failed to listen")
-	}
-	log.Info().Msgf("[client] local backend http listening on %s", httpLn.Addr().String())
-	handler := NewHandler(httpLn.Addr().String(), flagName, func() string {
-		if relayClient == nil {
-			return "Starting..."
-		}
-		return relayClient.ServerStatus()
-	})
-	httpSrv := &http.Server{Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	go func() {
-		if err := httpSrv.Serve(httpLn); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg(" http backend error")
-		}
-	}()
-
-	// 2) libp2p client
-	client, err := sdk.NewClient(ctx, sdk.ClientConfig{
-		Name:      flagName,
-		TargetTCP: fmt.Sprintf("127.0.0.1:%d", flagPort),
-		ServerURL: flagServerURL,
-	})
+	// client
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{flagServerURL} })
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	if err := client.Start(ctx); err != nil {
-		return fmt.Errorf("start client: %w", err)
-	}
-	relayClient = client
+	defer client.Close()
 
-	// wait for termination
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
-	log.Info().Msg("[client] shutting down...")
-
-	// Shutdown sequence:
-	// 1. Close client (waits for goroutines, closes libp2p host)
-	if err := client.Close(); err != nil {
-		log.Warn().Err(err).Msg("[client] client close error")
+	// Relay listener
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
 
-	// 2. Shutdown HTTP server with a fresh context (with timeout)
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		log.Error().Err(err).Msg("[client] http server shutdown error")
+	// app handler
+	handler := NewHandler(flagName)
+
+	// Serve over relay in background
+	go func() {
+		if err := http.Serve(listener, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[client] relay http serve error")
+		}
+	}()
+
+	// Local HTTP serve
+	var httpSrv *http.Server
+	if flagPort > 0 {
+		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler}
+		log.Info().Int("port", flagPort).Msg("[client] serving local http")
+		go func() {
+			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Warn().Err(err).Msg("[client] local http stopped")
+			}
+		}()
 	}
 
+	// handle shutdown and cleanup
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Warn().Err(err).Msg("[client] local http shutdown error")
+			}
+		}
+	}()
+
+	// Wait for shutdown
+	<-ctx.Done()
 	log.Info().Msg("[client] shutdown complete")
 	return nil
 }
