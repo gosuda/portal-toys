@@ -40,6 +40,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gosuda/portal v0.0.0-20251029075055-01117849a0b3 h1:ZPpiuwkUsaQpfJ8mHcRNSgpNkkntSlRkW1H9rGDUo7Y=
 github.com/gosuda/portal v0.0.0-20251029075055-01117849a0b3/go.mod h1:9PadGMfsx6DdLVzVtvLgsCfGO8kxaicOy56k/ziYYPU=
+github.com/gosuda/portal v0.0.0-20251029083012-9d8b63e3259b h1:xSH1K6ptqG5vHw3RFpCa2cVFpXi35miF6vMXKUbnaFc=
+github.com/gosuda/portal v0.0.0-20251029083012-9d8b63e3259b/go.mod h1:9PadGMfsx6DdLVzVtvLgsCfGO8kxaicOy56k/ziYYPU=
 github.com/hashicorp/yamux v0.1.2 h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=
 github.com/hashicorp/yamux v0.1.2/go.mod h1:C+zze2n6e/7wshOZep2A70/aQU6QBRWJO/G6FT1wIns=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
