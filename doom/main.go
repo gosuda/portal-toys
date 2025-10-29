@@ -33,7 +33,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relayserver base URL")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relayserver base URL")
 	flags.IntVar(&flagPort, "port", 8096, "local port")
 	flags.StringVar(&flagName, "name", "doom", "backend display name")
 }

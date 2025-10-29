@@ -70,7 +70,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relay websocket URL")
+	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 3000, "local HTTP port (optional)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")

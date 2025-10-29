@@ -40,6 +40,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gosuda/relaydns v0.0.0-20251029063113-31e0366eb332 h1:jW+tS055gg6tue0iGLCnvOYXeW8dP3wA8UHk/R90g44=
 github.com/gosuda/relaydns v0.0.0-20251029063113-31e0366eb332/go.mod h1:SOi8bECLlKeOaLbDw2cjmdLWT7El6ADcZjEcvZfsDJQ=
+github.com/gosuda/relaydns v0.0.0-20251029070231-d7ece53aded9 h1:yYUzGrQr4DJ85X/f6ZnBd5RRWOCnCkXwR6SCgrjsPsE=
+github.com/gosuda/relaydns v0.0.0-20251029070231-d7ece53aded9/go.mod h1:SOi8bECLlKeOaLbDw2cjmdLWT7El6ADcZjEcvZfsDJQ=
 github.com/hashicorp/yamux v0.1.2 h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=
 github.com/hashicorp/yamux v0.1.2/go.mod h1:C+zze2n6e/7wshOZep2A70/aQU6QBRWJO/G6FT1wIns=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
