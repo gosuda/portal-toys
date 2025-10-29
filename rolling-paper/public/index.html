@@ -237,8 +237,7 @@
                 const btn = el('button', { type: 'button' });
                 const setText = (count, thr) => {
                     const t = thr || threshold || 3;
-                    const left = Math.max(0, t - (count || 0));
-                    btn.textContent = `삭제 투표 (${count || 0}/${t}, 남은 ${left})`;
+                    btn.textContent = `삭제 투표 (${count || 0}/${t})`;
                 };
                 setText(msg.voteCount || 0, threshold);
                 btn.style.width = 'auto';
