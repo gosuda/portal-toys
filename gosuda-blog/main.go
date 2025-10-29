@@ -45,10 +45,6 @@ func main() {
 	mux.Handle("/", fileServerWithSPA(dir))
 
 	// 2) Start RelayDNS client and serve over a relay listener
-	cred, err := sdk.NewCredential()
-	if err != nil {
-		log.Fatal().Err(err).Msg("new credential")
-	}
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{serverURL}
 	})
@@ -57,6 +53,7 @@ func main() {
 	}
 	defer client.Close()
 
+	cred := sdk.NewCredential()
 	listener, err := client.Listen(cred, name, []string{"http-backend"})
 	if err != nil {
 		log.Fatal().Err(err).Msg("listen over relay")

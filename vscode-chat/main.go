@@ -60,10 +60,6 @@ func main() {
 	}
 
 	// Create credential and relay client, then listen and serve proxy over relay
-	cred, err := sdk.NewCredential()
-	if err != nil {
-		log.Fatal().Err(err).Msg("new credential")
-	}
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{serverURL}
 	})
@@ -72,6 +68,7 @@ func main() {
 	}
 	defer client.Close()
 
+	cred := sdk.NewCredential()
 	listener, err := client.Listen(cred, name, []string{"vscode-chat"})
 	if err != nil {
 		log.Fatal().Err(err).Msg("relay listen")

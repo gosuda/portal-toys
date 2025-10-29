@@ -45,8 +45,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Credential + client
-	cred, _ := sdk.NewCredential()
+	// client
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{flagServerURL} })
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
@@ -54,6 +53,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	defer client.Close()
 
 	// Relay listener
+	cred := sdk.NewCredential()
 	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)

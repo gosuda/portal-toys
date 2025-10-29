@@ -175,13 +175,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// 1) Create credential for this paint app
-	cred, err := sdk.NewCredential()
-	if err != nil {
-		return fmt.Errorf("new credential: %w", err)
-	}
-
-	// 2) Create SDK client and connect to relay(s)
+	// Create SDK client and connect to relay(s)
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{flagServerURL}
 	})
@@ -190,14 +184,14 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	}
 	defer client.Close()
 
-	// 3) Register lease and obtain a net.Listener that accepts relayed connections
-	alpns := []string{"paint"}
-	listener, err := client.Listen(cred, flagName, alpns)
+	// Register lease and obtain a net.Listener that accepts relayed connections
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
 
-	// 4) Setup HTTP handler
+	// Setup HTTP handler
 	canvas := newCanvas()
 	mux := http.NewServeMux()
 

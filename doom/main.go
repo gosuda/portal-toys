@@ -45,13 +45,7 @@ func main() {
 }
 
 func runDoom(cmd *cobra.Command, args []string) error {
-	// 1) Create credential for this backend
-	cred, err := sdk.NewCredential()
-	if err != nil {
-		return fmt.Errorf("new credential: %w", err)
-	}
-
-	// 2) Create SDK client and connect to relay(s)
+	// 1) Create SDK client and connect to relay(s)
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{flagServerURL}
 	})
@@ -64,9 +58,9 @@ func runDoom(cmd *cobra.Command, args []string) error {
 		}
 	}()
 
-	// 3) Register lease and obtain relay listener
-	alpns := []string{"http-backend"}
-	listener, err := client.Listen(cred, flagName, alpns)
+	// 2) Register lease and obtain relay listener
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

@@ -104,10 +104,6 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	staticHandler = http.FileServer(http.FS(publicSub))
 
 	// Relay client using http-backend pattern
-	cred, err := sdk.NewCredential()
-	if err != nil {
-		return fmt.Errorf("new credential: %w", err)
-	}
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{flagServerURL}
 	})
@@ -116,7 +112,8 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	}
 	defer client.Close()
 
-	listener, err := client.Listen(cred, flagName, []string{"rolling-paper"})
+	cred := sdk.NewCredential()
+	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
