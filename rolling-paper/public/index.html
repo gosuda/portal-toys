@@ -173,7 +173,7 @@
 </head>
 <body>
     <header>
-        <a class="logo" href="/">썸고 롤링페이퍼</a>
+        <a class="logo" href="/">롤링페이퍼</a>
     </header>
 
     <div class="container">
@@ -193,108 +193,147 @@
     </div>
 
     <script>
-        const API_BASE_PATH = (() => {
-            const currentPath = window.location.pathname;
-            const match = currentPath.match(/\/peer\/([a-zA-Z0-9]{40,})\/?/);
-            if (match && match[0]) {
-                return match[0].replace(/\/$/, "");
-            }
-            return "";
-        })();
+        (function () {
+            // helpers
+            const $ = (s) => document.querySelector(s);
+            const el = (tag, attrs = {}, ...children) => {
+                const n = document.createElement(tag);
+                for (const [k, v] of Object.entries(attrs)) {
+                    if (k === 'class') n.className = v;
+                    else if (k === 'text') n.textContent = v;
+                    else n.setAttribute(k, v);
+                }
+                for (const c of children) n.appendChild(c);
+                return n;
+            };
+            const detectBasePath = () => {
+                const m = location.pathname.match(/^\/peer\/([^/]+)(?:\/|$)/);
+                return m ? m[0].replace(/\/$/, '') : '';
+            };
+            const API_BASE = detectBasePath();
+            const api = (p) => `${API_BASE}${p}`;
+            const jsonFetch = async (path, opts) => {
+                const res = await fetch(api(path), opts);
+                let body = {};
+                try { body = await res.json(); } catch {}
+                return { ok: res.ok, body };
+            };
 
-        async function fetchMessages() {
-            const board = document.getElementById("message-board");
-            try {
-                const response = await fetch(`${API_BASE_PATH}/api/messages`);
-                if (!response.ok) throw new Error(`http ${response.status}`);
-                const messages = await response.json();
+            // dom refs
+            const els = {
+                board: $('#message-board'),
+                form: $('#messageForm'),
+                msg: $('#messageInput'),
+                nick: $('#nicknameInput'),
+                status: $('#statusMessage'),
+            };
 
-                if (!Array.isArray(messages) || messages.length === 0) {
-                    board.innerHTML = "<p>아직 메시지가 없습니다.</p>";
+            const setStatus = (message, type) => {
+                els.status.textContent = message;
+                els.status.className = `status-message ${type}`;
+            };
+
+            const makeVoteButton = (msg, threshold, onDeleted) => {
+                const btn = el('button', { type: 'button' });
+                const setText = (count, thr) => {
+                    const t = thr || threshold || 3;
+                    const left = Math.max(0, t - (count || 0));
+                    btn.textContent = `삭제 투표 (${count || 0}/${t}, 남은 ${left})`;
+                };
+                setText(msg.voteCount || 0, threshold);
+                btn.style.width = 'auto';
+                btn.style.padding = '6px 10px';
+                btn.style.fontSize = '13px';
+                btn.addEventListener('click', async () => {
+                    try {
+                        const body = `id=${encodeURIComponent(msg.id)}`;
+                        const { ok, body: out } = await jsonFetch('/api/vote-delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body,
+                        });
+                        if (!ok) return alert(out.message || '투표 실패');
+                        if (out.deleted) onDeleted();
+                        else setText(out.voteCount || 0, out.threshold || threshold);
+                    } catch { alert('네트워크 오류'); }
+                });
+                return btn;
+            };
+
+            const createMessageItem = (msg, threshold) => {
+                const item = el('div', { class: 'message-item' });
+                const header = el('div', { class: 'message-header' },
+                    el('span', { class: 'message-nickname', text: msg.nickname || '익명' }),
+                    el('span', { class: 'message-timestamp', text: new Date(msg.timestamp).toLocaleString() }),
+                );
+                const content = el('p', { class: 'message-content', text: msg.content });
+                const delWrap = el('div');
+                delWrap.style.marginTop = '8px';
+                delWrap.style.display = 'flex';
+                delWrap.style.justifyContent = 'flex-end';
+                const delBtn = makeVoteButton(msg, threshold, () => item.remove());
+                delWrap.appendChild(delBtn);
+                item.appendChild(header);
+                item.appendChild(content);
+                item.appendChild(delWrap);
+                return item;
+            };
+
+            const renderMessages = (payload) => {
+                const messages = Array.isArray(payload) ? payload : (Array.isArray(payload.messages) ? payload.messages : []);
+                const threshold = (typeof payload.threshold === 'number' && payload.threshold > 0) ? payload.threshold : 3;
+                if (!messages.length) {
+                    els.board.innerHTML = '<p>아직 메시지가 없습니다.</p>';
                     return;
                 }
+                const frag = document.createDocumentFragment();
+                messages.forEach((m) => frag.appendChild(createMessageItem(m, threshold)));
+                els.board.innerHTML = '';
+                els.board.appendChild(frag);
+            };
 
-                board.innerHTML = "";
-                messages.forEach(msg => {
-                    const item = document.createElement("div");
-                    item.className = "message-item";
-
-                    const header = document.createElement("div");
-                    header.className = "message-header";
-
-                    const nick = document.createElement("span");
-                    nick.className = "message-nickname";
-                    nick.textContent = msg.nickname || "익명";
-
-                    const time = document.createElement("span");
-                    time.className = "message-timestamp";
-                    time.textContent = new Date(msg.timestamp).toLocaleString();
-
-                    const content = document.createElement("p");
-                    content.className = "message-content";
-                    content.textContent = msg.content;
-
-                    header.appendChild(nick);
-                    header.appendChild(time);
-                    item.appendChild(header);
-                    item.appendChild(content);
-                    board.appendChild(item);
-                });
-            } catch (err) {
-                console.error("fetch messages failed:", err);
-                board.innerHTML = "<p>메시지를 불러오지 못했습니다.</p>";
-            }
-        }
-
-        async function submitMessage(event) {
-            event.preventDefault();
-
-            const messageInput = document.getElementById("messageInput");
-            const nicknameInput = document.getElementById("nicknameInput");
-            const message = messageInput.value.trim();
-            const nickname = nicknameInput.value.trim();
-
-            if (!message) {
-                displayStatus("메시지를 입력하세요.", "error");
-                return;
-            }
-
-            const body = `message=${encodeURIComponent(message)}&nickname=${encodeURIComponent(nickname)}`;
-
-            try {
-                const response = await fetch(`${API_BASE_PATH}/api/submit`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                    body,
-                });
-
-                const result = await response.json().catch(() => ({}));
-
-                if (response.ok) {
-                    displayStatus(result.message || "메시지가 저장되었습니다.", "success");
-                    messageInput.value = "";
-                    fetchMessages();
-                } else {
-                    displayStatus(result.message || "전송에 실패했습니다.", "error");
+            const fetchMessages = async () => {
+                try {
+                    const { ok, body } = await jsonFetch('/api/messages');
+                    if (!ok) throw new Error('http');
+                    renderMessages(body);
+                } catch (err) {
+                    console.error('fetch messages failed:', err);
+                    els.board.innerHTML = '<p>메시지를 불러오지 못했습니다.</p>';
                 }
-            } catch (err) {
-                console.error("submit failed:", err);
-                displayStatus("네트워크 오류가 발생했습니다.", "error");
-            }
-        }
+            };
 
-        function displayStatus(message, type) {
-            const box = document.getElementById("statusMessage");
-            box.textContent = message;
-            box.className = `status-message ${type}`;
-        }
+            const submitMessage = async (e) => {
+                e.preventDefault();
+                const message = els.msg.value.trim();
+                const nickname = els.nick.value.trim();
+                if (!message) return setStatus('메시지를 입력하세요.', 'error');
+                const body = `message=${encodeURIComponent(message)}&nickname=${encodeURIComponent(nickname)}`;
+                try {
+                    const { ok, body: out } = await jsonFetch('/api/submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body,
+                    });
+                    if (ok) {
+                        setStatus(out.message || '메시지가 저장되었습니다.', 'success');
+                        els.msg.value = '';
+                        fetchMessages();
+                    } else {
+                        setStatus(out.message || '전송에 실패했습니다.', 'error');
+                    }
+                } catch (err) {
+                    console.error('submit failed:', err);
+                    setStatus('네트워크 오류가 발생했습니다.', 'error');
+                }
+            };
 
-        function boot() {
-            fetchMessages();
-            document.getElementById("messageForm").addEventListener("submit", submitMessage);
-        }
-
-        window.addEventListener("load", boot);
+            // boot
+            window.addEventListener('load', () => {
+                fetchMessages();
+                els.form.addEventListener('submit', submitMessage);
+            });
+        })();
     </script>
 </body>
 </html>

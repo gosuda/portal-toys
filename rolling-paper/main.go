@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"database/sql"
+	crand "crypto/rand"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,11 +18,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cockroachdb/pebble"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
 	sdk "github.com/gosuda/relaydns/sdk"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 //go:embed public
@@ -28,30 +31,25 @@ var embeddedPublic embed.FS
 var (
 	publicSub     fs.FS
 	staticHandler http.Handler
+	db            *pebble.DB
 )
 
-var db *sql.DB
-
-const createTableSQL = `
-CREATE TABLE IF NOT EXISTS messages (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	nickname TEXT,
-	content TEXT,
-	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-);`
+const (
+	keyMsgPrefix = "m:"
+	keyVoteCnt   = "v:"
+	keyVoteSess  = "vs:"
+	keyVoteIP    = "vi:"
+)
 
 type JSONMessage struct {
+	ID        string    `json:"id,omitempty"`
 	Nickname  string    `json:"nickname"`
 	Content   string    `json:"content"`
 	Timestamp time.Time `json:"timestamp"`
+	VoteCount int       `json:"voteCount,omitempty"`
 }
 
-type DBMessage struct {
-	Nickname  sql.NullString
-	Content   string
-	Timestamp time.Time
-}
-
+// Stored value format: JSON-encoded JSONMessage
 type APIResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
@@ -64,9 +62,10 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURL string
-	flagPort      int
-	flagName      string
+	flagServerURL     string
+	flagPort          int
+	flagName          string
+	flagVoteThreshold int
 )
 
 func init() {
@@ -74,6 +73,7 @@ func init() {
 	flags.StringVar(&flagServerURL, "server-url", "ws://localhost:4017/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 3000, "local HTTP port (optional)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
+	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
 }
 
 func main() {
@@ -87,7 +87,7 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Init DB
+	// Init DB (Pebble)
 	initDB()
 	defer db.Close()
 
@@ -157,19 +157,17 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 
 func initDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "./rollpaper.db")
+	db, err = pebble.Open("./rolling-paper/db", &pebble.Options{})
 	if err != nil {
-		log.Fatal().Err(err).Msg("open sqlite")
-	}
-
-	if _, err = db.Exec(createTableSQL); err != nil {
-		log.Fatal().Err(err).Msg("create table")
+		log.Fatal().Err(err).Msg("open pebble")
 	}
 }
 
+var apiPathRe = regexp.MustCompile(`^/peer/[^/]+/(api/.*)$`)
+
 func extractAPIPart(path string) (string, bool) {
-	re := regexp.MustCompile(`^/peer/[a-zA-Z0-9]{40,}/(api/.*)$`)
-	matches := re.FindStringSubmatch(path)
+	// Accept peer IDs containing base64/base32-like characters and padding.
+	matches := apiPathRe.FindStringSubmatch(path)
 	if len(matches) > 1 {
 		return "/" + matches[1], true
 	}
@@ -197,19 +195,23 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nickname := strings.TrimSpace(r.FormValue("nickname"))
-	var nick interface{}
-	if nickname != "" {
-		nick = nickname
+
+	now := time.Now().UTC()
+	msg := JSONMessage{
+		Nickname:  nickname,
+		Content:   content,
+		Timestamp: now,
+	}
+	val, err := json.Marshal(msg)
+	if err != nil {
+		log.Error().Err(err).Msg("json marshal failed")
+		sendJSONError(w, "store failed", http.StatusInternalServerError)
+		return
 	}
 
-	_, err := db.Exec(
-		"INSERT INTO messages (nickname, content, timestamp) VALUES (?, ?, ?)",
-		nick,
-		content,
-		time.Now(),
-	)
-	if err != nil {
-		log.Error().Err(err).Msg("db insert failed")
+	key := makeMsgKey(now)
+	if err := db.Set([]byte(key), val, nil); err != nil {
+		log.Error().Err(err).Msg("pebble set failed")
 		sendJSONError(w, "store failed", http.StatusInternalServerError)
 		return
 	}
@@ -223,37 +225,34 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := db.Query("SELECT nickname, content, timestamp FROM messages ORDER BY timestamp DESC")
+	// Iterate Pebble keys with prefix keyMsgPrefix (newest-first by reversed timestamp)
+	iter, err := db.NewIter(&pebble.IterOptions{
+		LowerBound: []byte(keyMsgPrefix),
+		UpperBound: []byte("m;"),
+	})
 	if err != nil {
-		log.Error().Err(err).Msg("db query failed")
-		sendJSONError(w, "query failed", http.StatusInternalServerError)
+		log.Error().Err(err).Msg("pebble new iter failed")
 		return
 	}
-	defer rows.Close()
+	defer iter.Close()
 
 	var messages []JSONMessage
-	for rows.Next() {
-		var dbMsg DBMessage
-		if err := rows.Scan(&dbMsg.Nickname, &dbMsg.Content, &dbMsg.Timestamp); err != nil {
-			log.Warn().Err(err).Msg("scan failed")
+	for ok := iter.First(); ok; ok = iter.Next() {
+		var msg JSONMessage
+		if err := json.Unmarshal(iter.Value(), &msg); err != nil {
+			log.Warn().Err(err).Msg("json decode failed")
 			continue
 		}
-
-		msg := JSONMessage{
-			Content:   dbMsg.Content,
-			Timestamp: dbMsg.Timestamp,
+		// Attach ID from key and current vote count
+		k := string(iter.Key())
+		msg.ID = k
+		if vc, err := getVoteCount(k); err == nil {
+			msg.VoteCount = vc
 		}
-		if dbMsg.Nickname.Valid {
-			msg.Nickname = dbMsg.Nickname.String
-		}
-
 		messages = append(messages, msg)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(messages); err != nil {
-		log.Error().Err(err).Msg("json encode failed")
-	}
+	writeJSON(w, map[string]any{"messages": messages, "threshold": currentThreshold()})
 }
 
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
@@ -278,6 +277,9 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 		case "/api/messages":
 			handleGetMessages(w, r)
 			return
+		case "/api/vote-delete":
+			handleVoteDelete(w, r)
+			return
 		}
 	}
 
@@ -295,4 +297,184 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Serve embedded static files
 	staticHandler.ServeHTTP(w, r)
+}
+
+// getVoteCount reads the vote count for the given message key (string form of the key)
+func getVoteCount(msgKey string) (int, error) {
+	vKey := []byte(keyVoteCnt + msgKey)
+	b, closer, err := db.Get(vKey)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+	defer closer.Close()
+	var n int
+	if err := json.Unmarshal(b, &n); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func setVoteCount(msgKey string, n int) error {
+	vKey := []byte(keyVoteCnt + msgKey)
+	b, _ := json.Marshal(n)
+	return db.Set(vKey, b, nil)
+}
+
+func handleVoteDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "invalid method", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		sendJSONError(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	id := strings.TrimSpace(r.FormValue("id"))
+	if id == "" {
+		sendJSONError(w, "id required", http.StatusBadRequest)
+		return
+	}
+	// Session + IP based dedupe
+	sid := getOrSetSessionID(w, r)
+	ip := getClientIP(r)
+	vsKey := []byte(keyVoteSess + id + ":" + sid)
+	viKey := []byte(keyVoteIP + id + ":" + ip)
+	// If either already exists, it's a duplicate vote
+	if exists(vsKey) || exists(viKey) {
+		count, _ := getVoteCount(id)
+		respondVote(w, false, count)
+		return
+	}
+	// Check message exists
+	if _, closer, err := db.Get([]byte(id)); err != nil {
+		if err == pebble.ErrNotFound {
+			sendJSONError(w, "not found", http.StatusNotFound)
+			return
+		}
+		log.Error().Err(err).Msg("pebble get failed")
+		sendJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	} else {
+		closer.Close()
+	}
+
+	// Increment vote count (non-atomic RMW for demo simplicity)
+	count, err := getVoteCount(id)
+	if err != nil {
+		log.Error().Err(err).Msg("read vote count failed")
+		sendJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	count++
+	if err := setVoteCount(id, count); err != nil {
+		log.Error().Err(err).Msg("write vote count failed")
+		sendJSONError(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	// Mark dedupe keys
+	_ = db.Set(vsKey, []byte("1"), nil)
+	_ = db.Set(viKey, []byte("1"), nil)
+
+	// If threshold reached, delete message and votes
+	deleted := false
+	threshold := currentThreshold()
+	if count >= threshold {
+		if err := db.Delete([]byte(id), nil); err != nil {
+			log.Error().Err(err).Msg("delete message failed")
+			sendJSONError(w, "delete failed", http.StatusInternalServerError)
+			return
+		}
+		if err := db.Delete([]byte(keyVoteCnt+id), nil); err != nil && err != pebble.ErrNotFound {
+			log.Warn().Err(err).Msg("delete vote key failed")
+		}
+		// Best-effort cleanup of dedupe keys (optional, not exhaustive scan)
+		_ = db.Delete(vsKey, nil)
+		_ = db.Delete(viKey, nil)
+		deleted = true
+	}
+
+	respondVote(w, deleted, count)
+}
+
+func respondVote(w http.ResponseWriter, deleted bool, count int) {
+	threshold := currentThreshold()
+	writeJSON(w, map[string]any{
+		"status":    "success",
+		"deleted":   deleted,
+		"voteCount": count,
+		"threshold": threshold,
+	})
+}
+
+func currentThreshold() int {
+	if flagVoteThreshold < 1 {
+		return 1
+	}
+	return flagVoteThreshold
+}
+
+func getClientIP(r *http.Request) string {
+	// Prefer X-Forwarded-For if present
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		// take first IP
+		parts := strings.Split(xff, ",")
+		ip := strings.TrimSpace(parts[0])
+		if ip != "" {
+			return ip
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+func getOrSetSessionID(w http.ResponseWriter, r *http.Request) string {
+	const cookieName = "rp_sid"
+	if c, err := r.Cookie(cookieName); err == nil && c.Value != "" {
+		return c.Value
+	}
+	// generate 16 random bytes
+	var b [16]byte
+	if _, err := crand.Read(b[:]); err != nil {
+		// fallback to time-based rand
+		for i := range b {
+			b[i] = byte(rand.Intn(256))
+		}
+	}
+	sid := hex.EncodeToString(b[:])
+	http.SetCookie(w, &http.Cookie{
+		Name:     cookieName,
+		Value:    sid,
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   60 * 60 * 24 * 180, // ~180 days
+		SameSite: http.SameSiteLaxMode,
+	})
+	return sid
+}
+
+// Helpers
+func makeMsgKey(t time.Time) string {
+	// Key layout: "m:<rev_ts_hex>:<rand_hex>"
+	// rev_ts ensures lexicographic ascending order == newest first
+	revTs := ^uint64(t.UnixNano())
+	return fmt.Sprintf(keyMsgPrefix+"%016x:%08x", revTs, rand.Uint32())
+}
+
+func exists(key []byte) bool {
+	if _, c, err := db.Get(key); err == nil {
+		c.Close()
+		return true
+	}
+	return false
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(v)
 }
