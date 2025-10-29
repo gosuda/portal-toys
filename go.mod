@@ -6,7 +6,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gorilla/websocket v1.5.3
-	github.com/gosuda/relaydns v0.0.0-20251028141630-024eb777675c
+	github.com/gosuda/relaydns v0.0.0-20251029023358-081d018bacde
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
 )
