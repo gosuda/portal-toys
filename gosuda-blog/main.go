@@ -41,6 +41,8 @@ func main() {
 	mux := http.NewServeMux()
 	// Minimal health endpoint
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// Quiet favicon 404s
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	// Serve static files (with SPA friendly behavior)
 	mux.Handle("/", fileServerWithSPA(dir))
 

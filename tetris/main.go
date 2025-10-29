@@ -21,6 +21,9 @@ import (
 	sdk "github.com/gosuda/relaydns/sdk"
 )
 
+//go:embed static
+var embeddedStatic embed.FS
+
 var rootCmd = &cobra.Command{
 	Use:   "relaydns-tetris",
 	Short: "RelayDNS multiplayer tetris (local HTTP backend + libp2p advertiser)",
@@ -623,27 +626,57 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/ws", server.handleWS)
 	// Handle relay prefix like /peer/{id}/...
 	mux.HandleFunc("/peer/", func(w http.ResponseWriter, r *http.Request) {
-		// Handle paths like /peer/{id} and /peer/{id}/...
+		// Expected forms:
+		//  - /peer/{token}
+		//  - /peer/{token}/
+		//  - /peer/{token}/<asset>
 		const prefix = "/peer/"
 		rest := strings.TrimPrefix(r.URL.Path, prefix)
-		// Find first slash after token
-		slash := strings.IndexByte(rest, '/')
-		if slash == -1 {
-			// No trailing slash: redirect to add "/" so relative URLs resolve under token
-			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
+		// Split token and optional suffix
+		token := rest
+		suffix := ""
+		if i := strings.IndexByte(rest, '/'); i >= 0 {
+			token = rest[:i]
+			suffix = rest[i:]
+		}
+
+		// Basic token sanity: avoid treating paths like /peer/app.js as a token-only request
+		if token == "" || len(token) < 8 { // keep len low to be permissive, just avoid obviously wrong cases
+			http.NotFound(w, r)
 			return
 		}
-		// Suffix after token
-		suffix := rest[slash:]
+
+		// If no suffix, redirect to add trailing slash so relative assets resolve correctly
+		if suffix == "" {
+			http.Redirect(w, r, "/peer/"+token+"/", http.StatusMovedPermanently)
+			return
+		}
+		// Serve index explicitly when asking for folder root or index.html
+		if suffix == "/" || suffix == "/index.html" {
+			b, err := fs.ReadFile(sub, "index.html")
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write(b)
+			return
+		}
+
 		// Route ws specially
 		if suffix == "/ws" {
 			server.handleWS(w, r)
 			return
 		}
+
 		// Rewrite to suffix for static serving
 		r2 := r.Clone(r.Context())
 		r2.URL.Path = suffix
 		staticFS.ServeHTTP(w, r2)
+	})
+	// Quiet favicon 404s
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
 	})
 	mux.Handle("/", staticFS)
 
@@ -699,20 +732,4 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	server.wait()
 	log.Info().Msg("[tetris] shutdown complete")
 	return nil
-}
-
-//go:embed static/*
-var embeddedStatic embed.FS
-
-// stripPeerPrefix removes "/peer/{token}/" from the start of a path if present.
-func stripPeerPrefix(p string) string {
-	const prefix = "/peer/"
-	if !strings.HasPrefix(p, prefix) {
-		return p
-	}
-	rest := strings.TrimPrefix(p, prefix)
-	if i := strings.IndexByte(rest, '/'); i >= 0 {
-		return "/" + rest[i+1:]
-	}
-	return "/"
 }
