@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 NAME="vscode-relay"
-SERVER_URL="http://relaydns.gosuda.org"
+SERVER_URL="http://portal.gosuda.org"
 HOST="127.0.0.1"
 PORT=8100
 
@@ -91,7 +91,7 @@ if ! wait_port "$HOST" "$PORT"; then
   exit 1
 fi
 
-# RelayDNS advertiser: prefer local binary, else go run
+# Portal advertiser: prefer local binary, else go run
 if [[ -x "$SCRIPT_DIR/vscode-relay" ]]; then RELAY_CMD=("$SCRIPT_DIR/vscode-relay")
 elif [[ -x "$SCRIPT_DIR/vscode-relay.exe" ]]; then RELAY_CMD=("$SCRIPT_DIR/vscode-relay.exe")
 elif command -v go >/dev/null 2>&1; then RELAY_CMD=(go run ./vscode-relay)

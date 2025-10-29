@@ -38,7 +38,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
+	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8093, "local tetris HTTP port")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
 }

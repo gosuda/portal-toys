@@ -23,7 +23,7 @@ func main() {
 		dir       string
 	)
 
-	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
+	flag.StringVar(&serverURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
 	flag.IntVar(&port, "port", 8081, "Optional local HTTP port to serve the static site (0 to disable)")
 	flag.StringVar(&name, "name", "gosuda-blog", "Display name shown on server UI")
 	flag.StringVar(&dir, "dir", "./gosuda-blog/dist", "Directory to serve (built static files)")

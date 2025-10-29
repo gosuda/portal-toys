@@ -29,7 +29,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
+	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8081, "optional local HTTP port (0 to disable)")
 	flags.StringVar(&flagName, "name", "chatter-bbs", "backend display name")
 }

@@ -25,7 +25,7 @@ func main() {
 		targetPort int
 	)
 
-	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
+	flag.StringVar(&serverURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
 	flag.StringVar(&name, "name", "vscode-relay", "Display name shown on server UI")
 	flag.StringVar(&targetHost, "target-host", "127.0.0.1", "Local host where VSCode Web listens")
 	flag.IntVar(&targetPort, "target-port", 8100, "Local port where VSCode Web listens")
