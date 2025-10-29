@@ -56,7 +56,7 @@ func main() {
 	defer client.Close()
 
 	cred := sdk.NewCredential()
-	listener, err := client.Listen(cred, name, []string{"htt/1.1"})
+	listener, err := client.Listen(cred, name, []string{"http/1.1"})
 	if err != nil {
 		log.Fatal().Err(err).Msg("listen over relay")
 	}
