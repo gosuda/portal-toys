@@ -20,7 +20,7 @@ var (
 	reSrc  = regexp.MustCompile(`src="(/[^\"]*)"`)
 )
 
-func rewriteHTMLToRelative(b []byte, relPrefix string) []byte {
+func rewriteHTMLToRelative(b []byte) []byte {
 	// helper closure to process matches safely
 	process := func(re *regexp.Regexp, attr string, in []byte) []byte {
 		return re.ReplaceAllFunc(in, func(m []byte) []byte {
@@ -36,9 +36,6 @@ func rewriteHTMLToRelative(b []byte, relPrefix string) []byte {
 				return m
 			}
 			rel := strings.TrimPrefix(path, "/")
-			if relPrefix != "" {
-				rel = relPrefix + rel
-			}
 			return fmt.Appendf(nil, "%s=\"%s\"", attr, rel)
 		})
 	}
@@ -49,10 +46,23 @@ func rewriteHTMLToRelative(b []byte, relPrefix string) []byte {
 	b = process(reAbsSrc, "src", b)
 	out := process(reHref, "href", b)
 	out = process(reSrc, "src", out)
-	// Inject a base tag script like paint to ensure proper relative resolution under /peer/{token}
-	// Do this only if there's no existing <base ...>
+	// Inject a base tag script to ensure proper relative resolution under /peer/{token}
+	// Only if there's no existing <base ...>. When under /peer/{token}/..., force base to that root.
+	// Otherwise, set base to '/'. This avoids making deep paths (like /blog/posts/slug) the base,
+	// which would break ../../ resolution for assets.
 	if !strings.Contains(strings.ToLower(string(out)), "<base ") {
-		inject := `<script>(function(){var b=document.createElement('base');var p=window.location.pathname;b.href=p.endsWith('/')?p:(p+'/');document.head.appendChild(b);})();</script>`
+		inject := `<script>(function(){
+var b=document.createElement('base');
+var p=window.location.pathname;
+if(p.startsWith('/peer/')){
+  var parts=p.split('/');
+  if(parts.length>=3){ b.href='/' + parts[1] + '/' + parts[2] + '/'; }
+  else { b.href=p.endsWith('/')?p:(p+'/'); }
+}else{
+  b.href='/';
+}
+document.head.appendChild(b);
+})();</script>`
 		// Insert after first <head>
 		outStr := string(out)
 		if strings.Contains(outStr, "<head>") {
@@ -64,8 +74,8 @@ func rewriteHTMLToRelative(b []byte, relPrefix string) []byte {
 }
 
 // rewriteCSSToRelative adjusts url(...) references so absolute-root paths and gosuda.org URLs
-// become relative with the appropriate relPrefix so assets load under subpaths like /peer/<id>/lang/...
-func rewriteCSSToRelative(b []byte, relPrefix string) []byte {
+// become relative to the current base so assets load under subpaths like /peer/<id>/...
+func rewriteCSSToRelative(b []byte) []byte {
 	// Use a simple matcher for url(...) then parse inside without backrefs
 	reURL := regexp.MustCompile(`url\(([^)]*)\)`)
 	return reURL.ReplaceAllFunc(b, func(m []byte) []byte {
@@ -90,17 +100,14 @@ func rewriteCSSToRelative(b []byte, relPrefix string) []byte {
 		}
 		if after, ok := strings.CutPrefix(p, "/"); ok {
 			p = after
-			if relPrefix != "" {
-				p = relPrefix + p
-			}
 		}
 		return []byte("url(" + quote + p + quote + ")")
 	})
 }
 
-// serveFileWithOptionalRewrite reads file p, optionally rewrites bytes with rw using relPrefix,
+// serveFileWithOptionalRewrite reads file p, optionally rewrites bytes with rw,
 // sets content type, and writes the response.
-func serveFileWithOptionalRewrite(w http.ResponseWriter, r *http.Request, p string, contentType string, relPrefix string, rw func([]byte, string) []byte) {
+func serveFileWithOptionalRewrite(w http.ResponseWriter, r *http.Request, p string, contentType string, rw func([]byte) []byte) {
 	f, err := os.Open(p)
 	if err != nil {
 		http.Error(w, "failed to open file", http.StatusInternalServerError)
@@ -113,7 +120,7 @@ func serveFileWithOptionalRewrite(w http.ResponseWriter, r *http.Request, p stri
 		return
 	}
 	if rw != nil {
-		b = rw(b, relPrefix)
+		b = rw(b)
 	}
 	if contentType != "" {
 		w.Header().Set("Content-Type", contentType)
@@ -167,8 +174,7 @@ func fileServerWithSPA(dir string) http.Handler {
 			idx := filepath.Join(p, "index.html")
 			if _, err := os.Stat(idx); err == nil {
 				log.Debug().Str("serve", idx).Msg("serve directory index")
-				relPrefix := calcRelPrefix(cleanURLPath, true)
-				serveFileWithOptionalRewrite(w, r, idx, "text/html; charset=utf-8", relPrefix, rewriteHTMLToRelative)
+				serveFileWithOptionalRewrite(w, r, idx, "text/html; charset=utf-8", rewriteHTMLToRelative)
 				return
 			}
 		}
@@ -179,11 +185,9 @@ func fileServerWithSPA(dir string) http.Handler {
 			lower := strings.ToLower(p)
 			switch {
 			case strings.HasSuffix(lower, ".html"):
-				relPrefix := calcRelPrefix(cleanURLPath, false)
-				serveFileWithOptionalRewrite(w, r, p, "text/html; charset=utf-8", relPrefix, rewriteHTMLToRelative)
+				serveFileWithOptionalRewrite(w, r, p, "text/html; charset=utf-8", rewriteHTMLToRelative)
 			case strings.HasSuffix(lower, ".css"):
-				relPrefix := calcRelPrefix(cleanURLPath, false)
-				serveFileWithOptionalRewrite(w, r, p, "text/css; charset=utf-8", relPrefix, rewriteCSSToRelative)
+				serveFileWithOptionalRewrite(w, r, p, "text/css; charset=utf-8", rewriteCSSToRelative)
 			default:
 				http.ServeFile(w, r, p)
 			}
@@ -194,8 +198,7 @@ func fileServerWithSPA(dir string) http.Handler {
 			pHTML := p + ".html"
 			if _, err := os.Stat(pHTML); err == nil {
 				log.Debug().Str("serve", pHTML).Msg("serve pretty URL .html")
-				relPrefix := calcRelPrefix(cleanURLPath, false)
-				serveFileWithOptionalRewrite(w, r, pHTML, "text/html; charset=utf-8", relPrefix, rewriteHTMLToRelative)
+				serveFileWithOptionalRewrite(w, r, pHTML, "text/html; charset=utf-8", rewriteHTMLToRelative)
 				return
 			}
 		}
@@ -203,8 +206,7 @@ func fileServerWithSPA(dir string) http.Handler {
 		if !strings.Contains(filepath.Base(p), ".") {
 			idx := filepath.Join(dir, "index.html")
 			log.Debug().Str("fallback", idx).Msg("SPA fallback to index.html")
-			relPrefix := calcRelPrefix(cleanURLPath, false)
-			serveFileWithOptionalRewrite(w, r, idx, "text/html; charset=utf-8", relPrefix, rewriteHTMLToRelative)
+			serveFileWithOptionalRewrite(w, r, idx, "text/html; charset=utf-8", rewriteHTMLToRelative)
 			return
 		}
 		log.Debug().Str("url", r.URL.Path).Msg("not found")
@@ -212,25 +214,4 @@ func fileServerWithSPA(dir string) http.Handler {
 	})
 }
 
-// calcRelPrefix computes how many "../" are needed from the current cleanURLPath
-// to reach the web root (dist). cleanURLPath has no leading '/'.
-func calcRelPrefix(cleanURLPath string, isDir bool) string {
-	var depthPath string
-	if isDir {
-		depthPath = path.Clean(cleanURLPath)
-	} else {
-		depthPath = path.Dir(cleanURLPath)
-	}
-	if depthPath == "." || depthPath == "/" || depthPath == "" {
-		return ""
-	}
-	segs := strings.Split(depthPath, "/")
-	n := 0
-	for _, s := range segs {
-		if s == "" || s == "." {
-			continue
-		}
-		n++
-	}
-	return strings.Repeat("../", n)
-}
+// (calcRelPrefix removed; base tag + relative links make it unnecessary.)
