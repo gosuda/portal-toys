@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Simple launcher: auto-detect OpenVSCode Server or code-server, then advertise via RelayDNS.
+# Simple launcher: auto-detect OpenVSCode Server or code-server, then advertise via Portal
 # Usage: bash vscode-relay/run.sh [--name NAME] [--server-url URL] [--port 8100]
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

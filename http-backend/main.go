@@ -12,12 +12,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-client",
-	Short: "RelayDNS demo client (local HTTP backend + libp2p advertiser)",
+	Use:   "client",
+	Short: "Portal demo client (local HTTP backend + libp2p advertiser)",
 	RunE:  runClient,
 }
 

@@ -185,7 +185,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RelayDNS — YouTube Chat</title>
+  <title>YouTube Chat</title>
   <style>
     :root{
       --chrome:#f3f4f6; --chrome-line:#d1d5db; --panel:#ffffff; --ink:#111827; --muted:#6b7280;
@@ -289,7 +289,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       </div>
     </div>
 
-    <div class="status">RelayDNS — {{.Name}}</div>
+    <div class="status">{{.Name}}</div>
   </div>
 
   <!-- YouTube IFrame API Loader -->
@@ -324,9 +324,9 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     const qClear = document.getElementById('qClear');
 
     // Nickname persistence
-    const stored = localStorage.getItem('relaydns_nick');
+    const stored = localStorage.getItem('nick');
     if(stored) nickEl.value = stored;
-    function saveNick(){ try{ localStorage.setItem('relaydns_nick', (nickEl.value||'anon').trim()); }catch(_){} }
+    function saveNick(){ try{ localStorage.setItem('nick', (nickEl.value||'anon').trim()); }catch(_){} }
     nickEl.addEventListener('change', saveNick);
     rollBtn.addEventListener('click', ()=>{ nickEl.value = randomNick(); saveNick(); nickEl.focus(); });
 

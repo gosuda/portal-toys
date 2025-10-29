@@ -1,5 +1,5 @@
-# relaydns-toys
-relaydns-toys is a collection of simple demos that demonstrate how to build, publish, and interact with decentralized services through the [relaydns](https://github.com/gosuda/relaydns) network.
+# portal-toys
+portal-toys is a collection of simple demos that demonstrate how to build, publish, and interact with decentralized services through the [portal](https://github.com/gosuda/portal) network.
 Each toy app can be generated or modified easily using LLMs allowing rapid prototyping and experimentation.
 
 ## Quick Start (Using LLM)
@@ -22,6 +22,6 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 - [vscode-chat](./vscode-chat/): go run ./vscode-chat
 
 ## Tips
-- 기본 RelayDNS 서버 URL은 예제마다 `http://relaydns.gosuda.org`로 되어 있습니다. 과도한 요청으로 **디도스 공격이 되지 않도록 주의**해주세요.
+- 기본 Portal 서버 URL은 예제마다 `http://relaydns.gosuda.org`로 되어 있습니다. 과도한 요청으로 **디도스 공격이 되지 않도록 주의**해주세요.
 - 광고가 성공하면 서버 UI(관리 페이지)에서 등록된 이름(`--name`)으로 보입니다.
 - Go 버전은 `go.mod` 기준(Go 1.25+)을 권장합니다. 최신 Go면 대부분 문제 없습니다.

@@ -44,7 +44,7 @@ var clientPage = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>RelayDNS Backend</title>
+  <title>Portal Backend</title>
   <style>
     body { font-family: sans-serif; background: #f9f9f9; padding: 40px; }
     h1 { color: #333; }
@@ -59,12 +59,12 @@ var clientPage = template.Must(template.New("index").Parse(`<!DOCTYPE html>
   </head>
 <body>
   <div class="card">
-    <h1>🚀 RelayDNS Backend</h1>
+    <h1>🚀 Portal Backend</h1>
     <p>This page is served from the backend node.</p>
     <p>Current time: <b>{{.Now}}</b></p>
     <p>Name: <b>{{.Name}}</b></p>
     <p>Server Status: <span class="stat {{.StatusClass}}"><span class="dot"></span>{{.Status}}</span></p>
   </div>
-  <footer>relaydns demo client — served locally at {{.Addr}}</footer>
+  <footer>demo client — served locally at {{.Addr}}</footer>
 </body>
 </html>`))

@@ -12,7 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 func main() {
@@ -23,9 +23,9 @@ func main() {
 		dir       string
 	)
 
-	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "RelayDNS relay websocket URL")
+	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
 	flag.IntVar(&port, "port", 8081, "Optional local HTTP port to serve the static site (0 to disable)")
-	flag.StringVar(&name, "name", "gosuda-blog", "Display name shown on RelayDNS server UI")
+	flag.StringVar(&name, "name", "gosuda-blog", "Display name shown on server UI")
 	flag.StringVar(&dir, "dir", "./gosuda-blog/dist", "Directory to serve (built static files)")
 	flag.Parse()
 
@@ -46,12 +46,12 @@ func main() {
 	// Serve static files (with SPA friendly behavior)
 	mux.Handle("/", fileServerWithSPA(dir))
 
-	// 2) Start RelayDNS client and serve over a relay listener
+	// 2) Start client and serve over a relay listener
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{serverURL}
 	})
 	if err != nil {
-		log.Fatal().Err(err).Msg("new relaydns client")
+		log.Fatal().Err(err).Msg("new client")
 	}
 	defer client.Close()
 

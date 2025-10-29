@@ -14,7 +14,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 func main() {
@@ -25,8 +25,8 @@ func main() {
 		targetPort int
 	)
 
-	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "RelayDNS relay websocket URL")
-	flag.StringVar(&name, "name", "vscode-relay", "Display name shown on RelayDNS server UI")
+	flag.StringVar(&serverURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
+	flag.StringVar(&name, "name", "vscode-relay", "Display name shown on server UI")
 	flag.StringVar(&targetHost, "target-host", "127.0.0.1", "Local host where VSCode Web listens")
 	flag.IntVar(&targetPort, "target-port", 8100, "Local port where VSCode Web listens")
 	flag.Parse()

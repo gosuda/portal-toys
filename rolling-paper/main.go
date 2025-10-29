@@ -22,7 +22,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 //go:embed public
@@ -56,8 +56,8 @@ type APIResponse struct {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-rolling-paper",
-	Short: "RelayDNS demo: Rolling Paper (relay HTTP backend)",
+	Use:   "rolling-paper",
+	Short: "Portal demo: Rolling Paper (relay HTTP backend)",
 	RunE:  runRollingPaper,
 }
 

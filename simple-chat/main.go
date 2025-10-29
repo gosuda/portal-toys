@@ -12,12 +12,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-chat",
-	Short: "RelayDNS demo chat (local HTTP backend + libp2p advertiser)",
+	Use:   "simple-chat",
+	Short: "Portal demo chat (local HTTP backend + libp2p advertiser)",
 	RunE:  runChat,
 }
 
@@ -32,7 +32,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relayserver base URL to auto-fetch multiaddrs from /health")
 	flags.IntVar(&flagPort, "port", 8091, "local chat HTTP port")
-	flags.StringVar(&flagName, "name", "example-chat", "backend display name")
+	flags.StringVar(&flagName, "name", "simple-chat", "backend display name")
 	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
 }
 
@@ -69,7 +69,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	// Build router
 	handler := NewHandler(flagName, hub)
 
-	// RelayDNS client (http-backend style)
+	// client (http-backend style)
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
 		c.BootstrapServers = []string{flagServerURL}
 	})

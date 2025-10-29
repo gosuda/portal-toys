@@ -241,7 +241,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RelayDNS Chat — {{.Name}}</title>
+  <title>Simple Chat — {{.Name}}</title>
   <style>
     :root{
       --bg: #0d1117;
@@ -356,29 +356,29 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     function genUID(){ try{ return (crypto.randomUUID && crypto.randomUUID()) || '' }catch(_){ return '' } }
     function fallbackUID(){ return Math.random().toString(36).slice(2) + Date.now().toString(36) }
     let clientUID = null;
-    try { clientUID = localStorage.getItem('relaydns_uid'); } catch(_) {}
-    if(!clientUID || clientUID.length < 8){ clientUID = genUID() || fallbackUID(); try { localStorage.setItem('relaydns_uid', clientUID); } catch(_) {} }
+    try { clientUID = localStorage.getItem('uid'); } catch(_) {}
+    if(!clientUID || clientUID.length < 8){ clientUID = genUID() || fallbackUID(); try { localStorage.setItem('uid', clientUID); } catch(_) {} }
 
     // Restore nickname or initialize randomly
     let savedNick = null;
-    try { savedNick = localStorage.getItem('relaydns_nick'); } catch(_) {}
+    try { savedNick = localStorage.getItem('nick'); } catch(_) {}
     if(savedNick){
       const oldPattern = /^[a-z]+-[a-z]+-[0-9a-z]{2,}$/i.test(savedNick);
       if (oldPattern) {
         user.value = randomNick();
-        try { localStorage.setItem('relaydns_nick', user.value); } catch(_) {}
+        try { localStorage.setItem('nick', user.value); } catch(_) {}
       } else {
         user.value = savedNick;
       }
     } else {
       user.value = randomNick();
-      try { localStorage.setItem('relaydns_nick', user.value); } catch(_) {}
+      try { localStorage.setItem('nick', user.value); } catch(_) {}
     }
     setPrompt();
     // Debounced notify of nickname changes to server so roster updates without sending a chat
     let nickTimer = null;
     user.addEventListener('input', () => {
-      try{ localStorage.setItem('relaydns_nick', user.value); }catch(_){}
+      try{ localStorage.setItem('nick', user.value); }catch(_){}
       setPrompt();
       if (ws && ws.readyState === 1) {
         if (nickTimer) clearTimeout(nickTimer);
@@ -389,7 +389,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     });
     roll.addEventListener('click', () => {
       user.value = randomNick();
-      try{ localStorage.setItem('relaydns_nick', user.value); }catch(_){}
+      try{ localStorage.setItem('nick', user.value); }catch(_){}
       setPrompt();
       user.focus();
     });

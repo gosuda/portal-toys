@@ -16,15 +16,15 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 //go:embed static
 var staticFiles embed.FS
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-paint",
-	Short: "RelayDNS collaborative paint (local HTTP backend + libp2p advertiser)",
+	Use:   "paint",
+	Short: "collaborative paint (local HTTP backend + libp2p advertiser)",
 	RunE:  runPaint,
 }
 
@@ -38,7 +38,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://relaydns.gosuda.org/relay", "relay websocket URL")
 	flags.IntVar(&flagPort, "port", 8092, "local paint HTTP port")
-	flags.StringVar(&flagName, "name", "example-paint", "backend display name")
+	flags.StringVar(&flagName, "name", "paint", "backend display name")
 }
 
 func main() {

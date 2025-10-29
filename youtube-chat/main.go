@@ -13,12 +13,12 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-youtube-chat",
-	Short: "RelayDNS demo: collaborative youtube chat (relay HTTP backend)",
+	Use:   "youtube-chat",
+	Short: "Portal demo: collaborative youtube chat (relay HTTP backend)",
 	RunE:  runYouTubeChat,
 }
 

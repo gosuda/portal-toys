@@ -18,15 +18,15 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	sdk "github.com/gosuda/relaydns/sdk"
+	"github.com/gosuda/portal/sdk"
 )
 
 //go:embed static
 var embeddedStatic embed.FS
 
 var rootCmd = &cobra.Command{
-	Use:   "relaydns-tetris",
-	Short: "RelayDNS multiplayer tetris (local HTTP backend + libp2p advertiser)",
+	Use:   "tetris",
+	Short: "Portal multiplayer tetris (local HTTP backend + libp2p advertiser)",
 	RunE:  runTetris,
 }
 
