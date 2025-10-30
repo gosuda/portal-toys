@@ -1,0 +1,13 @@
+services:
+  ffmpeg-converter:
+    build:
+      context: ..
+      dockerfile: ffmpeg-converter/Dockerfile
+    container_name: ffmpeg-converter
+    ports:
+      - "8098:8098"
+    environment:
+      SERVER_URL: ${SERVER_URL:-wss://portal.gosuda.org/relay}
+      NAME: ${NAME:-ffmpeg-converter}
+      PORT: ${PORT:-8098}
+      MAX_MB: ${MAX_MB:-200}

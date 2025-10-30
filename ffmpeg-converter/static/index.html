@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FFmpeg Converter</title>
+    <style>
+      /* Theme */
+      :root{
+        --bg: #0b1220;         /* background */
+        --panel: #0d1426;      /* surface */
+        --panel-2: #0f1a33;    /* elevated */
+        --text: #e6eefc;       /* primary text */
+        --muted: #9fb0cc;      /* secondary text */
+        --border: #1f2a44;     /* borders */
+        --accent: #22d3ee;     /* brand */
+        --accent-2: #5eead4;   /* brand secondary */
+        --danger: #f87171;     /* errors */
+        --warn: #f59e0b;       /* warnings */
+      }
+      *{box-sizing:border-box}
+      body{
+        margin:0; color:var(--text);
+        font:14px/1.55 system-ui, Segoe UI, Roboto, Apple SD Gothic Neo, Noto Sans KR, sans-serif;
+        background: radial-gradient(1200px 600px at 10% -10%, rgba(34,211,238,.12), transparent),
+                    radial-gradient(1000px 600px at 110% 10%, rgba(94,234,212,.10), transparent),
+                    var(--bg);
+        min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px;
+      }
+      main{width:100%; max-width:900px}
+      .card{
+        background: linear-gradient(180deg, rgba(13,20,38,.86), rgba(11,18,32,.86));
+        border: 1px solid var(--border);
+        border-radius: 16px; padding: 20px;
+        box-shadow: 0 20px 50px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.03);
+        backdrop-filter: blur(6px);
+      }
+      h1{margin:0 0 10px 0; font-size:20px; letter-spacing:.2px}
+      .muted{color:var(--muted); margin: 2px 0 14px}
+
+      /* Inputs */
+      label{display:block; color:var(--muted); margin:6px 0}
+      input[type=file], select, input[type=text], input[type=number]{
+        width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--border);
+        background:#0b162c; color:var(--text);
+        transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+      }
+      input::placeholder{color:#93a4c1}
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+      input[type=number]{ -moz-appearance: textfield; appearance: textfield; }
+      select{
+        -webkit-appearance:none; -moz-appearance:none; appearance:none;
+        background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20'%3E%3Cpath fill='%239fb0cc' d='M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.06l3.71-2.83a.75.75 0 1 1 .92 1.2l-4.17 3.18a.75.75 0 0 1-.92 0L5.21 8.43a.75.75 0 0 1 .02-1.22Z'/%3E%3C/svg%3E");
+        background-repeat:no-repeat; background-position:right 12px center; background-size:14px 14px;
+        padding-right:40px;
+      }
+      input:focus, select:focus{
+        outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.18);
+        background:#0c1a35;
+      }
+
+      /* Layout */
+      .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px}
+      .inline{display:flex; align-items:center; gap:8px; color:var(--muted)}
+
+      /* Buttons */
+      button{
+        padding:10px 16px; border-radius:12px; border:1px solid rgba(34,211,238,.35);
+        background: linear-gradient(180deg, rgba(34,211,238,.22), rgba(34,211,238,.14));
+        color:var(--text); cursor:pointer; font-weight:600; letter-spacing:.2px;
+        transition: transform .05s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+      }
+      button:hover{ box-shadow: 0 0 0 3px rgba(34,211,238,.18) inset; }
+      button:active{ transform: translateY(1px); }
+      button:disabled{ opacity:.65; cursor:not-allowed; }
+
+      /* Messages */
+      .result{margin-top:14px}
+      .result a{ color: var(--accent-2); text-decoration: none; font-weight:700 }
+      .result a:hover{ text-decoration: underline }
+      .warn{ color: var(--warn) }
+      .error{ color: var(--danger) }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="card">
+        <h1>FFmpeg Converter</h1>
+        <p class="muted">Upload a media file, select a preset, and convert on the server using ffmpeg.</p>
+        <label>File</label>
+        <input type="file" id="file">
+        <div class="row">
+          <label class="inline">Preset
+            <select id="preset">
+              <option value="mp4">Video → MP4 (H.264 + AAC)</option>
+              <option value="webm">Video → WebM (VP9 + Opus)</option>
+              <option value="mp4-copy">Video → MP4 (Remux, no re-encode)</option>
+              <option value="gif2mp4">GIF → MP4</option>
+              <option value="gif">Video → GIF</option>
+              <option value="thumbnail">Video → Thumbnail (JPG)</option>
+              <option value="mp3">Audio → MP3</option>
+              <option value="m4a">Audio → M4A (AAC)</option>
+              <option value="wav">Audio → WAV (PCM)</option>
+              <option value="flac">Audio → FLAC</option>
+            </select>
+          </label>
+          <button id="go">Convert</button>
+        </div>
+        <div class="row">
+          <label class="inline">CRF <input id="crf" type="number" min="0" max="51" placeholder="23" style="width:90px"></label>
+          <label class="inline">FPS <input id="fps" type="number" min="1" max="240" placeholder=""></label>
+          <label class="inline">Width <input id="width" type="number" min="16" max="7680" placeholder=""></label>
+          <label class="inline">Height <input id="height" type="number" min="16" max="4320" placeholder=""></label>
+        </div>
+        <div class="row">
+          <label class="inline">Audio bitrate <input id="abitrate" type="text" placeholder="128k" style="width:100px"></label>
+          <label class="inline">Start(SS) <input id="ss" type="text" placeholder="00:00:00" style="width:120px"></label>
+          <label class="inline">Duration(T) <input id="t" type="text" placeholder="" style="width:120px"></label>
+          <label class="inline">Speed <input id="speed" type="number" step="0.1" min="0.25" max="4" placeholder="1.0" style="width:90px"></label>
+        </div>
+        <div id="msg" class="result"></div>
+      </div>
+    </main>
+    <script>
+      const $ = sel => document.querySelector(sel);
+      $('#go').addEventListener('click', async () => {
+        const f = $('#file').files[0];
+        const preset = $('#preset').value;
+        const msg = $('#msg');
+        msg.textContent = '';
+        if (!f) { msg.textContent = 'Choose a file.'; msg.className='result warn'; return; }
+        const fd = new FormData();
+        fd.append('file', f);
+        fd.append('preset', preset);
+        const optIds = ['crf','fps','width','height','abitrate','ss','t','speed'];
+        optIds.forEach(id => { const v = (document.getElementById(id).value||'').trim(); if (v) fd.append(id, v); });
+        try{
+          const res = await fetch('convert', { method:'POST', body: fd });
+          if (!res.ok) { msg.textContent = 'Convert failed: ' + res.status + ' ' + (await res.text()); msg.className='result error'; return; }
+          // derive filename from content-disposition
+          const disp = res.headers.get('content-disposition')||'';
+          const m = disp.match(/filename="([^"]+)"/i);
+          const name = m ? m[1] : ('output-' + Date.now());
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = name; a.textContent = 'Download ' + name;
+          msg.className='result'; msg.innerHTML = '';
+          msg.appendChild(a);
+        }catch(e){ msg.textContent = 'Network error'; msg.className='result error'; }
+      });
+    </script>
+  </body>
+  </html>
