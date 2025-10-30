@@ -1,0 +1,63 @@
+:root{--bg:#0f172a;--panel:#111827;--text:#e5e7eb;--muted:#94a3b8;--accent:#22d3ee;--danger:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR,sans-serif}
+header{padding:20px;border-bottom:1px solid #1f2937;background:#0b1220;position:sticky;top:0;z-index:10}
+header h1{margin:0 0 6px 0;font-size:22px}
+header p{margin:0;color:var(--muted)}
+main{max-width:1100px;margin:20px auto;padding:0 16px}
+.tool-nav{margin-bottom:8px}
+.tool-tabs{display:flex;flex-wrap:wrap;gap:8px}
+.tool-tabs .tab{appearance:none;border:1px solid #1f2937;background:#0e172a;color:var(--text);padding:10px 14px;border-radius:9999px;cursor:pointer;font-weight:600;letter-spacing:.2px}
+.tool-tabs .tab:hover{border-color:#334155;background:#0b1220}
+.tool-tabs .tab.active{background:var(--accent);border-color:var(--accent);color:#0b1020;box-shadow:0 0 0 2px rgba(34,211,238,.15) inset}
+.tool-tabs .tab:focus{outline:2px solid var(--accent);outline-offset:2px}
+
+.tool{margin:16px 0}
+.tool h2{margin:0;font-size:16px}
+.tool summary{list-style:none}
+.tool summary::-webkit-details-marker{display:none}
+details.tool{background:transparent;border:0;padding:0}
+details.tool>summary{background:var(--panel);border:1px solid #1f2937;border-radius:10px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+details.tool[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
+details.tool .tool-body{background:var(--panel);border:1px solid #1f2937;border-top:none;border-bottom-left-radius:10px;border-bottom-right-radius:10px;padding:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid.single{grid-template-columns:1fr}
+label{display:block;margin:6px 0;color:var(--muted)}
+textarea{width:100%;min-height:140px;background:#0b1020;border:1px solid #1f2937;border-radius:8px;color:var(--text);padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+input[type=text],input[type=number],input[type=password],input[type=datetime-local]{
+  width:100%;padding:10px;border-radius:8px;border:1px solid #1f2937;background:#0b1020;color:var(--text);
+}
+input[type=datetime-local]{
+  font-family:inherit;color-scheme:dark;
+}
+/* Polished select styling */
+select{width:100%;min-width:180px;padding:10px 36px 10px 12px;border-radius:9999px;border:1px solid #1f2937;background:#0b1020;color:var(--text);
+  -webkit-appearance:none;-moz-appearance:none;appearance:none;cursor:pointer;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 20 20'%3E%3Cpath fill='%2394a3b8' d='M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.06l3.71-2.83a.75.75 0 1 1 .92 1.2l-4.17 3.18a.75.75 0 0 1-.92 0L5.21 8.43a.75.75 0 0 1 .02-1.22Z'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:14px 14px;
+}
+select:hover{border-color:#334155;background:#0b1220}
+select:focus{outline:2px solid var(--accent);outline-offset:2px}
+select:disabled{opacity:.6;cursor:not-allowed}
+
+/* Keep inline select compact when wrapped with label.inline */
+.inline select{min-width:160px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+button{padding:8px 12px;border-radius:8px;border:1px solid #1f2937;background:#0e172a;color:var(--text);cursor:pointer}
+button:hover{border-color:#334155;background:#0b1220}
+.warning{color:#f59e0b;margin-top:8px}
+.hidden{display:none}
+.qr-box{margin-top:12px;display:flex;align-items:center;justify-content:center;padding:12px;background:#0b1020;border:1px dashed #243042;border-radius:8px}
+footer{padding:16px;color:var(--muted);text-align:center}
+
+/* key-value grid lines */
+.kv{background:#0b1020;border:1px solid #1f2937;border-radius:8px;padding:6px}
+.kv>div{display:flex;justify-content:space-between;border-bottom:1px dashed #223046;padding:6px 4px}
+.kv>div:last-child{border-bottom:none}
+.kv .k{color:#9aa7bd}
+.kv .v{color:#e5e7eb;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+.tz-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.tz-list .card{background:#0b1020;border:1px solid #1f2937;border-radius:8px;padding:8px}
+.tz-list .title{color:#9aa7bd;margin-bottom:4px}
+.inline{display:flex;align-items:center;gap:6px;color:var(--muted)}

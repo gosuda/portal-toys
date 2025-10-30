@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tools</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <header>
+      <h1>🔧 Tools</h1>
+    </header>
+
+    <main>
+      <div class="tool-nav">
+        <div id="tool-tabs" class="tool-tabs"></div>
+      </div>
+
+      <div id="tools-container">
+      <details class="tool" id="timestamp">
+        <summary><h2>Unix Timestamp</h2></summary>
+        <div class="tool-body">
+        <div class="grid">
+          <div>
+            <label>Current Time</label>
+            <div class="row wrap">
+              <button id="ts-now">Refresh Now</button>
+            </div>
+            <div class="kv">
+              <div><span class="k">Local</span><span class="v" id="now-local"></span></div>
+              <div><span class="k">UTC</span><span class="v" id="now-utc"></span></div>
+              <div><span class="k">Unix(s)</span><span class="v" id="now-seconds"></span></div>
+              <div><span class="k">Unix(ms)</span><span class="v" id="now-millis"></span></div>
+            </div>
+
+            <label style="margin-top:10px">Timestamp → Date/Time</label>
+            <input id="ts-input" type="text" placeholder="e.g. 1719979873 or 1719979873123">
+            <div class="row">
+              <button id="ts-clear">Clear</button>
+            </div>
+            <div class="kv" id="ts-time-out">
+              <div><span class="k">Local</span><span class="v" id="ts-out-local"></span></div>
+              <div><span class="k">UTC</span><span class="v" id="ts-out-utc"></span></div>
+            </div>
+          </div>
+          <div>
+            <label>Date/Time → Timestamp</label>
+            <div class="row">
+              <input id="dt-input" type="datetime-local">
+            </div>
+            <div class="row">
+              <label class="inline"><input type="checkbox" id="dt-as-utc"> Treat input as UTC</label>
+            </div>
+            <div class="kv">
+              <div><span class="k">Unix(s)</span><span class="v" id="dt-out-seconds"></span></div>
+              <div><span class="k">Unix(ms)</span><span class="v" id="dt-out-millis"></span></div>
+          </div>
+
+            <label style="margin-top:10px">Other Region Time (optional)</label>
+            <div class="row">
+              <select id="tz-select"></select>
+            </div>
+            <div class="kv" id="tz-single" style="display:none">
+              <div><span class="k" id="tz-single-label">Region</span><span class="v" id="tz-single-time"></span></div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </details>
+
+      <details class="tool" id="random">
+        <summary><h2>Random String</h2></summary>
+        <div class="tool-body">
+          <div class="grid">
+            <div>
+              <label>Length</label>
+              <input id="random-len" type="number" min="1" max="1024" value="16">
+              <label style="margin-top:8px">Charset</label>
+              <select id="random-preset">
+                <option value="alnum" selected>Alphanumeric</option>
+                <option value="letters">Letters</option>
+                <option value="digits">Digits</option>
+                <option value="hex">Hex</option>
+                <option value="b64">Base64</option>
+                <option value="custom">Custom</option>
+              </select>
+              <input id="random-custom" type="text" placeholder="Custom charset" style="margin-top:6px">
+              <div class="row" style="margin-top:8px">
+                <button id="random-gen">Regenerate</button>
+              </div>
+            </div>
+            <div>
+              <label>Output</label>
+              <textarea id="random-out"></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="tool" id="sha">
+        <summary><h2>SHA Hash</h2></summary>
+        <div class="tool-body">
+          <div class="grid">
+            <div>
+              <label>Input</label>
+              <textarea id="sha-in" placeholder="Enter text"></textarea>
+              <label style="margin-top:8px">Algorithm</label>
+              <select id="sha-algo">
+                <option value="SHA-256" selected>SHA-256</option>
+                <option value="SHA-1">SHA-1</option>
+                <option value="SHA-384">SHA-384</option>
+                <option value="SHA-512">SHA-512</option>
+              </select>
+            </div>
+            <div>
+              <label>Hex</label>
+              <textarea id="sha-hex" readonly></textarea>
+              <label>Base64</label>
+              <textarea id="sha-b64" readonly></textarea>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="tool" id="aes">
+        <summary><h2>AES (GCM) Encrypt/Decrypt</h2></summary>
+        <div class="tool-body">
+          <div class="grid">
+            <div>
+              <label>Mode</label>
+              <select id="aes-mode">
+                <option value="encrypt" selected>Encrypt</option>
+                <option value="decrypt">Decrypt</option>
+              </select>
+              <label style="margin-top:8px">Passphrase</label>
+              <input id="aes-pass" type="password" placeholder="Passphrase">
+              <div id="aes-enc-pane">
+                <label style="margin-top:8px">Plaintext</label>
+                <textarea id="aes-pt" placeholder="Text to encrypt"></textarea>
+              </div>
+              <div id="aes-dec-pane" style="display:none">
+                <label style="margin-top:8px">Ciphertext</label>
+                <textarea id="aes-ct" placeholder="Base64(salt|iv|cipher)"></textarea>
+              </div>
+            </div>
+            <div>
+              <label>Output</label>
+              <textarea id="aes-out" readonly></textarea>
+              <div class="row" id="aes-tools" style="margin-top:8px">
+                <button id="aes-new">New Salt/IV</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+      <details class="tool" id="hexdec">
+        <summary><h2>Decimal / Hex Codec</h2></summary>
+        <div class="tool-body">
+        <div class="grid">
+          <div>
+            <label>Text Input</label>
+            <textarea id="hexdec-text" placeholder="e.g. Hello world"></textarea>
+            <div class="row"></div>
+          </div>
+          <div>
+            <label>Hex (space-separated)</label>
+            <textarea id="hex-out" placeholder="48 65 6c 6c 6f"></textarea>
+            <div class="row"></div>
+
+            <label>Dec (space-separated)</label>
+            <textarea id="dec-out" placeholder="72 101 108 108 111"></textarea>
+            <div class="row"></div>
+          </div>
+        </div>
+        </div>
+      </details>
+
+      <details class="tool" id="b64">
+        <summary><h2>Base64 Encode/Decode</h2></summary>
+        <div class="tool-body">
+        <div class="grid">
+          <div>
+            <label>Input (text)</label>
+            <textarea id="b64-text" placeholder="e.g. Hello"></textarea>
+            
+          </div>
+          <div>
+            <label>Base64</label>
+            <textarea id="b64-out" placeholder="SGVsbG8="></textarea>
+            
+          </div>
+        </div>
+        </div>
+      </details>
+
+      <details class="tool" id="json">
+        <summary><h2>JSON Beautifier</h2></summary>
+        <div class="tool-body">
+        <div class="grid">
+          <div>
+            <label>Input JSON</label>
+            <textarea id="json-in" placeholder='{"a":1,"b":[2,3]}'></textarea>
+            <div class="row"></div>
+          </div>
+          <div>
+            <label>Output</label>
+            <textarea id="json-out" placeholder='{
+  "a": 1,
+  "b": [2, 3]
+}'></textarea>
+          </div>
+        </div>
+        </div>
+      </details>
+
+      <details class="tool" id="case">
+        <summary><h2>Case Converter</h2></summary>
+        <div class="tool-body">
+        <div class="grid">
+          <div>
+            <label>Input</label>
+            <textarea id="case-in" placeholder="Hello World!"></textarea>
+            <div class="row">
+              <label class="inline">Mode
+                <select id="case-mode">
+                  <option value="lower">lower</option>
+                  <option value="upper">UPPER</option>
+                  <option value="title" selected>Title Case</option>
+                </select>
+              </label>
+            </div>
+          </div>
+          <div>
+            <label>Output</label>
+            <textarea id="case-out"></textarea>
+          </div>
+        </div>
+        </div>
+      </details>
+
+      </div>
+    </main>
+
+    <footer>
+      <span>Made with Codex ❤️</span>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+  </html>
