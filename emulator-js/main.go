@@ -36,7 +36,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relayserver base URL")
-	flags.IntVar(&flagPort, "port", 8099, "local port")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "emulator-js", "backend display name")
 }
 
@@ -97,7 +97,7 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 
 	// 6) Optional: also serve locally on --port
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{
 			Addr:              fmt.Sprintf(":%d", flagPort),
 			Handler:           mux,

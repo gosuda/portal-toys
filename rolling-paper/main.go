@@ -71,7 +71,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	flags.IntVar(&flagPort, "port", 3000, "local HTTP port (optional)")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
 }
@@ -127,7 +127,7 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 
 	// Optional local serve
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
 		log.Info().Msgf("[rolling-paper] serving locally at http://127.0.0.1:%d", flagPort)
 		go func() {

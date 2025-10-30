@@ -31,7 +31,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relayserver base URL to auto-fetch multiaddrs from /health")
-	flags.IntVar(&flagPort, "port", 8091, "local chat HTTP port")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "simple-chat", "backend display name")
 	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
 }
@@ -93,7 +93,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 
 	// Optional local server on --port
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		log.Info().Msgf("[chat] serving locally at http://127.0.0.1:%d", flagPort)
 		go func() {

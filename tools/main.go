@@ -35,7 +35,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	flags.IntVar(&flagPort, "port", 8098, "local HTTP port for tools")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "tools", "backend display name")
 }
 
@@ -79,7 +79,7 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		log.Info().Msgf("[tools] serving locally at http://127.0.0.1:%d", flagPort)
 		go func() {

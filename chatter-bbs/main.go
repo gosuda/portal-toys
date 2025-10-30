@@ -30,7 +30,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	flags.IntVar(&flagPort, "port", 8081, "optional local HTTP port (0 to disable)")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "chatter-bbs", "backend display name")
 }
 
@@ -70,7 +70,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 
 	// Optional local HTTP
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler}
 		log.Info().Msgf("[chatter-bbs] serving locally at http://127.0.0.1:%d", flagPort)
 		go func() {

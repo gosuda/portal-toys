@@ -39,7 +39,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	flags.IntVar(&flagPort, "port", 8093, "local tetris HTTP port")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
 }
 
@@ -704,7 +704,7 @@ func runTetris(cmd *cobra.Command, args []string) error {
 
 	// Optional local HTTP
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 		log.Info().Msgf("[tetris] serving locally at http://127.0.0.1:%d", flagPort)
 		go func() {

@@ -30,7 +30,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relayserver base URL")
-	flags.IntVar(&flagPort, "port", 0, "local backend HTTP port")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "example-backend", "backend display name shown on server UI")
 }
 
@@ -71,7 +71,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 
 	// Local HTTP serve
 	var httpSrv *http.Server
-	if flagPort > 0 {
+	if flagPort >= 0 {
 		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler}
 		log.Info().Int("port", flagPort).Msg("[client] serving local http")
 		go func() {
