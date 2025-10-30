@@ -213,6 +213,32 @@
         </div>
       </details>
 
+      <details class="tool" id="diff">
+        <summary><h2>Diff Compare</h2></summary>
+        <div class="tool-body">
+          <div class="grid">
+            <div>
+              <label>Left</label>
+              <div id="diff-left" class="diff-edit" contenteditable="true" spellcheck="false" placeholder="Original text..."></div>
+            </div>
+            <div>
+              <label>Right</label>
+              <div id="diff-right" class="diff-edit" contenteditable="true" spellcheck="false" placeholder="Modified text..."></div>
+            </div>
+          </div>
+          <div class="row">
+            <label class="inline">Mode
+              <select id="diff-mode">
+                <option value="word" selected>Word</option>
+                <option value="line">Line</option>
+                <option value="char">Char</option>
+              </select>
+            </label>
+            <label class="inline"><input type="checkbox" id="diff-ignore-case"> Ignore case</label>
+          </div>
+        </div>
+      </details>
+
       <details class="tool" id="case">
         <summary><h2>Case Converter</h2></summary>
         <div class="tool-body">
@@ -242,7 +268,7 @@
     </main>
 
     <footer>
-      <span>Made with Codex ❤️</span>
+      
     </footer>
 
     <script src="app.js"></script>

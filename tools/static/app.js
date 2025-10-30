@@ -169,6 +169,7 @@ const tools = [
   { id: 'hexdec', name: 'Decimal / Hex', icon: '🔢' },
   { id: 'b64', name: 'Base64', icon: '🧬' },
   { id: 'json', name: 'JSON', icon: '🧰' },
+  { id: 'diff', name: 'Diff', icon: '🧩' },
   { id: 'case', name: 'Case', icon: '🔤' },
   { id: 'random', name: 'Random', icon: '🎲' },
   { id: 'sha', name: 'SHA', icon: '🔒' },
@@ -396,3 +397,157 @@ aesPT?.addEventListener('input', updateAES);
 aesCT?.addEventListener('input', updateAES);
 aesNew?.addEventListener('click', () => { currentSalt=null; currentIv=null; updateAES(); });
 setAesModeUI();
+
+// ==========================
+// Diff Compare (LCS-based)
+// ==========================
+function tokenize(str, mode){
+  if (mode === 'char') return Array.from(str);
+  if (mode === 'line') {
+    // Keep newlines as tokens to preserve structure
+    const out = [];
+    const parts = str.split(/(\r?\n)/);
+    for (const p of parts) if (p !== '') out.push(p);
+    return out;
+  }
+  // word mode: split but keep whitespace
+  const parts = str.split(/(\s+)/);
+  return parts.filter(p => p !== '');
+}
+
+function lcs(a, b, eq){
+  const n = a.length, m = b.length;
+  const dp = Array(n+1);
+  for (let i=0;i<=n;i++){ dp[i] = new Array(m+1).fill(0); }
+  for (let i=1;i<=n;i++){
+    for (let j=1;j<=m;j++){
+      if (eq(a[i-1], b[j-1])) dp[i][j] = dp[i-1][j-1] + 1;
+      else dp[i][j] = dp[i-1][j] >= dp[i][j-1] ? dp[i-1][j] : dp[i][j-1];
+    }
+  }
+  // backtrack
+  const script = [];
+  let i=n, j=m;
+  while (i>0 || j>0){
+    if (i>0 && j>0 && eq(a[i-1], b[j-1])) { script.push({t:'eq', v:a[i-1]}); i--; j--; }
+    else if (j>0 && (i===0 || dp[i][j-1] >= dp[i-1][j])) { script.push({t:'ins', v:b[j-1]}); j--; }
+    else if (i>0) { script.push({t:'del', v:a[i-1]}); i--; }
+  }
+  script.reverse();
+  return script;
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function diffRun(){
+  const left = document.getElementById('diff-left').value||'';
+  const right = document.getElementById('diff-right').value||'';
+  const mode = document.getElementById('diff-mode').value;
+  const ignore = document.getElementById('diff-ignore-case').checked;
+
+  const aTok = tokenize(left, mode);
+  const bTok = tokenize(right, mode);
+  const norm = (x) => ignore ? x.toLowerCase() : x;
+  const dp = (function(){
+    const n=aTok.length, m=bTok.length; const D=Array(n+1);
+    for(let i=0;i<=n;i++){ D[i]=new Array(m+1).fill(0); }
+    for(let i=1;i<=n;i++){
+      for(let j=1;j<=m;j++){
+        if (norm(aTok[i-1]) === norm(bTok[j-1])) D[i][j] = D[i-1][j-1]+1; else D[i][j] = D[i-1][j] >= D[i][j-1] ? D[i-1][j] : D[i][j-1];
+      }
+    }
+    return D;
+  })();
+  let i=aTok.length, j=bTok.length; const ops=[];
+  while(i>0 || j>0){
+    if (i>0 && j>0 && norm(aTok[i-1]) === norm(bTok[j-1])) { ops.push({t:'eq', v:aTok[i-1]}); i--; j--; }
+    else if (j>0 && (i===0 || dp[i][j-1] >= dp[i-1][j])) { ops.push({t:'ins', v:bTok[j-1]}); j--; }
+    else if (i>0) { ops.push({t:'del', v:aTok[i-1]}); i--; }
+  }
+  ops.reverse();
+  // Merge adjacent same-type tokens for readability (except keep whitespace tokens boundaries)
+  const merged = [];
+  for (const op of ops){
+    const last = merged[merged.length-1];
+    if (last && last.t===op.t && !(mode!=='line' && (/^\s+$/.test(op.v) || /^\s+$/.test(last.v)))){
+      last.v += op.v;
+    } else {
+      merged.push({t:op.t, v: op.v});
+    }
+  }
+  const html = merged.map(op => `<span class="${op.t}">${escapeHtml(op.v)}</span>`).join('');
+  const out = document.getElementById('diff-out');
+  out.innerHTML = html;
+}
+
+function getEditableText(id){
+  const el = document.getElementById(id);
+  if (!el) return '';
+  // textContent preserves newlines reasonably for contenteditable
+  return (el.textContent||'');
+}
+
+function setEditableHTML(id, html){
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+function runDiff(){
+  const left = getEditableText('diff-left');
+  const right = getEditableText('diff-right');
+  const mode = document.getElementById('diff-mode').value;
+  const ignore = document.getElementById('diff-ignore-case').checked;
+
+  const aTok = tokenize(left, mode);
+  const bTok = tokenize(right, mode);
+  const norm = (x) => ignore ? x.toLowerCase() : x;
+  // DP table
+  const dp = (function(){
+    const n=aTok.length, m=bTok.length; const D=Array(n+1);
+    for(let i=0;i<=n;i++){ D[i]=new Array(m+1).fill(0); }
+    for(let i=1;i<=n;i++){
+      for(let j=1;j<=m;j++){
+        D[i][j] = (norm(aTok[i-1]) === norm(bTok[j-1])) ? (D[i-1][j-1]+1) : (D[i-1][j] >= D[i][j-1] ? D[i-1][j] : D[i][j-1]);
+      }
+    }
+    return D;
+  })();
+  // Backtrack to ops
+  let i=aTok.length, j=bTok.length; const ops=[];
+  while(i>0 || j>0){
+    if (i>0 && j>0 && norm(aTok[i-1]) === norm(bTok[j-1])) { ops.push({t:'eq', vA:aTok[i-1], vB:bTok[j-1]}); i--; j--; }
+    else if (j>0 && (i===0 || dp[i][j-1] >= dp[i-1][j])) { ops.push({t:'ins', vB:bTok[j-1]}); j--; }
+    else if (i>0) { ops.push({t:'del', vA:aTok[i-1]}); i--; }
+  }
+  ops.reverse();
+
+  // Build left and right HTML: highlight deletions on left, insertions on right
+  const leftHtml = ops.map(op => {
+    if (op.t === 'eq') return escapeHtml(op.vA);
+    if (op.t === 'del') return `<span class="diff-red">${escapeHtml(op.vA)}</span>`;
+    return ''; // ins not present in left
+  }).join('');
+  const rightHtml = ops.map(op => {
+    if (op.t === 'eq') return escapeHtml(op.vB);
+    if (op.t === 'ins') return `<span class="diff-red">${escapeHtml(op.vB)}</span>`;
+    return ''; // del not present in right
+  }).join('');
+
+  setEditableHTML('diff-left', leftHtml);
+  setEditableHTML('diff-right', rightHtml);
+}
+
+// Auto-run diff on input/option changes
+['diff-left','diff-right'].forEach(id => {
+  const el = document.getElementById(id);
+  el?.addEventListener('input', () => {
+    // Defer to avoid re-entrancy while typing
+    requestAnimationFrame(runDiff);
+  });
+});
+document.getElementById('diff-mode')?.addEventListener('change', runDiff);
+document.getElementById('diff-ignore-case')?.addEventListener('change', runDiff);
+// Initial compare
+runDiff();

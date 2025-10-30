@@ -61,3 +61,7 @@ footer{padding:16px;color:var(--muted);text-align:center}
 .tz-list .card{background:#0b1020;border:1px solid #1f2937;border-radius:8px;padding:8px}
 .tz-list .title{color:#9aa7bd;margin-bottom:4px}
 .inline{display:flex;align-items:center;gap:6px;color:var(--muted)}
+
+/* Diff styles */
+.diff-edit{min-height:160px;background:#0b1020;border:1px solid #1f2937;border-radius:8px;color:var(--text);padding:10px;white-space:pre-wrap;word-wrap:break-word;overflow:auto}
+.diff-red{background:rgba(239,68,68,.22);color:#fecaca;border-radius:3px;padding:0 1px}
