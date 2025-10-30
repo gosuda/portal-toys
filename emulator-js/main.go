@@ -36,7 +36,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relayserver base URL")
 	flags.IntVar(&flagPort, "port", 8099, "local port")
-	flags.StringVar(&flagName, "name", "애뮬숭이", "backend display name")
+	flags.StringVar(&flagName, "name", "emulator-js", "backend display name")
 }
 
 func main() {
@@ -124,7 +124,7 @@ func withStaticHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set appropriate headers for static assets
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		
+
 		ext := path.Ext(r.URL.Path)
 		if ext == ".html" || r.URL.Path == "/" {
 			w.Header().Set("Cache-Control", "no-cache")
@@ -132,8 +132,7 @@ func withStaticHeaders(next http.Handler) http.Handler {
 			// Cache JS, CSS, WASM, images for 1 day
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 		}
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
-
