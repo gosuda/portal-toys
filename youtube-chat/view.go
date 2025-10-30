@@ -155,6 +155,38 @@ func NewHandler(name string, hub *drawHub) http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
+	// Dump export: returns JSON object { "nickname": [urls...] }
+	r.Get("/dump.json", func(w http.ResponseWriter, r *http.Request) {
+		ch := make(chan [][]byte, 1)
+		hub.snapshotReq <- ch
+		history := <-ch
+		d := BuildDumpFromHistory(history)
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(d)
+	})
+
+	// Dump import: accepts the same JSON and broadcasts adds
+	r.Post("/dump/import", func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		d, err := ParseDump(r.Body)
+		if err != nil {
+			http.Error(w, "invalid JSON", http.StatusBadRequest)
+			return
+		}
+		added := 0
+		now := time.Now().UnixMilli()
+		for nick, arr := range d {
+			for _, url := range arr {
+				msg := map[string]interface{}{"t": "ytq-add", "url": url, "by": nick, "ts": now}
+				b, _ := json.Marshal(msg)
+				hub.broadcast <- b
+				added++
+			}
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]int{"added": added})
+	})
+
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -194,85 +226,69 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     *{ box-sizing:border-box }
     body{ margin:0; background:var(--chrome); color:var(--ink); font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif }
     .wrap{ max-width:1100px; margin:0 auto; padding:16px }
-    .ribbon{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; box-shadow:0 1px 0 rgba(0,0,0,0.03) }
-    .row{ display:flex; gap:12px; align-items:stretch; flex-wrap:wrap }
-    .group{ border-right:1px solid var(--chrome-line); padding-right:12px; margin-right:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap }
-    .group:last-child{ border-right:none; margin-right:0; padding-right:0 }
     .title{ font-weight:800; margin:0 0 8px 0; font-size:14px; color:var(--muted) }
     .btn{ background:var(--btn); border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; cursor:pointer; font-weight:700; color:#111; min-width:44px; min-height:38px; text-align:center }
     .btn:hover{ background:var(--btn-hover) }
     .input{ border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; background:#fff; min-height:38px; min-width:220px }
-    .main{ margin-top:12px; display:grid; grid-template-columns: 2fr 1fr; grid-template-areas: 'player chat'; gap:12px }
+    .main{ margin-top:16px; display:grid; grid-template-columns: 2fr 1fr; grid-template-areas: 'player chat'; gap:16px }
     .col-player{ grid-area: player }
-    .col-chat{ grid-area: chat }
-    .panel{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px }
+    .col-chat{ grid-area: chat; min-height:0; overflow:hidden }
+    .panel{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; display:flex; flex-direction:column }
     .player{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border:1px solid var(--chrome-line); border-radius:8px; overflow:hidden }
     .status{ margin-top:8px; color:var(--muted); font-size:12px }
-    .queue{ margin-top:8px }
-    .queue-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px }
-    .queue-actions{ display:flex; gap:8px; align-items:center }
-    .queue-list{ border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; max-height:220px; overflow:auto }
+    .queue{ margin-top:12px }
+    .queue-list{ border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; min-height:56px; max-height:240px; overflow:auto }
+    .queue-tools{ margin-top:10px; margin-bottom:8px; font-size:12px; color:var(--muted) }
+    .link{ color:var(--accent); text-decoration:underline; cursor:pointer }
     .queue-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px dashed #e5e7eb; cursor:pointer }
     .queue-item:last-child{ border-bottom:none }
     .queue-item .meta{ color:var(--muted); font-size:12px }
     .queue-item.active{ background:#eef2ff }
     .btn-icon{ background:var(--btn); border:1px solid var(--btn-line); border-radius:6px; padding:4px 8px; cursor:pointer; }
     .chat{ display:flex; flex-direction:column; height:100% }
-    .chat-head{ display:flex; gap:8px; align-items:center; margin-bottom:8px }
-    .chat-log{ flex:1; overflow:auto; border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; max-height:60vh }
+    .chat-head{ display:flex; gap:12px; align-items:center; margin-bottom:10px }
+    .chat-log{ flex:1 1 auto; min-height:0; overflow:auto; border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa }
     .chat-msg{ margin:0 0 6px 0; line-height:1.35 }
     .chat-msg .who{ font-weight:700 }
     .chat-msg .time{ color:var(--muted); font-size:11px; margin-left:6px }
-    .chat-input{ display:flex; gap:8px; margin-top:8px }
+    .chat-input{ display:flex; gap:12px; margin-top:10px }
     .chat-input input{ flex:1 }
+    .yt-add{ margin-top:12px }
+    .yt-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
+    .yt-actions-right{ margin-left:auto; display:flex; gap:12px; align-items:center }
+    .queue-empty{ color:var(--muted); font-size:13px; padding:8px; text-align:center }
     @media (max-width: 900px){
       .main{ grid-template-columns:1fr; grid-template-areas: 'player' 'chat' }
       .btn{ min-height:42px }
       .input{ min-height:42px }
-      .chat-log{ height: 50vh }
     }
   </style>
   </head>
 <body>
   <div class="wrap">
-    <div class="ribbon">
-      <div class="row">
-        <div class="group">
-          <div class="title">YouTube</div>
-          <input id="ytUrl" class="input" type="url" placeholder="https://youtu.be/… 또는 https://www.youtube.com/watch?v=…" />
-          <button class="btn" id="ytPlay" title="Broadcast and play">Play ▶</button>
-        </div>
-        <div class="group">
-          <div class="title">Player</div>
-          <label for="size" style="color:var(--muted); font-size:12px">Size</label>
-          <input id="size" type="range" min="1" max="4" value="2" step="1" />
-          <label for="ratio" style="color:var(--muted); font-size:12px; margin-left:8px">Ratio</label>
-          <select id="ratio" class="input" style="min-width:120px">
-            <option value="16/9" selected>16:9</option>
-            <option value="4/3">4:3</option>
-            <option value="1/1">1:1</option>
-            <option value="21/9">21:9</option>
-          </select>
-        </div>
-        <div class="group">
-          <div class="title">닉네임</div>
-          <input id="nick" class="input" type="text" placeholder="anon" style="min-width:140px" />
-          <button id="roll" class="btn" title="랜덤 닉네임">🎲</button>
-        </div>
-      </div>
-    </div>
 
     <div class="main">
       <div class="panel col-player">
         <div id="ytPlayer" class="player"></div>
         <div id="ytStatus" class="status"></div>
-        <div class="queue">
-          <div class="queue-head">
-            <div class="title" style="margin:0">재생 목록</div>
-            <div class="queue-actions">
+        <div class="yt-add">
+          <div class="title" style="margin:0">YouTube</div>
+          <div class="yt-row">
+            <input id="ytUrl" class="input" type="url" placeholder="https://youtu.be/… 또는 https://www.youtube.com/watch?v=…" />
+            <button class="btn" id="ytPlay" title="Broadcast and play">Play ▶</button>
+            <div class="yt-actions-right">
+              <button id="qPrev" class="btn" title="이전 곡">Prev ◀</button>
               <button id="qNext" class="btn" title="다음 곡">Next ▶</button>
               <button id="qClear" class="btn" title="목록 비우기">Clear</button>
             </div>
+          </div>
+        </div>
+        <div class="queue">
+          <div class="queue-tools">
+            <a id="qExportLink" class="link" title="URL 목록을 JSON으로 다운로드">Export JSON</a>
+            <span style="margin:0 6px; color:#d1d5db">|</span>
+            <a id="qImportLink" class="link" title="JSON 파일에서 URL 목록 업로드">Import JSON</a>
+            <input id="qImportFile" type="file" accept="application/json,.json" style="display:none" />
           </div>
           <div id="qList" class="queue-list"></div>
         </div>
@@ -280,6 +296,9 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       <div class="panel chat col-chat">
         <div class="chat-head">
           <div class="title" style="margin:0">채팅</div>
+          <div style="flex:1"></div>
+          <input id="nick" class="input" type="text" placeholder="anon" style="min-width:140px" />
+          <button id="roll" class="btn" title="랜덤 닉네임">🎲</button>
         </div>
         <div id="log" class="chat-log"></div>
         <div class="chat-input">
@@ -288,8 +307,6 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
         </div>
       </div>
     </div>
-
-    <div class="status">{{.Name}}</div>
   </div>
 
   <!-- YouTube IFrame API Loader -->
@@ -316,12 +333,28 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     const log = document.getElementById('log');
     const msgEl = document.getElementById('msg');
     const sendBtn = document.getElementById('send');
-    const sizeEl = document.getElementById('size');
-    const ratioEl = document.getElementById('ratio');
-    const mainGrid = document.querySelector('.main');
     const qList = document.getElementById('qList');
+    const qPrev = document.getElementById('qPrev');
     const qNext = document.getElementById('qNext');
     const qClear = document.getElementById('qClear');
+    const qExport = document.getElementById('qExportLink');
+    const qImport = document.getElementById('qImportLink');
+    const qImportFile = document.getElementById('qImportFile');
+
+    // Constrain chat panel to left panel height; scroll inside chat-log
+    try {
+      const leftPanel = document.querySelector('.col-player');
+      const rightPanel = document.querySelector('.col-chat');
+      if (leftPanel && rightPanel && 'ResizeObserver' in window) {
+        const sync = () => {
+          rightPanel.style.maxHeight = leftPanel.getBoundingClientRect().height + 'px';
+        };
+        const ro = new ResizeObserver(sync);
+        ro.observe(leftPanel);
+        sync();
+        window.addEventListener('resize', sync);
+      }
+    } catch (_) {}
 
     // Nickname persistence
     const stored = localStorage.getItem('nick');
@@ -347,11 +380,19 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
 
     // Messaging
     function send(msg){ if(sock.readyState===1) sock.send(JSON.stringify(msg)); }
-    function sendYT(url, id){ send({t:'yt', url, id, ts: Date.now()}); }
     function sendChat(text){ const name = (nickEl.value||'anon').trim() || 'anon'; send({t:'chat', name, text, ts: Date.now()}); }
     function sendQAdd(url, id){ const by=(nickEl.value||'anon').trim()||'anon'; send({t:'ytq-add', url, id, by, ts: Date.now()}); }
+    function sendQAddBy(url, id, by){ by=(by||'anon').trim()||'anon'; send({t:'ytq-add', url, id, by, ts: Date.now()}); }
     function sendQClear(){ send({t:'ytq-clear', ts: Date.now()}); }
     function sendQDel(idx, id){ send({t:'ytq-del', idx, id, ts: Date.now()}); }
+    // server import helper
+    async function uploadJSONText(text){
+      try{
+        const res = await fetch('dump/import', {method:'POST', headers:{'Content-Type':'application/json'}, body:text});
+        if(!res.ok){ throw new Error('upload failed'); }
+        return true;
+      }catch(_){ alert('업로드에 실패했습니다.'); return false; }
+    }
 
     // --- YouTube player state ---
     let ytPlayerObj = null;
@@ -437,6 +478,13 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
 
     function renderQueue(){
       qList.innerHTML = '';
+      if (playlist.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'queue-empty';
+        empty.textContent = 'No items yet — please add a YouTube URL.';
+        qList.appendChild(empty);
+        return;
+      }
       playlist.forEach((it, i)=>{
         const row = document.createElement('div'); row.className='queue-item' + (i===currentIdx?' active':'');
         const left = document.createElement('div'); left.innerHTML = (i===currentIdx?'▶ ':'') + '<strong>' + (it.id||'') + '</strong>';
@@ -530,33 +578,54 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     msgEl.setAttribute('inputmode','text');
     msgEl.addEventListener('keydown', (e)=>{ if(e.isComposing||e.keyCode===229){return;} if(e.key==='Enter'){ e.preventDefault(); sendBtn.click(); } });
 
+    qPrev.addEventListener('click', ()=>{ if(currentIdx - 1 >= 0){ playIndex(currentIdx - 1); } });
     qNext.addEventListener('click', ()=>{ if(currentIdx + 1 < playlist.length){ playIndex(currentIdx + 1); } });
     qClear.addEventListener('click', ()=>{ if(confirm('재생 목록을 모두 비울까요?')) sendQClear(); });
 
-    // Player size controls (원본 유지)
-    function isMobile(){ return window.matchMedia('(max-width: 900px)').matches; }
-    function applySize(){
-      const v = parseInt(sizeEl.value,10);
-      const fr = Math.max(1, Math.min(4, v));
-      if(!mainGrid) return;
-      if(isMobile()){
-        mainGrid.style.gridTemplateColumns = '1fr';
-      } else {
-        mainGrid.style.gridTemplateColumns = fr + 'fr 1fr';
-      }
-      try{ localStorage.setItem('ytchat.size', String(fr)); }catch(_){ }
-    }
-    function applyRatio(){
-      const r = ratioEl.value;
-      ytPlayer.style.aspectRatio = r;
-      try{ localStorage.setItem('ytchat.ratio', r); }catch(_){ }
-    }
-    try{ const s = parseInt(localStorage.getItem('ytchat.size')||'2',10); if(s){ sizeEl.value=String(s); } }catch(_){ }
-    try{ const rr = localStorage.getItem('ytchat.ratio')||'16/9'; ratioEl.value = rr; }catch(_){ }
-    applySize(); applyRatio();
-    sizeEl.addEventListener('input', applySize);
-    window.addEventListener('resize', ()=>{ applySize(); });
-    ratioEl.addEventListener('change', applyRatio);
+    // Export/Import JSON via server endpoints (format: { "nickname": [urls...] })
+    qExport.addEventListener('click', ()=>{
+      fetch('dump.json').then(r=>{
+        if(!r.ok) throw new Error('download error');
+        return r.text();
+      }).then(text=>{
+        const blob = new Blob([text], {type:'application/json'});
+        const a = document.createElement('a');
+        const ts = new Date(); const pad=(n)=>String(n).padStart(2,'0');
+        const name = 'youtube-urls-' + ts.getFullYear() + pad(ts.getMonth()+1) + pad(ts.getDate()) + '-' + pad(ts.getHours()) + pad(ts.getMinutes()) + pad(ts.getSeconds()) + '.json';
+        a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); URL.revokeObjectURL(a.href); a.remove();
+      }).catch(()=>{ alert('내보내기에 실패했습니다.'); });
+    });
+
+    qImport.addEventListener('click', ()=>{ qImportFile.click(); });
+    qImportFile.addEventListener('change', ()=>{
+      const f = qImportFile.files && qImportFile.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const text = String(reader.result||'');
+          let obj = JSON.parse(text);
+          if (!obj || typeof obj !== 'object' || Array.isArray(obj)) { throw new Error('object expected'); }
+          // Flatten {nick: [urls...], ...]
+          const pairs = [];
+          for (const [nick, arr] of Object.entries(obj)){
+            if (!Array.isArray(arr)) continue;
+            const urls = arr.map(v=> typeof v==='string'? v : (v&&typeof v.url==='string'? v.url: '')).filter(Boolean);
+            for(const u of urls){ pairs.push([nick, u]); }
+          }
+          if (!pairs.length) { alert('유효한 URL이 없습니다.'); return; }
+          uploadJSONText(text);
+        }catch(e){
+          alert('가져오기에 실패했습니다. 유효한 JSON 파일인지 확인하세요.');
+        } finally {
+          qImportFile.value = '';
+        }
+      };
+      reader.onerror = ()=>{ alert('파일을 읽지 못했습니다.'); qImportFile.value=''; };
+      reader.readAsText(f);
+    });
+
+    // Responsive layout only: size/ratio controls removed
   })();
   </script>
 </body>
