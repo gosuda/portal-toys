@@ -213,6 +213,29 @@
         </div>
       </details>
 
+      <details class="tool" id="asn1">
+        <summary><h2>ASN.1 (DER) Viewer</h2></summary>
+        <div class="tool-body">
+          <div class="grid single">
+            <div>
+              <label>Input (Hex or Base64)</label>
+              <textarea id="asn1-in" placeholder="30 0a 02 01 01 ... or MIIB... (certificate, key, etc)"></textarea>
+              <div class="row">
+                <label class="inline">Format
+                  <select id="asn1-format">
+                    <option value="auto" selected>Auto</option>
+                    <option value="hex">Hex</option>
+                    <option value="b64">Base64</option>
+                  </select>
+                </label>
+              </div>
+              <div id="asn1-err" class="warning"></div>
+              <div id="asn1-out" class="asn1-tree" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details class="tool" id="diff">
         <summary><h2>Diff Compare</h2></summary>
         <div class="tool-body">

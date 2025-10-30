@@ -169,6 +169,7 @@ const tools = [
   { id: 'hexdec', name: 'Decimal / Hex', icon: '🔢' },
   { id: 'b64', name: 'Base64', icon: '🧬' },
   { id: 'json', name: 'JSON', icon: '🧰' },
+  { id: 'asn1', name: 'ASN.1', icon: '📜' },
   { id: 'diff', name: 'Diff', icon: '🧩' },
   { id: 'case', name: 'Case', icon: '🔤' },
   { id: 'random', name: 'Random', icon: '🎲' },
@@ -551,3 +552,118 @@ document.getElementById('diff-mode')?.addEventListener('change', runDiff);
 document.getElementById('diff-ignore-case')?.addEventListener('change', runDiff);
 // Initial compare
 runDiff();
+
+// ==========================
+// ASN.1 (DER) Viewer
+// ==========================
+function cleanHexToBytes(hex){
+  try { return hexToBytes(hex); } catch { return null; }
+}
+function b64ToBytesSafe(b64){
+  try{ return base64ToBytes(b64); }catch{ return null; }
+}
+function asn1Decode(bytes){
+  const nodes = [];
+  let off = 0;
+  while (off < bytes.length){
+    const { node, next } = asn1ReadTLV(bytes, off);
+    nodes.push(node);
+    off = next;
+  }
+  return nodes;
+}
+function asn1ReadTLV(bytes, off){
+  if (off >= bytes.length) throw new Error('unexpected end');
+  let b = bytes[off++];
+  const tagClass = (b >> 6) & 0x03; // 0=univ,1=app,2=ctx,3=priv
+  const constructed = !!(b & 0x20);
+  let tagNum = b & 0x1f;
+  if (tagNum === 0x1f){ // high-tag-number form
+    tagNum = 0; let more=true; let count=0;
+    while (more){
+      if (off >= bytes.length) throw new Error('truncated tag');
+      const tb = bytes[off++];
+      more = !!(tb & 0x80);
+      tagNum = (tagNum << 7) | (tb & 0x7f);
+      if (++count > 6) throw new Error('tag too large');
+    }
+  }
+  if (off >= bytes.length) throw new Error('unexpected end len');
+  let lenByte = bytes[off++];
+  let len;
+  if (lenByte === 0x80) throw new Error('indefinite length not supported');
+  if (lenByte & 0x80){
+    const n = lenByte & 0x7f; if (n === 0 || n > 4) throw new Error('invalid length');
+    if (off + n > bytes.length) throw new Error('truncated length');
+    len = 0; for (let i=0;i<n;i++) len = (len<<8) | bytes[off++];
+  } else { len = lenByte; }
+  if (off + len > bytes.length) throw new Error('value truncated');
+  const startVal = off; const endVal = off + len;
+  let children = null;
+  if (constructed){
+    children = [];
+    let p = startVal;
+    while (p < endVal){
+      const { node: ch, next } = asn1ReadTLV(bytes, p);
+      children.push(ch); p = next;
+    }
+  }
+  const node = { tagClass, constructed, tagNum, len, header: 0 /*unused*/, value: bytes.slice(startVal, endVal), children };
+  return { node, next: endVal };
+}
+function asn1Render(nodes){
+  const out = [];
+  const clsName = (c)=>(['Universal','Application','Context','Private'][c]||String(c));
+  const univName = (t)=>({
+    1:'BOOLEAN',2:'INTEGER',3:'BIT STRING',4:'OCTET STRING',5:'NULL',6:'OBJECT IDENTIFIER',
+    12:'UTF8String',16:'SEQUENCE',17:'SET',19:'PrintableString',22:'IA5String',23:'UTCTime',24:'GeneralizedTime'
+  }[t]||String(t));
+  function valPreview(n){
+    try{
+      if (n.tagClass===0 && !n.constructed){
+        switch(n.tagNum){
+          case 2: return '0x' + Array.from(n.value).map(b=>b.toString(16).padStart(2,'0')).join('');
+          case 5: return 'NULL';
+          case 6: return oidToString(n.value);
+          case 3: return `bits(${n.value.length}b)`;
+          case 4: return 'octets ' + n.value.length;
+          case 12: case 19: case 22: return new TextDecoder().decode(n.value);
+          case 23: case 24: return new TextDecoder().decode(n.value);
+        }
+      }
+    }catch{}
+    return '';
+  }
+  function oidToString(bytes){ if (!bytes || bytes.length===0) return ''; const a = []; const b0 = bytes[0]; a.push(Math.floor(b0/40)); a.push(b0%40); let v=0; for(let i=1;i<bytes.length;i++){ const b=bytes[i]; v=(v<<7)|(b&0x7f); if(!(b&0x80)){ a.push(v); v=0; } } return a.join('.'); }
+  function renderNode(n, depth){
+    const indent = '<span class="asn1-indent">'.repeat(depth) + '</span>';
+    const tagText = (n.tagClass===0?univName(n.tagNum):String(n.tagNum));
+    const pv = valPreview(n);
+    out.push(`${indent}<span class="asn1-node"><span class="asn1-class">${clsName(n.tagClass)}</span> <span class="asn1-tag">${tagText}${n.constructed?' (C)':''}</span> <span class="asn1-len">len=${n.len}</span>${pv? ' <span class="asn1-val">'+escapeHtml(pv)+'</span>':''}</span>`);
+    if (n.children){ for(const ch of n.children) renderNode(ch, depth+1); }
+  }
+  for (const n of nodes) renderNode(n, 0);
+  return out.join('\n');
+}
+function runASN1(){
+  const input = document.getElementById('asn1-in');
+  const fmt = document.getElementById('asn1-format').value;
+  const err = document.getElementById('asn1-err');
+  const out = document.getElementById('asn1-out');
+  err.textContent = ''; out.textContent = '';
+  const txt = (input.value||'').trim(); if (!txt){ return; }
+  let bytes = null;
+  if (fmt === 'hex') bytes = cleanHexToBytes(txt);
+  else if (fmt === 'b64') bytes = b64ToBytesSafe(txt);
+  else {
+    // auto: try base64 first, then hex
+    bytes = b64ToBytesSafe(txt) || cleanHexToBytes(txt);
+  }
+  if (!bytes){ err.textContent = 'Failed to parse input as hex or base64.'; return; }
+  try{
+    const nodes = asn1Decode(bytes);
+    out.innerHTML = asn1Render(nodes);
+  }catch(e){ err.textContent = 'ASN.1 parse error: ' + (e?.message||String(e)); }
+}
+document.getElementById('asn1-in')?.addEventListener('input', () => requestAnimationFrame(runASN1));
+document.getElementById('asn1-format')?.addEventListener('change', runASN1);

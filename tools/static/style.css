@@ -65,3 +65,12 @@ footer{padding:16px;color:var(--muted);text-align:center}
 /* Diff styles */
 .diff-edit{min-height:160px;background:#0b1020;border:1px solid #1f2937;border-radius:8px;color:var(--text);padding:10px;white-space:pre-wrap;word-wrap:break-word;overflow:auto}
 .diff-red{background:rgba(239,68,68,.22);color:#fecaca;border-radius:3px;padding:0 1px}
+
+/* ASN.1 tree */
+.asn1-tree{margin-top:10px;background:#0b1020;border:1px solid #1f2937;border-radius:8px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre-wrap}
+.asn1-node{margin:2px 0}
+.asn1-indent{display:inline-block;width:16px}
+.asn1-tag{color:#93c5fd}
+.asn1-class{color:#a3e635}
+.asn1-len{color:#fbbf24}
+.asn1-val{color:#e5e7eb}
