@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>썸고 | 롤링페이퍼</title>
+    <title>Rolling Paper</title>
     <style>
         :root {
             color-scheme: light;
@@ -16,6 +16,8 @@
             --success-border: #c2e0cf;
             --error-bg: #fde8e8;
             --error-border: #f3c1c1;
+            --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", Arial, "돋움", Dotum, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
         }
 
         * {
@@ -23,10 +25,13 @@
         }
 
         body {
-            font-family: "IBM Plex Serif", Georgia, serif;
+            font-family: var(--font-sans);
             margin: 0;
             background: #f7f7f7;
             color: var(--ink);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         a {
@@ -42,7 +47,6 @@
         }
 
         .logo {
-            font-family: "JetBrains Mono", "Courier New", monospace;
             font-size: 20px;
             letter-spacing: 0.05em;
         }
@@ -57,7 +61,6 @@
         }
 
         h1 {
-            font-family: "Inter", Arial, sans-serif;
             margin: 0 0 24px;
             font-size: 26px;
             letter-spacing: -0.01em;
@@ -75,7 +78,7 @@
             border: 1px solid var(--border);
             border-radius: 4px;
             padding: 12px;
-            font-family: "Inter", Arial, sans-serif;
+            font-family: inherit;
             font-size: 15px;
             margin-bottom: 12px;
         }
@@ -85,13 +88,20 @@
             resize: vertical;
         }
 
+        .char-counter {
+            text-align: right;
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: -6px;
+            margin-bottom: 12px;
+        }
+
         button {
             width: 100%;
             border: none;
             border-radius: 4px;
             padding: 12px;
             font-size: 15px;
-            font-family: "Inter", Arial, sans-serif;
             background: var(--accent);
             color: #fff;
             cursor: pointer;
@@ -107,7 +117,6 @@
             margin-top: 10px;
             padding: 10px 12px;
             border-radius: 4px;
-            font-family: "Inter", Arial, sans-serif;
             font-size: 14px;
         }
 
@@ -126,7 +135,6 @@
         }
 
         h2 {
-            font-family: "Inter", Arial, sans-serif;
             font-size: 20px;
             margin: 0 0 18px;
             border-bottom: 1px solid var(--border);
@@ -153,27 +161,25 @@
         }
 
         .message-nickname {
-            font-family: "Inter", Arial, sans-serif;
             font-size: 15px;
             font-weight: 600;
         }
 
         .message-timestamp {
-            font-family: "JetBrains Mono", "Courier New", monospace;
             font-size: 12px;
             color: var(--muted);
         }
 
         .message-content {
             margin: 0;
-            font-size: 16px;
+            font-size: 15px;
             white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
     <header>
-        <a class="logo" href="/">롤링페이퍼</a>
+        <a class="logo" href="/">Rolling Papaer</a>
     </header>
 
     <div class="container">
@@ -182,7 +188,8 @@
         <form id="messageForm">
             <input type="text" id="nicknameInput" name="nickname" placeholder="닉네임 (선택)">
             <textarea id="messageInput" name="message" placeholder="남기고 싶은 메시지를 입력하세요." required></textarea>
-            <button type="submit">남기기</button>
+            <div id="charCounter" class="char-counter">0 / -</div>
+            <button id="submitButton" type="submit" disabled>남기기</button>
             <div id="statusMessage" class="status-message"></div>
         </form>
 
@@ -226,6 +233,20 @@
                 msg: $('#messageInput'),
                 nick: $('#nicknameInput'),
                 status: $('#statusMessage'),
+                counter: $('#charCounter'),
+                submitBtn: $('#submitButton'),
+            };
+
+            let MAX_LEN = null;
+
+            const updateCounter = () => {
+                const len = els.msg.value.length;
+                if (!els.counter) return;
+                if (typeof MAX_LEN === 'number' && MAX_LEN > 0) {
+                    els.counter.textContent = `${len} / ${MAX_LEN}`;
+                } else {
+                    els.counter.textContent = `${len}`;
+                }
             };
 
             const setStatus = (message, type) => {
@@ -278,9 +299,21 @@
                 return item;
             };
 
+            const applyMaxLen = (v) => {
+                if (typeof v === 'number' && v > 0) {
+                    MAX_LEN = v;
+                    if (els.msg) els.msg.setAttribute('maxlength', String(v));
+                    if (els.submitBtn) els.submitBtn.disabled = false;
+                    updateCounter();
+                }
+            };
+
             const renderMessages = (payload) => {
                 const messages = Array.isArray(payload) ? payload : (Array.isArray(payload.messages) ? payload.messages : []);
                 const threshold = (typeof payload.threshold === 'number' && payload.threshold > 0) ? payload.threshold : 3;
+                if (payload && typeof payload.maxLen === 'number' && payload.maxLen > 0) {
+                    applyMaxLen(payload.maxLen);
+                }
                 if (!messages.length) {
                     els.board.innerHTML = '<p>아직 메시지가 없습니다.</p>';
                     return;
@@ -307,6 +340,8 @@
                 const message = els.msg.value.trim();
                 const nickname = els.nick.value.trim();
                 if (!message) return setStatus('메시지를 입력하세요.', 'error');
+                if (!(typeof MAX_LEN === 'number' && MAX_LEN > 0)) return setStatus('설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.', 'error');
+                if (message.length > MAX_LEN) return setStatus(`메시지는 ${MAX_LEN}자까지 가능합니다.`, 'error');
                 const body = `message=${encodeURIComponent(message)}&nickname=${encodeURIComponent(nickname)}`;
                 try {
                     const { ok, body: out } = await jsonFetch('/api/submit', {
@@ -331,6 +366,10 @@
             window.addEventListener('load', () => {
                 fetchMessages();
                 els.form.addEventListener('submit', submitMessage);
+                if (els.msg) {
+                    els.msg.addEventListener('input', updateCounter);
+                    updateCounter();
+                }
             });
         })();
     </script>

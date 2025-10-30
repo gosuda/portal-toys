@@ -17,6 +17,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/pebble"
 	"github.com/rs/zerolog/log"
@@ -25,11 +26,11 @@ import (
 	"github.com/gosuda/portal/sdk"
 )
 
-//go:embed public
+//go:embed static
 var embeddedPublic embed.FS
 
 var (
-	publicSub     fs.FS
+	staticSub     fs.FS
 	staticHandler http.Handler
 	db            *pebble.DB
 )
@@ -66,6 +67,7 @@ var (
 	flagPort          int
 	flagName          string
 	flagVoteThreshold int
+	flagMaxLen        int
 )
 
 func init() {
@@ -74,6 +76,7 @@ func init() {
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
+	flags.IntVar(&flagMaxLen, "max-len", 2500, "maximum message length in characters (>=1)")
 }
 
 func main() {
@@ -96,12 +99,11 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/", rootHandler)
 
 	// Prepare embedded static files
-	sub, err := fs.Sub(embeddedPublic, "public")
+	sub, err := fs.Sub(embeddedPublic, "static")
 	if err != nil {
 		return fmt.Errorf("embed sub FS: %w", err)
 	}
-	publicSub = sub
-	staticHandler = http.FileServer(http.FS(publicSub))
+	staticHandler = http.FileServer(http.FS(sub))
 
 	// Relay client using http-backend pattern
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
@@ -193,6 +195,10 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		sendJSONError(w, "message required", http.StatusBadRequest)
 		return
 	}
+	if utf8.RuneCountInString(content) > currentMaxLen() {
+		sendJSONError(w, fmt.Sprintf("Too long message (maximum %d characters)", currentMaxLen()), http.StatusBadRequest)
+		return
+	}
 
 	nickname := strings.TrimSpace(r.FormValue("nickname"))
 
@@ -252,7 +258,7 @@ func handleGetMessages(w http.ResponseWriter, r *http.Request) {
 		messages = append(messages, msg)
 	}
 
-	writeJSON(w, map[string]any{"messages": messages, "threshold": currentThreshold()})
+	writeJSON(w, map[string]any{"messages": messages, "threshold": currentThreshold(), "maxLen": currentMaxLen()})
 }
 
 func sendJSONError(w http.ResponseWriter, message string, statusCode int) {
@@ -285,7 +291,7 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/peer/") && r.URL.Path != "/peer/" {
 		// SPA fallback to embedded index.html
-		b, err := fs.ReadFile(publicSub, "index.html")
+		b, err := fs.ReadFile(staticSub, "index.html")
 		if err != nil {
 			http.NotFound(w, r)
 			return
@@ -414,6 +420,13 @@ func currentThreshold() int {
 		return 1
 	}
 	return flagVoteThreshold
+}
+
+func currentMaxLen() int {
+	if flagMaxLen < 1 {
+		return 1
+	}
+	return flagMaxLen
 }
 
 func getClientIP(r *http.Request) string {
