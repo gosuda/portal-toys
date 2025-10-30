@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,7 +18,7 @@ import (
 	"github.com/gosuda/portal/sdk"
 )
 
-//go:embed index.html data docs
+//go:embed static/index.html static/data static/docs
 var emulatorAssets embed.FS
 
 var rootCmd = &cobra.Command{
@@ -74,7 +75,17 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	// 4) Build HTTP handler to serve embedded EmulatorJS assets
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	mux.Handle("/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
+
+	// Serve static/ as the site root
+	staticFS, err := fs.Sub(emulatorAssets, "static")
+	if err != nil {
+		return fmt.Errorf("sub fs static: %w", err)
+	}
+	mux.Handle("/", withStaticHeaders(http.FileServer(http.FS(staticFS))))
+
+	// Also expose top-level data and docs
+	mux.Handle("/data/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
+	mux.Handle("/docs/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 
 	// 5) Serve HTTP directly over the relay listener
 	log.Info().Msgf("[emulatorjs] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
