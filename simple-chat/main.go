@@ -17,7 +17,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "simple-chat",
-	Short: "Portal demo chat (local HTTP backend + libp2p advertiser)",
+	Short: "Portal demo chat",
 	RunE:  runChat,
 }
 

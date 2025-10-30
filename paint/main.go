@@ -27,7 +27,7 @@ var staticFiles embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "paint",
-	Short: "collaborative paint (local HTTP backend + libp2p advertiser)",
+	Short: "collaborative paint",
 	RunE:  runPaint,
 }
 

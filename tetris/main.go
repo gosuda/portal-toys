@@ -26,7 +26,7 @@ var embeddedStatic embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "tetris",
-	Short: "Portal multiplayer tetris (local HTTP backend + libp2p advertiser)",
+	Short: "Portal multiplayer tetris",
 	RunE:  runTetris,
 }
 

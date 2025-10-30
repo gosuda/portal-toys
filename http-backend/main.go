@@ -17,7 +17,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "client",
-	Short: "Portal demo client (local HTTP backend + libp2p advertiser)",
+	Short: "Portal demo client",
 	RunE:  runClient,
 }
 
