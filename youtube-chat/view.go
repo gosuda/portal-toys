@@ -230,15 +230,16 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     .btn{ background:var(--btn); border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; cursor:pointer; font-weight:700; color:#111; min-width:44px; min-height:38px; text-align:center }
     .btn:hover{ background:var(--btn-hover) }
     .input{ border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; background:#fff; min-height:38px; min-width:220px }
+    .app-title{ font-weight:800; font-size:28px; margin:0 0 6px 0 }
     .main{ margin-top:16px; display:grid; grid-template-columns: 2fr 1fr; grid-template-areas: 'player chat'; gap:16px }
     .col-player{ grid-area: player }
     .col-chat{ grid-area: chat; min-height:0; overflow:hidden }
     .panel{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; display:flex; flex-direction:column }
     .player{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border:1px solid var(--chrome-line); border-radius:8px; overflow:hidden }
     .status{ margin-top:8px; color:var(--muted); font-size:12px }
-    .queue{ margin-top:12px }
+    .queue{ margin-top:6px }
     .queue-list{ border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; min-height:56px; max-height:240px; overflow:auto }
-    .queue-tools{ margin-top:10px; margin-bottom:8px; font-size:12px; color:var(--muted) }
+    .queue-tools{ margin-top:4px; margin-bottom:4px; font-size:12px; color:var(--muted); text-align:right }
     .link{ color:var(--accent); text-decoration:underline; cursor:pointer }
     .queue-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px dashed #e5e7eb; cursor:pointer }
     .queue-item:last-child{ border-bottom:none }
@@ -266,13 +267,13 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
   </head>
 <body>
   <div class="wrap">
+    <div class="app-title">YouTube Chat</div>
 
     <div class="main">
       <div class="panel col-player">
         <div id="ytPlayer" class="player"></div>
         <div id="ytStatus" class="status"></div>
         <div class="yt-add">
-          <div class="title" style="margin:0">YouTube</div>
           <div class="yt-row">
             <input id="ytUrl" class="input" type="url" placeholder="https://youtu.be/… 또는 https://www.youtube.com/watch?v=…" />
             <button class="btn" id="ytPlay" title="Broadcast and play">Play ▶</button>
