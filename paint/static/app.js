@@ -104,6 +104,10 @@ function connect() {
     ws.onopen = () => {
         statusDiv.textContent = '✓ Connected - Draw to collaborate!';
         statusDiv.className = 'status connected';
+        // Ask existing peers for a lightweight snapshot instead of full history
+        try {
+            ws.send(JSON.stringify({ type: 'snapshot_request' }));
+        } catch {}
     };
 
     ws.onclose = () => {
@@ -116,6 +120,10 @@ function connect() {
         console.error('WebSocket error:', err);
     };
 
+    let pendingSnapshotTimer = null;
+    let lastSnapshotAt = 0;
+    let snapshotApplied = false;
+
     ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
 
@@ -125,8 +133,46 @@ function connect() {
             drawShape(msg.mode, msg.startX, msg.startY, msg.endX, msg.endY, msg.color, msg.width);
         } else if (msg.type === 'text') {
             drawText(msg.text, msg.x, msg.y, msg.color, msg.width);
+        } else if (msg.type === 'image') {
+            const img = new Image();
+            img.onload = () => {
+                const drawX = msg.x - (msg.w / 2);
+                const drawY = msg.y - (msg.h / 2);
+                ctx.drawImage(img, drawX, drawY, msg.w, msg.h);
+            };
+            if (msg.id) {
+                img.src = `images/${msg.id}`;
+            } else {
+                img.src = msg.image; // backward compatibility
+            }
         } else if (msg.type === 'clear') {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+        } else if (msg.type === 'snapshot_request') {
+            // Randomized response; cancel if someone else already sent a snapshot
+            if (pendingSnapshotTimer) clearTimeout(pendingSnapshotTimer);
+            pendingSnapshotTimer = setTimeout(async () => {
+                if (Date.now() - lastSnapshotAt < 1500) return;
+                try {
+                    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+                    const form = new FormData();
+                    form.append('file', blob, 'snapshot.png');
+                    const res = await fetch('upload-image', { method: 'POST', body: form });
+                    if (!res.ok) return;
+                    const { id } = await res.json();
+                    ws.send(JSON.stringify({ type: 'snapshot', id, w: canvas.width, h: canvas.height }));
+                } catch {}
+            }, 100 + Math.floor(Math.random() * 400));
+        } else if (msg.type === 'snapshot') {
+            lastSnapshotAt = Date.now();
+            if (snapshotApplied) return;
+            const img = new Image();
+            img.onload = () => {
+                // Fit sender snapshot onto our canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, msg.w, msg.h, 0, 0, canvas.width, canvas.height);
+                snapshotApplied = true;
+            };
+            img.src = `images/${msg.id}`;
         }
     };
 }
@@ -417,6 +463,108 @@ clearBtn.addEventListener('click', () => {
         const msg = { type: 'clear' };
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify(msg));
+        }
+    }
+});
+
+// Drag & drop image import
+function canvasPointFromClient(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY,
+    };
+}
+
+async function handleImageFile(file, dropClientX, dropClientY) {
+    if (!file.type.startsWith('image/')) return;
+    // Load image for dimensions
+    const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = reject;
+        i.src = URL.createObjectURL(file);
+    });
+
+    // Scale to fit within canvas (max 80% of canvas)
+    const maxW = canvas.width * 0.8;
+    const maxH = canvas.height * 0.8;
+    const scale = Math.min(1, maxW / img.width, maxH / img.height);
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+
+    // Draw locally first
+    const pt = canvasPointFromClient(dropClientX, dropClientY);
+    const drawX = pt.x - w / 2;
+    const drawY = pt.y - h / 2;
+    ctx.drawImage(img, drawX, drawY, w, h);
+
+    // Upload resized version to server to keep payload small
+    const off = document.createElement('canvas');
+    off.width = w;
+    off.height = h;
+    const offCtx = off.getContext('2d');
+    offCtx.drawImage(img, 0, 0, w, h);
+    const blob = await new Promise(resolve => off.toBlob(resolve, 'image/png'));
+    let uploaded = false;
+    let id = null;
+    try {
+        if (blob) {
+            const form = new FormData();
+            form.append('file', blob, 'image.png');
+            const res = await fetch('upload-image', { method: 'POST', body: form });
+            if (res.ok) {
+                const json = await res.json();
+                id = json && json.id;
+                uploaded = !!id;
+            }
+        }
+    } catch (e) {
+        // fall back to data URL broadcast below
+        uploaded = false;
+    }
+
+    if (uploaded && id) {
+        const msg = { type: 'image', id, x: pt.x, y: pt.y, w, h };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg));
+        }
+    } else {
+        // Fallback: broadcast as data URL so sharing still works
+        const dataUrl = off.toDataURL('image/png');
+        const msg = { type: 'image', image: dataUrl, x: pt.x, y: pt.y, w, h };
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(msg));
+        }
+    }
+}
+
+canvas.addEventListener('dragover', (e) => {
+    e.preventDefault();
+});
+
+canvas.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const dt = e.dataTransfer;
+    if (!dt) return;
+    if (dt.files && dt.files.length > 0) {
+        for (const file of dt.files) {
+            if (file.type.startsWith('image/')) {
+                handleImageFile(file, e.clientX, e.clientY);
+                break; // handle first image only
+            }
+        }
+    } else if (dt.items) {
+        for (const item of dt.items) {
+            if (item.kind === 'file') {
+                const file = item.getAsFile();
+                if (file && file.type.startsWith('image/')) {
+                    handleImageFile(file, e.clientX, e.clientY);
+                    break;
+                }
+            }
         }
     }
 });
