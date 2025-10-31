@@ -231,11 +231,32 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     .btn:hover{ background:var(--btn-hover) }
     .input{ border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; background:#fff; min-height:38px; min-width:220px }
     .app-title{ font-weight:800; font-size:28px; margin:0 0 6px 0 }
-    .main{ margin-top:16px; display:grid; grid-template-columns: 2fr 1fr; grid-template-areas: 'player chat'; gap:16px }
-    .col-player{ grid-area: player }
-    .col-chat{ grid-area: chat; min-height:0; overflow:hidden }
+    .main {
+  margin:16px auto 0 auto;  /* 상단 16px, 좌우 자동 */
+  display:grid;
+  grid-template-columns: 2fr 1fr; /* 플레이어:채팅 비율 */
+  grid-template-areas: 'player chat';
+  gap:16px; /* 플레이어-채팅 간격 */
+  max-width: 2000px; /* 전체 폭 제한 */
+}
+    .col-player {
+  width: 100%;
+  max-width: 1800px; /* 원하는 최대 크기 */
+}
+    /* 채팅 높이 동기화 */
+.col-chat {
+  min-height:0;
+  overflow:hidden;
+}
     .panel{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; display:flex; flex-direction:column }
-    .player{ position:relative; width:100%; aspect-ratio:16/9; background:#000; border:1px solid var(--chrome-line); border-radius:8px; overflow:hidden }
+    .player {
+  width: 100%;
+  aspect-ratio: 16/9; /* 반응형 비율 유지 */
+  background:#000;
+  border:1px solid var(--chrome-line);
+  border-radius:8px;
+  overflow:hidden;
+}
     .status{ margin-top:8px; color:var(--muted); font-size:12px }
     .queue{ margin-top:6px }
     .queue-list{ border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; min-height:56px; max-height:240px; overflow:auto }
@@ -258,11 +279,15 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     .yt-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
     .yt-actions-right{ margin-left:auto; display:flex; gap:12px; align-items:center }
     .queue-empty{ color:var(--muted); font-size:13px; padding:8px; text-align:center }
-    @media (max-width: 900px){
-      .main{ grid-template-columns:1fr; grid-template-areas: 'player' 'chat' }
-      .btn{ min-height:42px }
-      .input{ min-height:42px }
-    }
+    /* 작은 화면 대응 */
+@media (max-width: 900px){
+  .main {
+    grid-template-columns:1fr;
+    grid-template-areas:
+      'player'
+      'chat';
+  }
+}
   </style>
   </head>
 <body>
@@ -270,7 +295,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     <div class="app-title">YouTube Chat</div>
 
     <div class="main">
-      <div class="panel col-player" style="width: 1500px; height: 1080px;">
+      <div class="panel col-player">
         <div id="ytPlayer" class="player"></div>
         <div id="ytStatus" class="status"></div>
         <div class="yt-add">
