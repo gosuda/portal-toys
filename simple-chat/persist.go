@@ -78,6 +78,55 @@ func (s *messageStore) LoadAll() ([]message, error) {
 	return out, nil
 }
 
+// LoadRecent loads the most recent N messages from the store.
+// If limit <= 0, it loads all messages (same as LoadAll).
+func (s *messageStore) LoadRecent(limit int) ([]message, error) {
+	if s == nil || s.db == nil {
+		return nil, nil
+	}
+	if limit <= 0 {
+		return s.LoadAll()
+	}
+	it, err := s.db.NewIter(nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = it.Close() }()
+
+	// First, count total messages to calculate where to start
+	var total int
+	for it.First(); it.Valid(); it.Next() {
+		total++
+	}
+
+	// If total is less than limit, load all
+	if total <= limit {
+		out := make([]message, 0, total)
+		for it.First(); it.Valid(); it.Next() {
+			var m message
+			if err := json.Unmarshal(it.Value(), &m); err == nil {
+				out = append(out, m)
+			}
+		}
+		return out, nil
+	}
+
+	// Otherwise, skip to the position where we want to start
+	skip := total - limit
+	out := make([]message, 0, limit)
+	idx := 0
+	for it.First(); it.Valid(); it.Next() {
+		if idx >= skip {
+			var m message
+			if err := json.Unmarshal(it.Value(), &m); err == nil {
+				out = append(out, m)
+			}
+		}
+		idx++
+	}
+	return out, nil
+}
+
 func (s *messageStore) Close() error {
 	if s == nil || s.db == nil {
 		return nil

@@ -15,14 +15,16 @@ import (
 
 // simple in-memory chat hub
 type hub struct {
-	mu        sync.RWMutex
-	messages  []message
-	conns     map[*websocket.Conn]struct{}
-	connUID   map[*websocket.Conn]string
-	userConns map[string]map[*websocket.Conn]struct{}
-	userName  map[string]string
-	wg        sync.WaitGroup
-	store     *messageStore
+	mu          sync.RWMutex
+	messages    []message
+	maxBacklog  int // maximum messages to keep in memory (0 = unlimited)
+	conns       map[*websocket.Conn]struct{}
+	connUID     map[*websocket.Conn]string
+	userConns   map[string]map[*websocket.Conn]struct{}
+	userName    map[string]string
+	wg          sync.WaitGroup
+	store       *messageStore
+	connMu      map[*websocket.Conn]*sync.Mutex // per-connection write locks
 }
 
 type message struct {
@@ -36,11 +38,13 @@ type message struct {
 
 func newHub() *hub {
 	return &hub{
-		conns:     map[*websocket.Conn]struct{}{},
-		connUID:   map[*websocket.Conn]string{},
-		userConns: map[string]map[*websocket.Conn]struct{}{},
-		userName:  map[string]string{},
-		messages:  make([]message, 0, 64),
+		conns:      map[*websocket.Conn]struct{}{},
+		connUID:    map[*websocket.Conn]string{},
+		userConns:  map[string]map[*websocket.Conn]struct{}{},
+		userName:   map[string]string{},
+		messages:   make([]message, 0, 64),
+		maxBacklog: 100, // keep last 100 messages in memory
+		connMu:     map[*websocket.Conn]*sync.Mutex{},
 	}
 }
 
@@ -49,6 +53,12 @@ func (h *hub) broadcast(m message) {
 	// Do not persist/retain roster messages in backlog; they are ephemeral UI state
 	if m.Event != "roster" {
 		h.messages = append(h.messages, m)
+		// Trim old messages if we exceed maxBacklog
+		if h.maxBacklog > 0 && len(h.messages) > h.maxBacklog {
+			// Keep only the most recent maxBacklog messages
+			copy(h.messages, h.messages[len(h.messages)-h.maxBacklog:])
+			h.messages = h.messages[:h.maxBacklog]
+		}
 	}
 	conns := make([]*websocket.Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -61,7 +71,14 @@ func (h *hub) broadcast(m message) {
 		}
 	}
 	for _, c := range conns {
-		_ = c.WriteJSON(m)
+		h.mu.RLock()
+		mu := h.connMu[c]
+		h.mu.RUnlock()
+		if mu != nil {
+			mu.Lock()
+			_ = c.WriteJSON(m)
+			mu.Unlock()
+		}
 	}
 }
 
@@ -108,7 +125,14 @@ func (h *hub) closeAll() {
 	}
 	h.mu.Unlock()
 	for _, c := range conns {
-		_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutdown"))
+		h.mu.RLock()
+		mu := h.connMu[c]
+		h.mu.RUnlock()
+		if mu != nil {
+			mu.Lock()
+			_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutdown"))
+			mu.Unlock()
+		}
 	}
 }
 
@@ -125,13 +149,17 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 	if err != nil {
 		return
 	}
+	mu := &sync.Mutex{}
 	h.mu.Lock()
 	h.conns[conn] = struct{}{}
+	h.connMu[conn] = mu
 	backlog := append([]message(nil), h.messages...)
 	h.mu.Unlock()
 
 	for _, m := range backlog {
+		mu.Lock()
 		_ = conn.WriteJSON(m)
+		mu.Unlock()
 	}
 	h.wg.Add(1)
 	go func() {
@@ -158,12 +186,15 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 				delete(h.connUID, conn)
 			}
 			delete(h.conns, conn)
+			delete(h.connMu, conn)
 			h.mu.Unlock()
 			if leftUser != "" && lastConn {
 				h.broadcast(message{TS: time.Now().UTC(), User: leftUser, Event: "left"})
 				h.broadcastRoster()
 			}
+			mu.Lock()
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			mu.Unlock()
 			h.wg.Done()
 		}()
 		for {
@@ -255,6 +286,10 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     *{ box-sizing: border-box }
     /* Prefer locally-installed D2Coding for Korean monospaced rendering */
     @font-face { font-family: 'D2Coding'; src: local('D2Coding'), local('D2Coding Ligature'), local('D2Coding Nerd'); font-display: swap; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
     body { margin:0; padding:24px; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
     .wrap { max-width: 920px; margin: 0 auto }
     h1 { margin:0 0 12px 0; font-weight:700 }
@@ -264,15 +299,15 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .termbar-center { flex:1 1 auto; display:flex; justify-content:center }
     .term-actions { display:flex; align-items:center; gap:8px }
     .dots { display:flex; gap:6px }
-    .dot { width:10px; height:10px; border-radius:50%; }
+    .dot { width:10px; height:10px; border-radius:50%; transition: opacity 0.3s ease; }
     .dot.red{ background:#ef4444 }
     .dot.yellow{ background:#f59e0b }
     .dot.green{ background:#22c55e }
     .nick { display:flex; align-items:center; gap:8px }
     .nick input{ background:transparent; border:1px solid var(--border); color:var(--fg); padding:6px 8px; border-radius:6px; font-family:inherit; font-size:13px; width:180px }
     .nick button{ background:transparent; border:1px solid var(--border); color:var(--fg); padding:6px 8px; border-radius:6px; font-family:inherit; font-size:13px; cursor:pointer }
-    .screen { height:420px; overflow:auto; padding:14px; font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; line-height:1.5; }
-    .line { white-space: pre-wrap; word-break: break-word }
+    .screen { height:420px; overflow:auto; padding:14px; font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; line-height:1.5; contain: layout style paint; will-change: scroll-position; }
+    .line { white-space: pre-wrap; word-break: break-word; contain: layout style; }
     .ts { color:var(--muted) }
     .usr { color:#60a5fa }
     .event { color: var(--muted) }
@@ -375,24 +410,6 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       try { localStorage.setItem('nick', user.value); } catch(_) {}
     }
     setPrompt();
-    // Debounced notify of nickname changes to server so roster updates without sending a chat
-    let nickTimer = null;
-    user.addEventListener('input', () => {
-      try{ localStorage.setItem('nick', user.value); }catch(_){}
-      setPrompt();
-      if (ws && ws.readyState === 1) {
-        if (nickTimer) clearTimeout(nickTimer);
-        nickTimer = setTimeout(() => {
-          try{ ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID })); }catch(_){ }
-        }, 300);
-      }
-    });
-    roll.addEventListener('click', () => {
-      user.value = randomNick();
-      try{ localStorage.setItem('nick', user.value); }catch(_){}
-      setPrompt();
-      user.focus();
-    });
 
     // Stable color per nickname (expanded palette)
     const PALETTE = [
@@ -413,13 +430,19 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       const count = (users ? users.length : 0);
       if (usersCount) usersCount.textContent = String(count);
     }
+    // Batch DOM updates for better performance
+    let pendingAppends = [];
+    let appendTimer = null;
+
     function append(msg){
+      if (msg.event === 'roster') { renderRoster(msg.users || []); return; }
+
       const div = document.createElement('div');
       div.className = 'line';
       const ts = new Date(msg.ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const nick = (msg.user || 'anon');
       const color = colorFor(nick);
-      if (msg.event === 'roster') { renderRoster(msg.users || []); return; }
+
       if (msg.event === 'rename') {
         div.className = 'line event';
         div.innerHTML = '<span class="ts">[' + ts + ']</span> ' + escapeHTML(msg.user || 'anon') + ' -> ' + escapeHTML(msg.text || '') + ' changed';
@@ -431,26 +454,133 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
         div.innerHTML = '<span class="ts">[' + ts + ']</span> <span class="usr" style="color:' + color + '">' +
           nick + '</span>: ' + escapeHTML(msg.text || '');
       }
-      log.appendChild(div);
-      log.scrollTop = log.scrollHeight;
+
+      pendingAppends.push(div);
+
+      // Debounce DOM updates - batch multiple messages together
+      if (appendTimer) clearTimeout(appendTimer);
+      appendTimer = setTimeout(() => {
+        const fragment = document.createDocumentFragment();
+        pendingAppends.forEach(d => fragment.appendChild(d));
+        log.appendChild(fragment);
+        log.scrollTop = log.scrollHeight;
+        pendingAppends = [];
+      }, 0);
     }
     function escapeHTML(s){
       return s.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
     }
 
+    // WebSocket connection management with auto-reconnect
     const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
     const basePath = location.pathname.endsWith('/') ? location.pathname : (location.pathname + '/');
-    const ws = new WebSocket(wsProto + '://' + location.host + basePath + 'ws');
-    ws.onmessage = (e) => { try{ append(JSON.parse(e.data)); }catch(_){ } };
-    ws.onopen = () => {
-      try{ ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID })); }catch(_){ }
-    };
+    const wsURL = wsProto + '://' + location.host + basePath + 'ws';
+
+    let ws = null;
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    const maxReconnectDelay = 30000; // 30 seconds max
+    const initialReconnectDelay = 1000; // 1 second initial
+
+    function getReconnectDelay() {
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
+      const delay = Math.min(initialReconnectDelay * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+      return delay;
+    }
+
+    function updateConnectionStatus(connected, reconnecting = false) {
+      const greenDot = document.querySelector('.dot.green');
+      const yellowDot = document.querySelector('.dot.yellow');
+      if (greenDot) {
+        greenDot.style.opacity = connected ? '1' : '0.3';
+      }
+      if (yellowDot && reconnecting) {
+        // Pulse animation for reconnecting state
+        yellowDot.style.animation = 'pulse 1.5s ease-in-out infinite';
+      } else if (yellowDot) {
+        yellowDot.style.animation = '';
+      }
+    }
+
+    function connectWebSocket() {
+      if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        return; // Already connected or connecting
+      }
+
+      ws = new WebSocket(wsURL);
+
+      ws.onopen = () => {
+        reconnectAttempts = 0;
+        updateConnectionStatus(true);
+        try{
+          ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
+        }catch(_){ }
+      };
+
+      ws.onmessage = (e) => {
+        try{ append(JSON.parse(e.data)); }catch(_){ }
+      };
+
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+      };
+
+      ws.onclose = (e) => {
+        updateConnectionStatus(false, false);
+        // Don't reconnect if it was a normal closure initiated by client
+        if (e.code === 1000 && e.wasClean) {
+          return;
+        }
+
+        // Attempt to reconnect
+        const delay = getReconnectDelay();
+        reconnectAttempts++;
+        updateConnectionStatus(false, true);
+
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => {
+          connectWebSocket();
+        }, delay);
+      };
+    }
+
+    // Initial connection
+    connectWebSocket();
+
     function send(){
       const payload = { user: (user.value || 'anon'), text: cmd.value.trim(), uid: clientUID };
       if(!payload.text) return;
-      ws.send(JSON.stringify(payload));
-      cmd.value='';
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return; // Can't send if not connected
+      }
+      try {
+        ws.send(JSON.stringify(payload));
+        cmd.value='';
+      } catch(e) {
+        console.error('Failed to send message:', e);
+      }
     }
+
+    // Debounced notify of nickname changes to server so roster updates without sending a chat
+    let nickTimer = null;
+    user.addEventListener('input', () => {
+      try{ localStorage.setItem('nick', user.value); }catch(_){}
+      setPrompt();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        if (nickTimer) clearTimeout(nickTimer);
+        nickTimer = setTimeout(() => {
+          try{ ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID })); }catch(_){ }
+        }, 300);
+      }
+    });
+
+    roll.addEventListener('click', () => {
+      user.value = randomNick();
+      try{ localStorage.setItem('nick', user.value); }catch(_){}
+      setPrompt();
+      user.focus();
+    });
+
     // Handle IME composition properly to avoid duplicated last character
     // on Enter when using Korean/Japanese/Chinese input methods.
     cmd.addEventListener('keydown', e => {

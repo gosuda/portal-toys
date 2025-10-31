@@ -57,11 +57,12 @@ func runChat(cmd *cobra.Command, args []string) error {
 			log.Warn().Err(err).Msg("[chat] open store failed; running in memory only")
 		} else {
 			store = s
-			if msgs, err := store.LoadAll(); err != nil {
+			// Load only the most recent 100 messages to avoid slow startup
+			if msgs, err := store.LoadRecent(100); err != nil {
 				log.Warn().Err(err).Msg("[chat] load history failed")
 			} else if len(msgs) > 0 {
 				hub.bootstrap(msgs)
-				log.Info().Msgf("[chat] loaded %d messages from store", len(msgs))
+				log.Info().Msgf("[chat] loaded %d recent messages from store", len(msgs))
 			}
 			hub.attachStore(store)
 		}
