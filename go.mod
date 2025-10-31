@@ -6,7 +6,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gorilla/websocket v1.5.3
-	github.com/gosuda/portal v0.0.0-20251030060749-e63886f355e7
+	github.com/gosuda/portal v0.0.0-20251031035605-2a54705ebeaf
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
 )
