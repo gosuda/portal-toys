@@ -225,7 +225,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     }
     *{ box-sizing:border-box }
     body{ margin:0; background:var(--chrome); color:var(--ink); font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif }
-    .wrap{ max-width:1100px; margin:0 auto; padding:16px }
+    .wrap{ margin:0 auto; padding:16px }
     .title{ font-weight:800; margin:0 0 8px 0; font-size:14px; color:var(--muted) }
     .btn{ background:var(--btn); border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; cursor:pointer; font-weight:700; color:#111; min-width:44px; min-height:38px; text-align:center }
     .btn:hover{ background:var(--btn-hover) }
@@ -270,7 +270,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     <div class="app-title">YouTube Chat</div>
 
     <div class="main">
-      <div class="panel col-player">
+      <div class="panel col-player" style="width: 1500px; height: 1080px;">
         <div id="ytPlayer" class="player"></div>
         <div id="ytStatus" class="status"></div>
         <div class="yt-add">
