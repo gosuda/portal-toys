@@ -42,6 +42,8 @@ github.com/gosuda/portal v0.0.0-20251030060749-e63886f355e7 h1:vJLmD7jaFdmERp4zl
 github.com/gosuda/portal v0.0.0-20251030060749-e63886f355e7/go.mod h1:9PadGMfsx6DdLVzVtvLgsCfGO8kxaicOy56k/ziYYPU=
 github.com/gosuda/portal v0.0.0-20251031035605-2a54705ebeaf h1:1oy7IKVj+KnzypvIWZcyKx1mxju5sA4uozUslB+fiew=
 github.com/gosuda/portal v0.0.0-20251031035605-2a54705ebeaf/go.mod h1:/3IaXAoj7/WMfZ2U8V+6pi/r7iq6HkkgKQR53SPpY4M=
+github.com/gosuda/portal v1.0.0 h1:gNnp2vPL2doHrrVAN2sJeQkftEkHuwsqkJJdnFzVZTY=
+github.com/gosuda/portal v1.0.0/go.mod h1:/3IaXAoj7/WMfZ2U8V+6pi/r7iq6HkkgKQR53SPpY4M=
 github.com/hashicorp/yamux v0.1.2 h1:XtB8kyFOyHXYVFnwT5C3+Bdo8gArse7j2AQ0DA0Uey8=
 github.com/hashicorp/yamux v0.1.2/go.mod h1:C+zze2n6e/7wshOZep2A70/aQU6QBRWJO/G6FT1wIns=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
