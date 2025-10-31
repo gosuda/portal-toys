@@ -76,6 +76,7 @@ func (h *hub) broadcast(m message) {
 		h.mu.RUnlock()
 		if mu != nil {
 			mu.Lock()
+			_ = c.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			_ = c.WriteJSON(m)
 			mu.Unlock()
 		}
@@ -130,6 +131,7 @@ func (h *hub) closeAll() {
 		h.mu.RUnlock()
 		if mu != nil {
 			mu.Lock()
+			_ = c.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			_ = c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutdown"))
 			mu.Unlock()
 		}
@@ -143,12 +145,24 @@ func (h *hub) wait() {
 
 func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 	upgrader := websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
+		CheckOrigin:      func(r *http.Request) bool { return true },
+		ReadBufferSize:   1024,
+		WriteBufferSize:  1024,
+		HandshakeTimeout: 10 * time.Second,
 	}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
+
+	// Set connection timeouts and keepalive
+	_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+	conn.SetPongHandler(func(string) error {
+		_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
 	mu := &sync.Mutex{}
 	h.mu.Lock()
 	h.conns[conn] = struct{}{}
@@ -158,12 +172,40 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 
 	for _, m := range backlog {
 		mu.Lock()
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		_ = conn.WriteJSON(m)
 		mu.Unlock()
 	}
+
+	// Start ping ticker to keep connection alive
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	// Channel to signal when to stop the ping goroutine
+	done := make(chan struct{})
+
+	// Ping goroutine
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					mu.Unlock()
+					return
+				}
+				mu.Unlock()
+			case <-done:
+				return
+			}
+		}
+	}()
+
 	h.wg.Add(1)
 	go func() {
 		defer func() {
+			close(done)
 			var leftUser string
 			var uid string
 			var lastConn bool
@@ -193,7 +235,9 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 				h.broadcastRoster()
 			}
 			mu.Lock()
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			_ = conn.Close()
 			mu.Unlock()
 			h.wg.Done()
 		}()
@@ -203,6 +247,8 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 				Text string `json:"text"`
 				UID  string `json:"uid"`
 			}
+			// Reset read deadline on each message
+			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			if err := conn.ReadJSON(&req); err != nil {
 				return
 			}
@@ -479,8 +525,10 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     let ws = null;
     let reconnectTimer = null;
     let reconnectAttempts = 0;
+    let heartbeatTimer = null;
     const maxReconnectDelay = 30000; // 30 seconds max
     const initialReconnectDelay = 1000; // 1 second initial
+    const heartbeatInterval = 45000; // 45 seconds - send heartbeat to keep connection alive
 
     function getReconnectDelay() {
       // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
@@ -502,6 +550,27 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       }
     }
 
+    function startHeartbeat() {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatTimer = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try {
+            // Send empty message as heartbeat (text is empty, so server won't broadcast)
+            ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
+          } catch(e) {
+            console.error('Heartbeat failed:', e);
+          }
+        }
+      }, heartbeatInterval);
+    }
+
+    function stopHeartbeat() {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    }
+
     function connectWebSocket() {
       if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
         return; // Already connected or connecting
@@ -512,6 +581,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       ws.onopen = () => {
         reconnectAttempts = 0;
         updateConnectionStatus(true);
+        startHeartbeat(); // Start sending periodic heartbeats
         try{
           ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
         }catch(_){ }
@@ -527,6 +597,8 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 
       ws.onclose = (e) => {
         updateConnectionStatus(false, false);
+        stopHeartbeat(); // Stop heartbeat when disconnected
+
         // Don't reconnect if it was a normal closure initiated by client
         if (e.code === 1000 && e.wasClean) {
           return;
