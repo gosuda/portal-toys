@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"gosuda.org/portal/portal/core/cryptoops"
 	"gosuda.org/portal/sdk"
 )
 
@@ -26,6 +28,7 @@ var (
 	flagPort      int
 	flagName      string
 	flagDataPath  string
+	flagCredKey   string
 )
 
 func init() {
@@ -34,6 +37,7 @@ func init() {
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "simple-chat", "backend display name")
 	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
+	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
 }
 
 func main() {
@@ -80,6 +84,17 @@ func runChat(cmd *cobra.Command, args []string) error {
 	defer client.Close()
 
 	cred := sdk.NewCredential()
+	if flagCredKey != "" {
+		key, err := base64.StdEncoding.DecodeString(flagCredKey)
+		if err != nil {
+			return fmt.Errorf("decode cred key: %w", err)
+		}
+		cred2, err := cryptoops.NewCredentialFromPrivateKey(key)
+		if err != nil {
+			return fmt.Errorf("new credential from private key: %w", err)
+		}
+		cred = cred2
+	}
 	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
