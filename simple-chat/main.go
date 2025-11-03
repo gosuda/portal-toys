@@ -12,7 +12,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"github.com/gosuda/portal/sdk"
+	"gosuda.org/portal/sdk"
 )
 
 var rootCmd = &cobra.Command{

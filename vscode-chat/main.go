@@ -14,7 +14,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
-	"github.com/gosuda/portal/sdk"
+	"gosuda.org/portal/sdk"
 )
 
 func main() {
