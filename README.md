@@ -9,17 +9,27 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 4) 동작을 확인합니다. (`localhost:8081` 또는 `http://portal.gosuda.org`)
 5) 잘 돌아가면 저장소에 푸시합니다.
 
-## Examples
-- [chatter-bbs](./chatter-bbs/): go run ./chatter-bbs
-- [doom](./doom/): go run ./doom
-- [gosuda-blog](./gosuda-blog/): go run ./gosuda-blog
-- [http-backend](./http-backend/): go run ./http-backend
-- [paint](./paint/): go run ./paint
-- [rolling-paper](./rolling-paper/): go run ./rolling-paper
-- [simple-chat](./simple-chat/): go run ./simple-chat
-- [tetris](./tetris/): go run ./tetris
-- [youtube-chat](./youtube-chat/): go run ./youtube-chat
-- [vscode-chat](./vscode-chat/): go run ./vscode-chat
+## Golang Examples
+
+- [chatter-bbs](./golang/chatter-bbs/)
+- [doom](./golang/doom/)
+- [gosuda-blog](./golang/gosuda-blog/)
+- [http-backend](./golang/http-backend/)
+- [paint](./golang/paint/)
+- [rolling-paper](./golang/rolling-paper/)
+- [simple-chat](./golang/simple-chat/)
+- [tetris](./golang/tetris/)
+- [youtube-chat](./golang/youtube-chat/)
+- [vscode-chat](./golang/vscode-chat/)
+
+## Javascript Examples
+Will be added soon
+
+## Python Examples
+Will be added soon
+
+## Rust Examples
+Will be added soon
 
 ## Tips
 - 기본 Portal 서버 URL은 예제마다 `http://portal.gosuda.org`로 되어 있습니다. 과도한 요청으로 **디도스 공격이 되지 않도록 주의**해주세요.
