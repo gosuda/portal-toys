@@ -1,0 +1,13 @@
+{
+  "name": "js-rolling-paper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx server.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.16.2"
+  }
+}
+
