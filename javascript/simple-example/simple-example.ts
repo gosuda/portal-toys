@@ -21,10 +21,8 @@ export async function portalTunnel(options: PortalTunnelOptions): Promise<ChildP
     throw new Error(`Missing required options: ${missing.join(", ")}`);
   }
 
-  // portal-tunnel expose 8080 --name http-example --relay wss://portal.gosuda.org/relay
-  const args: string[] = ["expose", port.toString(), "--name", name, "--relay", relay];
-
-  const tunnelProcess = spawn("portal-tunnel", args);
+  const args: string[] = ["expose", "--port", port.toString(), "--host", "localhost", "--name", name, "--relay", relay];
+  const tunnelProcess = spawn("./bin/portal-tunnel", args);
 
   if (logLevel === "verbose") {
     tunnelProcess.stdout?.on("data", (data: Buffer) => {
@@ -45,9 +43,9 @@ export async function portalTunnel(options: PortalTunnelOptions): Promise<ChildP
       console.error("╠═══════════════════════════════════════════════════════════════════╣");
       console.error("║ portal-tunnel is not installed or not in PATH.                    ║");
       console.error("║                                                                   ║");
-      console.error("║ Please install it using:                                          ║");
+      console.error("║ Please install it using Makefile:                                 ║");
       console.error("║                                                                   ║");
-      console.error("║   go install gosuda.org/portal/cmd/portal-tunnel@latest           ║");
+      console.error("║   make tunnel-install                                             ║");
       console.error("║                                                                   ║");
       console.error("╚═══════════════════════════════════════════════════════════════════╝\n");
     } else {
@@ -78,6 +76,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 
+  // Only start tunnel when explicitly enabled
   portalTunnel({
     port: PORT,
     name: "ts-test-tunnel",
