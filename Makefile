@@ -6,6 +6,7 @@ PKG       := gosuda.org/portal/cmd/portal-tunnel
 VERSION   := v1.3.3
 GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)@$(VERSION)
 RELAY_URL := wss://portal.gosuda.org/relay
+PORT ?= 8080
 
 tunnel: tunnel-install tunnel-run
 
@@ -13,7 +14,7 @@ tunnel-install:
 	@$(GOINSTALL)
 
 tunnel-run:
-	"$(BIN)" expose --port 8080 --host localhost --relay "$(RELAY_URL)"
+	"$(BIN)" expose --port $(PORT) --host 127.0.0.1 --relay "$(RELAY_URL)"
 
 tunnel-help:
 	"$(BIN)" --help

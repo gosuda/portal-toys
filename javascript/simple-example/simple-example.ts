@@ -23,7 +23,7 @@ export async function portalTunnel(options: PortalTunnelOptions): Promise<ChildP
 
   const args: string[] = ["expose", "--port", port.toString(), "--host", "localhost", "--name", name, "--relay", relay];
   const tunnelProcess = spawn("./bin/portal-tunnel", args);
-
+ 
   if (logLevel === "verbose") {
     tunnelProcess.stdout?.on("data", (data: Buffer) => {
       console.log(`[Portal Tunnel] ${data.toString().trim()}`);
@@ -76,7 +76,6 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 
-  // Only start tunnel when explicitly enabled
   portalTunnel({
     port: PORT,
     name: "ts-test-tunnel",

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JS Simple Chat</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+      header { padding: 12px; background: #222; color: #fff; }
+      #log { flex: 1; padding: 12px; overflow: auto; background: #fafafa; }
+      #bar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #ddd; }
+      input, button { font-size: 14px; padding: 8px; }
+      #name { width: 160px; }
+      #msg { flex: 1; }
+      .sys { color: #666; }
+      .chat .name { font-weight: 600; margin-right: 6px; }
+    </style>
+  </head>
+  <body>
+    <header>JS Simple Chat</header>
+    <div id="log"></div>
+    <div id="bar">
+      <input id="name" placeholder="name" />
+      <input id="msg" placeholder="message" />
+      <button id="send">Send</button>
+    </div>
+    <script>
+      const log = document.getElementById('log');
+      const nameEl = document.getElementById('name');
+      const msgEl = document.getElementById('msg');
+      const btn = document.getElementById('send');
+
+      function line(elClass, html) {
+        const el = document.createElement('div');
+        el.className = elClass;
+        el.innerHTML = html;
+        log.appendChild(el);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+      ws.addEventListener('open', () => {
+        line('sys', 'Connected. Say hello!');
+      });
+      ws.addEventListener('message', (ev) => {
+        try {
+          const m = JSON.parse(ev.data);
+          if (m.type === 'system') line('sys', m.text);
+          if (m.type === 'chat') line('chat', `<span class="name">${m.name}</span> ${m.text}`);
+        } catch {}
+      });
+      ws.addEventListener('close', () => line('sys', 'Disconnected.'));
+
+      function send() {
+        const name = nameEl.value.trim() || 'anon';
+        const text = msgEl.value.trim();
+        if (!text) return;
+        ws.send(JSON.stringify({ type: 'hello', name }));
+        ws.send(JSON.stringify({ type: 'chat', text }));
+        msgEl.value = '';
+      }
+      msgEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+      btn.addEventListener('click', send);
+    </script>
+  </body>
+  </html>
+

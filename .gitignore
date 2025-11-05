@@ -34,3 +34,4 @@ go.work.sum
 dist
 db
 bin
+node_modules
