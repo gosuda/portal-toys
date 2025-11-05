@@ -25,6 +25,8 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 ## Javascript Examples
 
 - [simple-example](./javascript/simple-example/)
+- [rolling-paper](./javascript/rolling-paper/)
+- [simple-chat](./javascript/simple-chat/)
 
 ## Python Examples
 Will be added soon
