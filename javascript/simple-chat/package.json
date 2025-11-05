@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx server.ts"
+    "start": "tsx server.ts",
+    "start:dev": "cross-env TUNNEL_ENABLED=false tsx server.ts",
+    "start:tunnel": "tsx server.ts"
   },
   "dependencies": {
     "ws": "^8.18.0"
@@ -15,4 +17,3 @@
     "@types/ws": "^8.5.10"
   }
 }
-
