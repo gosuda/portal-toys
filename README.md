@@ -23,7 +23,8 @@ Each toy app can be generated or modified easily using LLMs allowing rapid proto
 - [vscode-chat](./golang/vscode-chat/)
 
 ## Javascript Examples
-Will be added soon
+
+- [simple-example](./javascript/simple-example/)
 
 ## Python Examples
 Will be added soon
