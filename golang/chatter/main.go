@@ -24,14 +24,12 @@ var rootCmd = &cobra.Command{
 
 var (
 	flagName      string
-	flagDataPath  string
 	flagCredKey   string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagName, "name", "free-chat", "backend display name")
-	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
 	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
 }
 
@@ -46,32 +44,14 @@ func runChat(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	hub := newHub()
-
-	// Optional: open persistent store and preload history
-	var store *messageStore
-	if flagDataPath != "" {
-		s, err := openMessageStore(flagDataPath)
-		if err != nil {
-			log.Warn().Err(err).Msg("[chat] open store failed; running in memory only")
-		} else {
-			store = s
-			// Load only the most recent 100 messages to avoid slow startup
-			if msgs, err := store.LoadRecent(100); err != nil {
-				log.Warn().Err(err).Msg("[chat] load history failed")
-			} else if len(msgs) > 0 {
-				hub.bootstrap(msgs)
-				log.Info().Msgf("[chat] loaded %d recent messages from store", len(msgs))
-			}
-			hub.attachStore(store)
-		}
-	}
 	// Build router
-	handler := NewHandler(flagName, hub)
+	handler := NewHandler(flagName)
 
 	// client (http-backend style)
+	// The bootstrap server is required by the SDK, but not used in this application.
+	// We use a dummy value to satisfy the SDK.
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
-		c.BootstrapServers = []string{"chat.korokorok.com"}
+		c.BootstrapServers = []string{"wss://bootstrap.dummy.com/ws"}
 	})
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
@@ -108,15 +88,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 		_ = listener.Close()
 	}()
 
-	// Wait for cancel, then clean up hub/store
+	// Wait for cancel
 	<-ctx.Done()
-	hub.closeAll()
-	hub.wait()
-	if store != nil {
-		if err := store.Close(); err != nil {
-			log.Warn().Err(err).Msg("[chat] store close error")
-		}
-	}
-	log.Info().Msg("[chat] shutdown complete")
 	return nil
 }

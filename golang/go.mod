@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/cockroachdb/pebble v1.1.5
+	github.com/creack/pty v1.1.9
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gorilla/websocket v1.5.3
 	github.com/microcosm-cc/bluemonday v1.0.27
