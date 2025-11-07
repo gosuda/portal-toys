@@ -15,16 +15,16 @@ import (
 
 // simple in-memory chat hub
 type hub struct {
-	mu          sync.RWMutex
-	messages    []message
-	maxBacklog  int // maximum messages to keep in memory (0 = unlimited)
-	conns       map[*websocket.Conn]struct{}
-	connUID     map[*websocket.Conn]string
-	userConns   map[string]map[*websocket.Conn]struct{}
-	userName    map[string]string
-	wg          sync.WaitGroup
-	store       *messageStore
-	connMu      map[*websocket.Conn]*sync.Mutex // per-connection write locks
+	mu         sync.RWMutex
+	messages   []message
+	maxBacklog int // maximum messages to keep in memory (0 = unlimited)
+	conns      map[*websocket.Conn]struct{}
+	connUID    map[*websocket.Conn]string
+	userConns  map[string]map[*websocket.Conn]struct{}
+	userName   map[string]string
+	wg         sync.WaitGroup
+	store      *messageStore
+	connMu     map[*websocket.Conn]*sync.Mutex // per-connection write locks
 }
 
 type message struct {

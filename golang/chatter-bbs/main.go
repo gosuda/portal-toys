@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,10 +29,10 @@ var (
 )
 
 func init() {
-    flags := rootCmd.PersistentFlags()
-    flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-    flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-    flags.StringVar(&flagName, "name", "chatter-bbs", "backend display name")
+	flags := rootCmd.PersistentFlags()
+	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
+	flags.StringVar(&flagName, "name", "chatter-bbs", "backend display name")
 }
 
 func main() {
@@ -50,40 +49,21 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	// Build handler (status always Connected when served over relay)
 	handler := NewHandler("relay", flagName, func() string { return "Connected" })
 
-    // Relay clients/listeners for multiple relays
-    cred := sdk.NewCredential()
-    var clients []*sdk.RDClient
-    var listeners []net.Listener
-    for _, raw := range flagServerURLs {
-        if raw == "" { continue }
-        for _, p := range strings.Split(raw, ",") {
-            u := strings.TrimSpace(p)
-            if u == "" { continue }
-            client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{u} })
-            if err != nil {
-                log.Error().Err(err).Str("url", u).Msg("new client failed")
-                continue
-            }
-            clients = append(clients, client)
-            ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
-            if err != nil {
-                return fmt.Errorf("listen (%s): %w", u, err)
-            }
-            listeners = append(listeners, ln)
-        }
-    }
-    if len(listeners) == 0 {
-        return fmt.Errorf("no valid relay servers provided via --server-url or RELAY/RELAY_URL env")
-    }
-
-    for i, ln := range listeners {
-        idx := i
-        go func() {
-            if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-                log.Error().Err(err).Int("listener", idx).Msg("[chatter-bbs] relay http error")
-            }
-        }()
-    }
+	// Relay (single client using all bootstrap servers)
+	cred := sdk.NewCredential()
+	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
+	if err != nil {
+		return fmt.Errorf("new client: %w", err)
+	}
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	go func() {
+		if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msg("[chatter-bbs] relay http error")
+		}
+	}()
 
 	// Optional local HTTP
 	var httpSrv *http.Server
@@ -99,17 +79,17 @@ func runChatter(cmd *cobra.Command, args []string) error {
 
 	// Shutdown watcher
 	go func() {
-        <-ctx.Done()
-        for _, ln := range listeners { _ = ln.Close() }
-        for _, c := range clients { _ = c.Close() }
-        if httpSrv != nil {
-            sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-            defer cancel()
-            if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-                log.Warn().Err(err).Msg("[chatter-bbs] local http shutdown error")
-            }
-        }
-    }()
+		<-ctx.Done()
+		_ = ln.Close()
+		_ = client.Close()
+		if httpSrv != nil {
+			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+				log.Warn().Err(err).Msg("[chatter-bbs] local http shutdown error")
+			}
+		}
+	}()
 
 	<-ctx.Done()
 	log.Info().Msg("[chatter-bbs] shutdown complete")
