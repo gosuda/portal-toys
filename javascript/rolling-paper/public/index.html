@@ -60,9 +60,6 @@
 
       try{ const saved = localStorage.getItem('rp_name'); if (saved) authorEl.value = saved; }catch{}
       authorEl.addEventListener('input', () => { try{ localStorage.setItem('rp_name', authorEl.value); }catch{} });
-
-      // XSS 허용: 제목/내용의 HTML을 그대로 렌더링합니다. 주의해서 사용하세요.
-
       function noteEl(note){
         const d = document.createElement('div');
         d.className = 'note';
