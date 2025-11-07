@@ -7,10 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
@@ -109,11 +111,11 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	cred := sdk.NewCredential()
 	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
 	if err != nil {
-		log.Error().Err(err).Strs("url", flagServerURLs).Msg("new client failed")
+		return fmt.Errorf("new client: %w", err)
 	}
 	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
 	if err != nil {
-		return fmt.Errorf("listen (%s): %w", ln.Addr().String(), err)
+		return fmt.Errorf("listen: %w", err)
 	}
 	// Serve over each relay listener
 	go func() {
@@ -281,6 +283,9 @@ func rootHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		case "/api/vote-delete":
 			handleVoteDelete(w, r)
+			return
+		case "/api/proxy":
+			handleProxy(w, r)
 			return
 		}
 	}
@@ -486,4 +491,109 @@ func exists(key []byte) bool {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// --- Simple streaming proxy for media to mitigate CORS/hotlinking ---
+// WARNING: This is a minimal demo proxy; it includes basic SSRF protections.
+// Do NOT expose publicly without adding proper allowlists and rate limiting.
+func handleProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("u"))
+	if raw == "" {
+		http.Error(w, "missing u", http.StatusBadRequest)
+		return
+	}
+	if len(raw) > 2048 {
+		http.Error(w, "url too long", http.StatusBadRequest)
+		return
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		http.Error(w, "invalid url", http.StatusBadRequest)
+		return
+	}
+	// Basic SSRF guard: block localhost/private/multicast/link-local
+	if !hostIsPublic(u.Hostname()) {
+		http.Error(w, "forbidden host", http.StatusForbidden)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	req.Header.Set("User-Agent", "rolling-paper-proxy/1.0")
+	// Best-effort: suppress referrer upstream
+	req.Header.Set("Referer", "")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		http.Error(w, "upstream error", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
+		http.Error(w, "upstream status", http.StatusBadGateway)
+		return
+	}
+	// Pass through limited headers
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	// Limit size to 10MB for demo
+	const max = 10 << 20
+	n, err := io.CopyN(w, resp.Body, max)
+	if err != nil {
+		if err == io.EOF {
+			return
+		}
+		_ = n
+		// Truncated or client closed; no extra handling
+	}
+}
+
+func hostIsPublic(host string) bool {
+	ips, err := net.LookupIP(host)
+	if err != nil || len(ips) == 0 {
+		return false
+	}
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() {
+			return false
+		}
+		if isPrivateIP(ip) {
+			return false
+		}
+	}
+	return true
+}
+
+func isPrivateIP(ip net.IP) bool {
+	if ip4 := ip.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return true
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+			return true
+		case ip4[0] == 192 && ip4[1] == 168:
+			return true
+		case ip4[0] == 127:
+			return true
+		case ip4[0] == 169 && ip4[1] == 254: // link-local
+			return true
+		}
+		return false
+	}
+	// IPv6 private/multicast/link-local checks
+	if ip.IsLoopback() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() || ip.IsMulticast() {
+		return true
+	}
+	// Unique local address fc00::/7
+	if len(ip) == net.IPv6len && (ip[0]&0xfe) == 0xfc {
+		return true
+	}
+	return false
 }

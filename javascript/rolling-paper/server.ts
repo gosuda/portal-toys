@@ -6,8 +6,28 @@ import { startTunnel, stopTunnel, type Tunnel } from "./tunnel.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, "public");
+
+// Simple CLI flag parsing: --key value | --key=value
+function argValue(key: string): string | undefined {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === `--${key}`) return argv[i + 1];
+    if (a.startsWith(`--${key}=`)) return a.split("=", 2)[1];
+  }
+  return undefined;
+}
+
+// Support flags similar to Go apps:
+// --server-url (relay websocket URL, comma-separated ok)
+// --name       (backend display name)
+// --port       (local http port)
+// --host       (local bind host)
+const CLI_PORT = Number(argValue("port") || process.env.PORT || 8080);
+const CLI_HOST = argValue("host") || "127.0.0.1";
+const CLI_NAME = argValue("name") || process.env.TUNNEL_NAME || "js-rolling-paper";
+const CLI_SERVER_URL = argValue("server-url") || process.env.RELAY || process.env.RELAY_URL || "wss://portal.gosuda.org/relay";
 
 type Note = {
   id: string;
@@ -141,9 +161,10 @@ const server = http.createServer((req, res) => {
   res.end("Not found");
 });
 
-server.listen(PORT, () => {
-  console.log(`Rolling Paper running on http://localhost:${PORT}`);
-  tunnelProc = startTunnel({ port: PORT });
+server.listen(CLI_PORT, CLI_HOST, () => {
+  const url = `http://${CLI_HOST}:${CLI_PORT}`;
+  console.log(`Rolling Paper running on ${url}`);
+  tunnelProc = startTunnel({ port: CLI_PORT, host: CLI_HOST, relay: CLI_SERVER_URL, name: CLI_NAME });
 });
 
 // graceful shutdown and tunnel cleanup
