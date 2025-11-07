@@ -178,7 +178,7 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 	}
 
 	// Start ping ticker to keep connection alive
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
 
 	// Channel to signal when to stop the ping goroutine
@@ -262,7 +262,6 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 			// map connection to uid and maintain per-user state
 			var announce bool
 			var renamed bool
-			var prevName string
 			h.mu.Lock()
 			if _, ok := h.connUID[conn]; !ok {
 				h.connUID[conn] = req.UID
@@ -277,7 +276,6 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 			if cur, ok := h.userName[req.UID]; !ok {
 				h.userName[req.UID] = req.User
 			} else if cur != req.User {
-				prevName = cur
 				h.userName[req.UID] = req.User
 				renamed = true
 			}
@@ -286,8 +284,7 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 				h.broadcast(message{TS: time.Now().UTC(), User: req.User, Event: "joined"})
 				h.broadcastRoster()
 			} else if renamed {
-				// Announce rename as an event line in chat
-				h.broadcast(message{TS: time.Now().UTC(), User: prevName, Text: req.User, Event: "rename"})
+				// Only update roster, don't announce rename in chat
 				h.broadcastRoster()
 			}
 			if req.Text == "" {
@@ -338,7 +335,11 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     }
     body { margin:0; padding:24px; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
     .wrap { max-width: 920px; margin: 0 auto }
-    h1 { margin:0 0 12px 0; font-weight:700 }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    h1 { margin:0; font-weight:700 }
+    .github-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); text-decoration: none; transition: all 0.2s ease; }
+    .github-btn:hover { background: var(--panel); border-color: var(--accent); }
+    .github-btn svg { fill: currentColor; display: block; }
     .term { border:1px solid var(--border); border-radius:10px; background:var(--panel); overflow:hidden; position: relative }
     .termbar { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--border); font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px }
     .termbar-left { display:flex; align-items:center; gap:8px }
@@ -358,6 +359,8 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .usr { color:#60a5fa }
     .event { color: var(--muted) }
     .event .usr { color: var(--muted) }
+    .line a { color: #60a5fa; text-decoration: underline; cursor: pointer; }
+    .line a:hover { color: #93c5fd; }
     .promptline { display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--border); font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
     #prompt { color:var(--accent) }
     #cmd { flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none; color:var(--fg); font-family: inherit; font-size:14px; caret-color: var(--cursor) }
@@ -370,6 +373,30 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .screen::-webkit-scrollbar-thumb { background: #374151; border-radius: 8px; border: 2px solid #111827 }
     .screen::-webkit-scrollbar-thumb:hover { background: #4b5563 }
     .userspill { display:inline-block; border:1px solid var(--border); padding:2px 10px; border-radius:999px; color:var(--fg); font-size:12px; opacity:.9 }
+
+    /* New message bubble */
+    .new-message-bubble {
+      position:absolute;
+      bottom:calc(50px + 16px);
+      left:50%;
+      transform:translateX(-50%);
+      background:#d97706;
+      color:#fef3c7;
+      padding:8px 16px;
+      border-radius:20px;
+      font-size:13px;
+      font-weight:500;
+      cursor:pointer;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity 0.3s ease;
+      z-index:10;
+      max-width:80%;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .new-message-bubble.show { opacity:1; pointer-events:auto; }
 
     /* Mobile responsiveness */
     @media (max-width: 640px) {
@@ -391,7 +418,14 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 </head>
 <body>
   <div class="wrap">
-    <h1>🔐 Chatting — {{.Name}}</h1>
+    <div class="header">
+      <h1>🔐 Chatting — {{.Name}}</h1>
+      <a href="https://github.com/gosuda/portal-toys" target="_blank" rel="noopener noreferrer" class="github-btn" title="View on GitHub">
+        <svg height="32" aria-hidden="true" viewBox="0 0 24 24" version="1.1" width="32">
+          <path d="M12 1C5.923 1 1 5.923 1 12c0 4.867 3.149 8.979 7.521 10.436.55.096.756-.233.756-.522 0-.262-.013-1.128-.013-2.049-2.764.509-3.479-.674-3.699-1.292-.124-.317-.66-1.293-1.127-1.554-.385-.207-.936-.715-.014-.729.866-.014 1.485.797 1.691 1.128.99 1.663 2.571 1.196 3.204.907.096-.715.385-1.196.701-1.471-2.448-.275-5.005-1.224-5.005-5.432 0-1.196.426-2.186 1.128-2.956-.111-.275-.496-1.402.11-2.915 0 0 .921-.288 3.024 1.128a10.193 10.193 0 0 1 2.75-.371c.936 0 1.871.123 2.75.371 2.104-1.43 3.025-1.128 3.025-1.128.605 1.513.221 2.64.111 2.915.701.77 1.127 1.747 1.127 2.956 0 4.222-2.571 5.157-5.019 5.432.399.344.743 1.004.743 2.035 0 1.471-.014 2.654-.014 3.025 0 .289.206.632.756.522C19.851 20.979 23 16.854 23 12c0-6.077-4.922-11-11-11Z"></path>
+        </svg>
+      </a>
+    </div>
     <div class="term">
       <div class="termbar">
         <div class="termbar-left">
@@ -407,6 +441,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
         <div class="term-actions"><span class="userspill"><span id="users-count">0</span> Online</span></div>
       </div>
       <div id="log" class="screen"></div>
+      <div id="new-message-bubble" class="new-message-bubble"></div>
       <div class="promptline">
         <span id="prompt"></span>
         <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="type a message and press Enter" enterkeyhint="send" inputmode="text" />
@@ -421,10 +456,32 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     const roll = document.getElementById('roll');
     const promptEl = document.getElementById('prompt');
     const usersCount = document.getElementById('users-count');
+    const newMessageBubble = document.getElementById('new-message-bubble');
+
+    // Smart scroll functions
+    function isScrolledToBottom() {
+      const threshold = 50;
+      return (log.scrollHeight - log.scrollTop - log.clientHeight) < threshold;
+    }
+
+    function scrollToBottom() {
+      log.scrollTop = log.scrollHeight;
+      newMessageBubble.classList.remove('show');
+    }
+
+    function showNewMessageBubble(username, text) {
+      const maxLen = 30;
+      const preview = text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
+      newMessageBubble.innerHTML = sanitizeNickname(username) + ': ' + escapeHTML(preview);
+      newMessageBubble.classList.add('show');
+    }
+
+    // Click bubble to scroll to bottom
+    newMessageBubble.addEventListener('click', scrollToBottom);
 
     function setPrompt(){
-      const nick = (user.value || 'anon').replace(/\s+/g,'').slice(0,24) || 'anon';
-      promptEl.textContent = nick + '@chat:~$';
+      const nick = (user.value || 'anon').replace(/\s+/g,'') || 'anon';
+      promptEl.innerHTML = sanitizeNickname(nick) + '<span style="color:var(--fg)">@chat:~$</span>';
     }
     function randomNick(){
       // Short nickname: one word + 4-digit number
@@ -478,6 +535,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     }
     // Batch DOM updates for better performance
     let pendingAppends = [];
+    let pendingMessages = [];
     let appendTimer = null;
 
     function append(msg){
@@ -489,32 +547,118 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       const nick = (msg.user || 'anon');
       const color = colorFor(nick);
 
+      let isActualMessage = false;
+
       if (msg.event === 'rename') {
-        div.className = 'line event';
-        div.innerHTML = '<span class="ts">[' + ts + ']</span> ' + escapeHTML(msg.user || 'anon') + ' -> ' + escapeHTML(msg.text || '') + ' changed';
+        // Don't show rename events
+        return;
       } else if (msg.event === 'joined' || msg.event === 'left') {
         const verb = msg.event === 'joined' ? 'joined' : 'left';
         div.className = 'line event';
-        div.innerHTML = '<span class="ts">[' + ts + ']</span> ' + escapeHTML(nick) + ' ' + verb;
+        div.innerHTML = '<span class="ts">[' + ts + ']</span> system: ' + sanitizeNickname(nick) + ' ' + verb;
       } else {
         div.innerHTML = '<span class="ts">[' + ts + ']</span> <span class="usr" style="color:' + color + '">' +
-          nick + '</span>: ' + escapeHTML(msg.text || '');
+          sanitizeNickname(nick) + '</span>: ' + linkifyText(msg.text || '');
+        isActualMessage = true;
       }
 
       pendingAppends.push(div);
 
+      // Store actual chat messages for bubble
+      if (isActualMessage && msg.text) {
+        pendingMessages.push({ username: nick, text: msg.text });
+      }
+
       // Debounce DOM updates - batch multiple messages together
       if (appendTimer) clearTimeout(appendTimer);
       appendTimer = setTimeout(() => {
+        const wasAtBottom = isScrolledToBottom();
+
         const fragment = document.createDocumentFragment();
         pendingAppends.forEach(d => fragment.appendChild(d));
         log.appendChild(fragment);
-        log.scrollTop = log.scrollHeight;
+
+        // Trim old messages to keep DOM size manageable
+        const maxDOMMessages = 200;
+        const messageLines = log.querySelectorAll('.line');
+        if (messageLines.length > maxDOMMessages) {
+          const toRemove = messageLines.length - maxDOMMessages;
+          for (let i = 0; i < toRemove; i++) {
+            if (messageLines[i] && messageLines[i].parentNode === log) {
+              log.removeChild(messageLines[i]);
+            }
+          }
+        }
+
+        if (wasAtBottom) {
+          log.scrollTop = log.scrollHeight;
+          newMessageBubble.classList.remove('show');
+        } else {
+          if (pendingMessages.length > 0) {
+            const latestMsg = pendingMessages[pendingMessages.length - 1];
+            showNewMessageBubble(latestMsg.username, latestMsg.text);
+          }
+        }
+
         pendingAppends = [];
+        pendingMessages = [];
       }, 0);
     }
     function escapeHTML(s){
+      // Block alert() function
+      s = s.replace(/alert\(/gi, '');
       return s.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+    }
+
+    // Convert URLs in text to clickable links
+    function linkifyText(text) {
+      // First escape HTML
+      const escaped = escapeHTML(text);
+      // URL regex pattern
+      const urlPattern = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gim;
+      return escaped.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    }
+
+    // Sanitize nickname: allow HTML/XSS but remove project class names
+    function sanitizeNickname(html) {
+      try {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+
+        // List of project class names to remove
+        const blockedClasses = [
+          'wrap', 'term', 'termbar', 'termbar-left', 'termbar-center', 'term-actions',
+          'dots', 'dot', 'red', 'yellow', 'green',
+          'nick', 'userspill', 'screen', 'new-message-bubble', 'promptline',
+          'ts', 'usr', 'line', 'event'
+        ];
+
+        // Recursively remove blocked class names
+        function cleanClasses(node) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            // Check if element has class attribute
+            if (node.hasAttribute('class')) {
+              const classes = node.getAttribute('class').split(/\s+/);
+              const filteredClasses = classes.filter(cls => !blockedClasses.includes(cls));
+
+              if (filteredClasses.length > 0) {
+                node.setAttribute('class', filteredClasses.join(' '));
+              } else {
+                node.removeAttribute('class');
+              }
+            }
+
+            // Recursively clean children
+            Array.from(node.childNodes).forEach(child => cleanClasses(child));
+          }
+        }
+
+        cleanClasses(temp);
+        return temp.innerHTML;
+      } catch (e) {
+        console.error('Sanitize error:', e);
+        return html; // Return as-is if error
+      }
     }
 
     // WebSocket connection management with auto-reconnect
@@ -528,7 +672,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     let heartbeatTimer = null;
     const maxReconnectDelay = 30000; // 30 seconds max
     const initialReconnectDelay = 1000; // 1 second initial
-    const heartbeatInterval = 45000; // 45 seconds - send heartbeat to keep connection alive
+    const heartbeatInterval = 20000; // 20 seconds - send heartbeat to keep connection alive (prevents proxy timeouts)
 
     function getReconnectDelay() {
       // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
@@ -599,12 +743,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
         updateConnectionStatus(false, false);
         stopHeartbeat(); // Stop heartbeat when disconnected
 
-        // Don't reconnect if it was a normal closure initiated by client
-        if (e.code === 1000 && e.wasClean) {
-          return;
-        }
-
-        // Attempt to reconnect
+        // Always attempt to reconnect regardless of close code
         const delay = getReconnectDelay();
         reconnectAttempts++;
         updateConnectionStatus(false, true);
