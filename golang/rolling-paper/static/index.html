@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Rolling Paper</title>
+    <link rel="stylesheet" href="style.css">
     <style>
         :root {
             color-scheme: light;
@@ -39,147 +40,31 @@
             text-decoration: none;
         }
 
-        header {
-            background: var(--accent);
-            color: #f6f6f6;
-            padding: 14px 24px;
-            border-bottom: 3px solid #2b2b2b;
-        }
-
-        .logo {
-            font-size: 20px;
-            letter-spacing: 0.05em;
-        }
-
-        .container {
-            max-width: 760px;
-            margin: 32px auto;
-            padding: 28px;
-            background: #fff;
+        /* moved bulk styles to style.css */
+        /* Blur-to-reveal */
+        .blur-target { filter: blur(14px) saturate(0.7); transition: filter .2s ease; }
+        .blur-veil {
+            position: absolute; inset: 0;
+            display: grid; place-items: center;
+            background: linear-gradient(180deg, rgba(255,255,255,.65), rgba(255,255,255,.35));
             border: 1px solid var(--border);
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        }
-
-        h1 {
-            margin: 0 0 24px;
-            font-size: 26px;
-            letter-spacing: -0.01em;
-            border-bottom: 2px solid var(--border);
-            padding-bottom: 8px;
-        }
-
-        form {
-            margin-bottom: 32px;
-        }
-
-        input[type="text"],
-        textarea {
-            width: 100%;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 12px;
-            font-family: inherit;
-            font-size: 15px;
-            margin-bottom: 12px;
-        }
-
-        textarea {
-            min-height: 140px;
-            resize: vertical;
-        }
-
-        .char-counter {
-            text-align: right;
-            font-size: 12px;
-            color: var(--muted);
-            margin-top: -6px;
-            margin-bottom: 12px;
-        }
-
-        button {
-            width: 100%;
-            border: none;
-            border-radius: 4px;
-            padding: 12px;
-            font-size: 15px;
-            background: var(--accent);
-            color: #fff;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background 0.2s ease;
+            user-select: none;
         }
-
-        button:hover {
-            background: #050505;
-        }
-
-        .status-message {
-            display: none;
-            margin-top: 10px;
-            padding: 10px 12px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .status-message.success {
-            display: block;
-            background: var(--success-bg);
-            border: 1px solid var(--success-border);
-            color: #205d30;
-        }
-
-        .status-message.error {
-            display: block;
-            background: var(--error-bg);
-            border: 1px solid var(--error-border);
-            color: #9e1c1c;
-        }
-
-        h2 {
-            font-size: 20px;
-            margin: 0 0 18px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 6px;
-        }
-
-        #message-board {
-            min-height: 40px;
-        }
-
-        .message-item {
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            padding: 16px;
-            margin-bottom: 14px;
-            background: var(--accent-light);
-        }
-
-        .message-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 8px;
-        }
-
-        .message-nickname {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .message-timestamp {
-            font-size: 12px;
-            color: var(--muted);
-        }
-
-        .message-content {
-            margin: 0;
-            font-size: 15px;
-            white-space: pre-wrap;
+        .blur-veil .blur-msg {
+            background: rgba(0,0,0,.65);
+            color: #fff;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.25);
         }
     </style>
 </head>
 <body>
     <header>
-        <a class="logo" href="/">Rolling Papaer</a>
+        <a class="logo" href="/">Rolling Paper</a>
     </header>
 
     <div class="container">
@@ -187,7 +72,7 @@
 
         <form id="messageForm">
             <input type="text" id="nicknameInput" name="nickname" placeholder="닉네임 (선택)">
-            <textarea id="messageInput" name="message" placeholder="남기고 싶은 메시지를 입력하세요." required></textarea>
+            <textarea id="messageInput" name="message" placeholder="메시지 또는 URL/HTML(srcdoc로 샌드박스 렌더링)을 입력하세요." required></textarea>
             <div id="charCounter" class="char-counter">0 / -</div>
             <button id="submitButton" type="submit" disabled>남기기</button>
             <div id="statusMessage" class="status-message"></div>
@@ -219,6 +104,7 @@
             };
             const API_BASE = detectBasePath();
             const api = (p) => `${API_BASE}${p}`;
+            const proxify = (u) => api(`/api/proxy?u=` + encodeURIComponent(u));
             const jsonFetch = async (path, opts) => {
                 const res = await fetch(api(path), opts);
                 let body = {};
@@ -255,15 +141,12 @@
             };
 
             const makeVoteButton = (msg, threshold, onDeleted) => {
-                const btn = el('button', { type: 'button' });
+                const btn = el('button', { type: 'button', class: 'btn-vote' });
                 const setText = (count, thr) => {
                     const t = thr || threshold || 3;
                     btn.textContent = `삭제 투표 (${count || 0}/${t})`;
                 };
                 setText(msg.voteCount || 0, threshold);
-                btn.style.width = 'auto';
-                btn.style.padding = '6px 10px';
-                btn.style.fontSize = '13px';
                 btn.addEventListener('click', async () => {
                     try {
                         const body = `id=${encodeURIComponent(msg.id)}`;
@@ -286,11 +169,9 @@
                     el('span', { class: 'message-nickname', text: msg.nickname || '익명' }),
                     el('span', { class: 'message-timestamp', text: new Date(msg.timestamp).toLocaleString() }),
                 );
-                const content = el('p', { class: 'message-content', text: msg.content });
-                const delWrap = el('div');
-                delWrap.style.marginTop = '8px';
-                delWrap.style.display = 'flex';
-                delWrap.style.justifyContent = 'flex-end';
+                const content = el('div', { class: 'message-content' });
+                content.appendChild(renderContent(msg.content || ''));
+                const delWrap = el('div', { class: 'row-end' });
                 const delBtn = makeVoteButton(msg, threshold, () => item.remove());
                 delWrap.appendChild(delBtn);
                 item.appendChild(header);
@@ -298,6 +179,156 @@
                 item.appendChild(delWrap);
                 return item;
             };
+
+            // --- rich content rendering ---
+            function renderContent(raw) {
+                const wrap = document.createElement('div');
+                wrap.className = 'embed-wrap';
+                const s = String(raw || '').trim();
+                if (!s) { wrap.textContent = ''; return wrap; }
+
+                // Heuristics: HTML vs URL vs plain text
+                const looksHTML = /<[^>]+>/.test(s);
+                const looksURL = /^(https?:)?\/\//i.test(s) || /^data:(image|audio|video)\//i.test(s);
+
+                if (looksHTML) {
+                    const id = genEmbedID();
+                    const iframe = document.createElement('iframe');
+                    iframe.className = 'embed';
+                    iframe.loading = 'lazy';
+                    iframe.referrerPolicy = 'no-referrer';
+                    iframe.sandbox = 'allow-scripts allow-same-origin';
+                    iframe.setAttribute('data-embed-id', id);
+                    iframe.srcdoc = buildSrcdoc(s, id);
+                    wrap.appendChild(iframe);
+                    addEmbedActions(wrap, iframe, null);
+                    applyBlur(wrap, iframe, null);
+                    return wrap;
+                }
+
+                if (looksURL) {
+                    const kind = chooseKind(s);
+                    if (kind === 'youtube') {
+                        const { embed, params } = toYouTubeEmbed(s);
+                        const ratio = document.createElement('div'); ratio.className = 'ratio ratio-16x9';
+                        const f = makeIFrame(embed + params, { sandbox: false, referrerPolicy: 'strict-origin-when-cross-origin', allowFullscreen: true });
+                        ratio.appendChild(f);
+                        wrap.appendChild(ratio);
+                        addEmbedActions(wrap, f, s);
+                        applyBlur(wrap, ratio, s);
+                        return wrap;
+                    }
+                    if (kind === 'vimeo') {
+                        const { embed, params } = toVimeoEmbed(s);
+                        const ratio = document.createElement('div'); ratio.className = 'ratio ratio-16x9';
+                        const f = makeIFrame(embed + params, { sandbox: false, referrerPolicy: 'strict-origin-when-cross-origin', allowFullscreen: true });
+                        ratio.appendChild(f);
+                        wrap.appendChild(ratio);
+                        addEmbedActions(wrap, f, s);
+                        applyBlur(wrap, ratio, s);
+                        return wrap;
+                    }
+                    if (kind === 'image') { const img = document.createElement('img'); img.className='embed'; img.alt='image'; img.setAttribute('referrerpolicy','no-referrer'); img.src=proxify(s); wrap.appendChild(img); addEmbedActions(wrap, img, s); applyBlur(wrap, img, s); return wrap; }
+                    if (kind === 'video') { const v = document.createElement('video'); v.className='embed'; v.controls=true; v.playsInline=true; v.setAttribute('controlsList','nodownload'); const src=document.createElement('source'); src.src=proxify(s); v.appendChild(src); wrap.appendChild(v); addEmbedActions(wrap, v, s); applyBlur(wrap, v, s); return wrap; }
+                    if (kind === 'audio') { const a = document.createElement('audio'); a.className='embed'; a.controls=true; const src=document.createElement('source'); src.src=proxify(s); a.appendChild(src); wrap.appendChild(a); addEmbedActions(wrap, a, s); applyBlur(wrap, a, s); return wrap; }
+                    // default: iframe to URL
+                    const f = makeIFrame(s, { allowFullscreen: true });
+                    wrap.appendChild(f);
+                    addEmbedActions(wrap, f, s);
+                    applyBlur(wrap, f, s);
+                    return wrap;
+                }
+
+                // Fallback: plain text
+                const p = document.createElement('p');
+                p.className = 'prewrap';
+                p.textContent = s;
+                wrap.appendChild(p);
+                return wrap;
+            }
+
+            function makeIFrame(src, opts) {
+                const iframe = document.createElement('iframe');
+                iframe.className = 'embed';
+                iframe.loading = 'lazy';
+                if (!opts || opts.referrerPolicy !== false) {
+                    iframe.referrerPolicy = (opts && opts.referrerPolicy) || 'no-referrer';
+                }
+                // Allow typical media embeds; sandbox by default (providers may disable)
+                if (!opts || opts.sandbox !== false) {
+                    iframe.sandbox = 'allow-scripts allow-same-origin';
+                }
+                iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen';
+                if (opts && opts.allowFullscreen) iframe.setAttribute('allowfullscreen','');
+                iframe.src = src;
+                return iframe;
+            }
+
+            function chooseKind(raw) {
+                if (isYouTube(raw)) return 'youtube';
+                if (isVimeo(raw)) return 'vimeo';
+                const u = raw.split('?')[0].split('#')[0].toLowerCase();
+                if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(u) || /^data:image\//.test(raw)) return 'image';
+                if (/\.(mp4|webm|ogv|mov|m4v)$/.test(u) || /^data:video\//.test(raw)) return 'video';
+                if (/\.(mp3|wav|ogg|m4a|flac)$/.test(u) || /^data:audio\//.test(raw)) return 'audio';
+                return 'iframe';
+            }
+
+            function isYouTube(u){ try{ const x=new URL(u); return x.hostname.includes('youtube.com')||x.hostname==='youtu.be'; }catch{ return false } }
+            function toYouTubeEmbed(u){ const x=new URL(u); let id=''; if(x.hostname==='youtu.be') id=x.pathname.slice(1); else if(x.searchParams.get('v')) id=x.searchParams.get('v'); else if(x.pathname.startsWith('/embed/')) id=x.pathname.split('/').pop(); const base='https://www.youtube.com/embed/'+encodeURIComponent(id); const params='?rel=0&modestbranding=1'; return { embed: base, params }; }
+            function isVimeo(u){ try{ const x=new URL(u); return x.hostname.includes('vimeo.com'); }catch{ return false } }
+            function toVimeoEmbed(u){ const x=new URL(u); const id=(x.pathname.split('/').filter(Boolean).pop()||''); const base='https://player.vimeo.com/video/'+encodeURIComponent(id); return { embed: base, params: '' }; }
+
+            // dynamic srcdoc autoresize
+            function genEmbedID(){ return 'e'+Math.random().toString(36).slice(2); }
+            function buildSrcdoc(content, id){
+                const esc = String(content || '');
+                const OPEN = '<scr' + 'ipt>';
+                const CLOSE = '</scr' + 'ipt>';
+                return `<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>html,body{margin:0;padding:0}img,video{max-width:100%;height:auto}</style></head><body>${esc}
+${OPEN}\n(function(){\n  function post(){try{parent.postMessage({type:'rp-embed-height',id:'${id}',height:document.documentElement.scrollHeight},'*');}catch(e){}}\n  var ro=new ResizeObserver(post); ro.observe(document.body);\n  window.addEventListener('load',post); setInterval(post,1000);\n})();\n${CLOSE}
+</body></html>`;
+            }
+
+            // parent listens for resize from srcdoc iframes
+            window.addEventListener('message', (ev) => {
+                const d = ev.data || {};
+                if (d && d.type === 'rp-embed-height' && d.id && typeof d.height === 'number') {
+                    const f = document.querySelector(`iframe[data-embed-id="${d.id}"]`);
+                    if (f) {
+                        const maxH = Math.floor(window.innerHeight * 0.9);
+                        f.style.height = Math.min(d.height + 8, maxH) + 'px';
+                    }
+                }
+            });
+
+            function addEmbedActions(wrap, el, href){
+                const bar = document.createElement('div'); bar.className='embed-actions';
+                const btn = document.createElement('button'); btn.type='button'; btn.textContent='확대';
+                btn.addEventListener('click', () => {
+                    if (el && el.requestFullscreen) { el.requestFullscreen().catch(()=>{}); }
+                    else if (href) { window.open(href, '_blank', 'noopener'); }
+                });
+                bar.appendChild(btn);
+                wrap.appendChild(bar);
+            }
+
+            function applyBlur(wrap, target, href){
+                if (!wrap || !target) return;
+                target.classList.add('blur-target');
+                const veil = document.createElement('div'); veil.className='blur-veil';
+                const msg = document.createElement('div'); msg.className='blur-msg'; msg.textContent='클릭하여 보기';
+                veil.appendChild(msg);
+                // Hide actions until reveal
+                const actions = wrap.querySelector('.embed-actions');
+                if (actions) actions.style.opacity = '0.5';
+                veil.addEventListener('click', () => {
+                    target.classList.remove('blur-target');
+                    veil.remove();
+                    if (actions) actions.style.opacity = '';
+                });
+                wrap.appendChild(veil);
+            }
 
             const applyMaxLen = (v) => {
                 if (typeof v === 'number' && v > 0) {
