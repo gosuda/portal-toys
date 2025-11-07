@@ -361,7 +361,36 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .event .usr { color: var(--muted) }
     .line a { color: #60a5fa; text-decoration: underline; cursor: pointer; }
     .line a:hover { color: #93c5fd; }
+    .line img { max-width: 300px; max-height: 300px; border-radius: 8px; margin-top: 4px; display: none; cursor: pointer; }
+    .line img:hover { opacity: 0.8; }
+    .line .image-placeholder { display: inline-block; padding: 8px 16px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .line .image-placeholder:hover { border-color: var(--accent); color: var(--fg); }
+    .line .image-controls { display: flex; gap: 4px; margin-top: 4px; }
+    .line .image-controls button { padding: 4px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font-size: 12px; cursor: pointer; }
+    .line .image-controls button:hover { border-color: var(--accent); }
+    .image-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.95); z-index: 9999; justify-content: center; align-items: center; cursor: pointer; }
+    .image-modal.show { display: flex; }
+    .image-modal img { max-width: 95%; max-height: 95%; object-fit: contain; border-radius: 4px; }
+    .users-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; max-width: 400px; width: 90%; max-height: 500px; z-index: 10000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+    .users-modal.show { display: block; }
+    .users-modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 9998; }
+    .users-modal-overlay.show { display: block; }
+    .users-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+    .users-modal-header h3 { margin: 0; color: var(--fg); font-size: 18px; }
+    .users-modal-close { background: transparent; border: none; color: var(--muted); font-size: 24px; cursor: pointer; line-height: 1; padding: 0; width: 24px; height: 24px; }
+    .users-modal-close:hover { color: var(--fg); }
+    .users-list { max-height: 380px; overflow-y: auto; }
+    .users-list-item { padding: 10px; margin: 4px 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font-family: 'D2Coding', ui-monospace, monospace; font-size: 14px; }
+    .users-list::-webkit-scrollbar { width: 8px; }
+    .users-list::-webkit-scrollbar-track { background: var(--bg); }
+    .users-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    .users-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+    .userspill { cursor: pointer; }
     .promptline { display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--border); font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .image-upload-btn { width: 20px; height: 20px; padding: 2px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: all 0.2s ease; }
+    .image-upload-btn:hover { background: var(--panel); border-color: var(--accent); }
+    .image-upload-btn svg { width: 16px; height: 16px; fill: var(--fg); }
+    #image-input { display: none; }
     #prompt { color:var(--accent) }
     #cmd { flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none; color:var(--fg); font-family: inherit; font-size:14px; caret-color: var(--cursor) }
     small{ color:var(--muted); display:block; margin-top:10px }
@@ -405,14 +434,14 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       h1 { font-size: 18px; }
       .termbar { flex-wrap: wrap; gap: 8px; }
       .termbar-center { order: 2; width: 100%; justify-content: center; }
-      .promptline { flex-direction: column; align-items: stretch; gap: 10px; }
-      #prompt { order: 1; }
-      #cmd { order: 2; font-size: 16px; }
-      .nick { order: 3; width: 100%; }
+      .promptline { flex-wrap: wrap; align-items: center; gap: 8px; }
+      #prompt { order: 1; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+      .image-upload-btn { order: 2; flex-shrink: 0; }
+      #cmd { order: 3; width: 100%; font-size: 16px; }
+      .nick { order: 4; width: 100%; }
       .nick input { width: 100%; font-size: 16px; }
       .nick button { font-size: 16px; }
       .screen { height: 50vh; font-size: 13px; }
-      .promptline { flex-wrap: nowrap; }
     }
   </style>
 </head>
@@ -444,10 +473,29 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       <div id="new-message-bubble" class="new-message-bubble"></div>
       <div class="promptline">
         <span id="prompt"></span>
+        <button class="image-upload-btn" id="image-upload-btn" title="Upload image">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+        </button>
+        <input type="file" id="image-input" accept="image/*" />
         <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="type a message and press Enter" enterkeyhint="send" inputmode="text" />
       </div>
     </div>
     <small>Tip: Enter to send • Nickname persists locally</small>
+  </div>
+  <div id="image-modal" class="image-modal">
+    <img id="modal-image" src="" alt="Full size image" />
+  </div>
+  <div id="users-modal-overlay" class="users-modal-overlay"></div>
+  <div id="users-modal" class="users-modal">
+    <div class="users-modal-header">
+      <h3>Online Users</h3>
+      <button id="users-modal-close" class="users-modal-close">&times;</button>
+    </div>
+    <div id="users-list" class="users-list"></div>
   </div>
   <script>
     const log = document.getElementById('log');
@@ -457,6 +505,17 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     const promptEl = document.getElementById('prompt');
     const usersCount = document.getElementById('users-count');
     const newMessageBubble = document.getElementById('new-message-bubble');
+    const imageUploadBtn = document.getElementById('image-upload-btn');
+    const imageInput = document.getElementById('image-input');
+    const imageModal = document.getElementById('image-modal');
+    const modalImage = document.getElementById('modal-image');
+    const usersModal = document.getElementById('users-modal');
+    const usersModalOverlay = document.getElementById('users-modal-overlay');
+    const usersModalClose = document.getElementById('users-modal-close');
+    const usersList = document.getElementById('users-list');
+
+    // Store current online users
+    let onlineUsers = [];
 
     // Smart scroll functions
     function isScrolledToBottom() {
@@ -530,9 +589,43 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       return PALETTE[idx];
     }
     function renderRoster(users){
-      const count = (users ? users.length : 0);
+      onlineUsers = users || [];
+      const count = onlineUsers.length;
       if (usersCount) usersCount.textContent = String(count);
     }
+
+    // Show users modal
+    function showUsersModal() {
+      // Populate users list
+      usersList.innerHTML = '';
+      if (onlineUsers.length === 0) {
+        usersList.innerHTML = '<div class="users-list-item">No users online</div>';
+      } else {
+        onlineUsers.forEach((username) => {
+          const item = document.createElement('div');
+          item.className = 'users-list-item';
+          item.innerHTML = sanitizeNickname(username);
+          usersList.appendChild(item);
+        });
+      }
+      usersModal.classList.add('show');
+      usersModalOverlay.classList.add('show');
+    }
+
+    // Hide users modal
+    function hideUsersModal() {
+      usersModal.classList.remove('show');
+      usersModalOverlay.classList.remove('show');
+    }
+
+    // Click on online count to show modal
+    document.querySelector('.userspill').addEventListener('click', showUsersModal);
+
+    // Close modal on close button
+    usersModalClose.addEventListener('click', hideUsersModal);
+
+    // Close modal on overlay click
+    usersModalOverlay.addEventListener('click', hideUsersModal);
     // Batch DOM updates for better performance
     let pendingAppends = [];
     let pendingMessages = [];
@@ -610,8 +703,20 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       return s.replace(/[&<>\"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
     }
 
-    // Convert URLs in text to clickable links
+    // Convert URLs in text to clickable links and display images
     function linkifyText(text) {
+      // Check if this is an image message
+      if (text.startsWith('[IMAGE]')) {
+        const base64Image = text.substring(7); // Remove '[IMAGE]' prefix
+        const imgId = 'img-' + Math.random().toString(36).substr(2, 9);
+        return '<div class="image-placeholder" data-img-id="' + imgId + '">[Image - Click to view]</div>' +
+               '<div class="image-controls" style="display:none" data-img-id="' + imgId + '">' +
+               '<button class="toggle-img" data-img-id="' + imgId + '">Hide</button>' +
+               '<button class="fullscreen-img" data-img-id="' + imgId + '">Fullscreen</button>' +
+               '</div>' +
+               '<img id="' + imgId + '" src="' + base64Image + '" alt="Uploaded image" class="chat-image" />';
+      }
+
       // First escape HTML
       const escaped = escapeHTML(text);
       // URL regex pattern
@@ -772,6 +877,117 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       }
     }
 
+    // Handle image upload
+    imageUploadBtn.addEventListener('click', () => {
+      imageInput.click();
+    });
+
+    // Resize image before uploading
+    function resizeImage(file, maxWidth, maxHeight, quality, callback) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          // Calculate new dimensions
+          if (width > height) {
+            if (width > maxWidth) {
+              height = height * (maxWidth / width);
+              width = maxWidth;
+            }
+          } else {
+            if (height > maxHeight) {
+              width = width * (maxHeight / height);
+              height = maxHeight;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to base64 with quality compression
+          const resizedBase64 = canvas.toDataURL('image/jpeg', quality);
+          callback(resizedBase64);
+        };
+        img.onerror = () => {
+          alert('Failed to load image');
+        };
+        img.src = e.target.result;
+      };
+      reader.onerror = () => {
+        alert('Failed to read file');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      // Check if file is an image
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        imageInput.value = '';
+        return;
+      }
+
+      // Check file size (max 10MB before resize)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Image size must be less than 10MB');
+        imageInput.value = '';
+        return;
+      }
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        alert('Not connected to server');
+        imageInput.value = '';
+        return;
+      }
+
+      // Show uploading status
+      const uploadingMsg = '[Uploading image...]';
+      cmd.placeholder = uploadingMsg;
+      cmd.disabled = true;
+
+      // Resize image (max 800x800, quality 0.7)
+      resizeImage(file, 800, 800, 0.7, (resizedBase64) => {
+        try {
+          // Check final size (base64 encoded)
+          if (resizedBase64.length > 500000) { // ~500KB limit
+            alert('Image is too large even after compression. Please use a smaller image.');
+            cmd.placeholder = 'type a message and press Enter';
+            cmd.disabled = false;
+            imageInput.value = '';
+            return;
+          }
+
+          // Send image as text with special prefix
+          const payload = {
+            user: (user.value || 'anon'),
+            text: '[IMAGE]' + resizedBase64,
+            uid: clientUID
+          };
+          ws.send(JSON.stringify(payload));
+
+          // Reset input
+          imageInput.value = '';
+          cmd.placeholder = 'type a message and press Enter';
+          cmd.disabled = false;
+        } catch(e) {
+          console.error('Failed to send image:', e);
+          alert('Failed to send image: ' + e.message);
+          cmd.placeholder = 'type a message and press Enter';
+          cmd.disabled = false;
+          imageInput.value = '';
+        }
+      });
+    });
+
     // Debounced notify of nickname changes to server so roster updates without sending a chat
     let nickTimer = null;
     user.addEventListener('input', () => {
@@ -804,6 +1020,58 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
         setTimeout(() => cmd.focus(), 0);
       }
     });
+    // Global click handler for images
+    document.addEventListener('click', (e) => {
+      const target = e.target;
+
+      // If clicked on image placeholder - show image and controls
+      if (target.classList && target.classList.contains('image-placeholder')) {
+        const imgId = target.getAttribute('data-img-id');
+        const img = document.getElementById(imgId);
+        const controls = document.querySelector('.image-controls[data-img-id="' + imgId + '"]');
+        if (img && controls) {
+          img.style.display = 'block';
+          controls.style.display = 'flex';
+          target.style.display = 'none';
+        }
+        e.preventDefault();
+        return;
+      }
+
+      // If clicked on toggle button - hide image and show placeholder
+      if (target.classList && target.classList.contains('toggle-img')) {
+        const imgId = target.getAttribute('data-img-id');
+        const img = document.getElementById(imgId);
+        const controls = document.querySelector('.image-controls[data-img-id="' + imgId + '"]');
+        const placeholder = document.querySelector('.image-placeholder[data-img-id="' + imgId + '"]');
+        if (img && controls && placeholder) {
+          img.style.display = 'none';
+          controls.style.display = 'none';
+          placeholder.style.display = 'inline-block';
+        }
+        e.preventDefault();
+        return;
+      }
+
+      // If clicked on fullscreen button - show modal
+      if (target.classList && target.classList.contains('fullscreen-img')) {
+        const imgId = target.getAttribute('data-img-id');
+        const img = document.getElementById(imgId);
+        if (img) {
+          modalImage.src = img.src;
+          imageModal.classList.add('show');
+        }
+        e.preventDefault();
+        return;
+      }
+    });
+
+    // Close modal when clicking on it
+    imageModal.addEventListener('click', () => {
+      imageModal.classList.remove('show');
+      modalImage.src = '';
+    });
+
     // Focus command line on load
     setTimeout(()=>cmd.focus(), 0);
   </script>
