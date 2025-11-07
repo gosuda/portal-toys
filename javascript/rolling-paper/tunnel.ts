@@ -8,7 +8,7 @@ export type TunnelOptions = {
   enabled?: boolean; // default: true
   port?: number;     // default: env PORT or 8080
   host?: string;     // default: 127.0.0.1
-  relay?: string;    // default: env RELAY or wss://portal.gosuda.org/relay
+  relay?: string;    // default: env RELAY|RELAY_URL or wss://portal.gosuda.org/relay
   name?: string;     // default: env TUNNEL_NAME or js-rolling-paper
   bin?: string;      // default: env TUNNEL_BIN|PORTAL_TUNNEL_BIN or auto-resolve
 };
@@ -23,7 +23,7 @@ export function startTunnel(opts: TunnelOptions = {}): Tunnel {
 
   const port = opts.port ?? Number(process.env.PORT || 8080);
   const host = opts.host ?? "127.0.0.1";
-  const relay = opts.relay ?? (process.env.RELAY || "wss://portal.gosuda.org/relay");
+  const relay = opts.relay ?? (process.env.RELAY || process.env.RELAY_URL);
   const name = opts.name ?? (process.env.TUNNEL_NAME || "js-rolling-paper");
   const bin = opts.bin ?? (process.env.TUNNEL_BIN || process.env.PORTAL_TUNNEL_BIN || resolveTunnelBin());
 
@@ -79,4 +79,3 @@ function resolveTunnelBin(): string {
   }
   return exe; // PATH fallback
 }
-

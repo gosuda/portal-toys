@@ -13,7 +13,7 @@ server.listen(PORT, () => {
   portalTunnel({
     port: PORT,
     name: "ts-test-tunnel",
-    relay: "wss://portal.gosuda.org/relay",
+    relay: "ws://localhost:4017/relay",
     // logLevel: "silent",
   });
 });

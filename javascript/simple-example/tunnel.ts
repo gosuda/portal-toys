@@ -7,7 +7,7 @@ export type LogLevel = "silent" | "error" | "verbose";
 export interface PortalTunnelOptions {
   port: number;
   name: string;
-  relay: string;
+  relay?: string;
   host?: string; // default: 127.0.0.1
   bin?: string;
   logLevel?: LogLevel;
@@ -31,7 +31,8 @@ function resolvePortalTunnel(): string {
 }
 
 export async function portalTunnel(options: PortalTunnelOptions): Promise<ChildProcess> {
-  const { port, name, relay, logLevel = "verbose" } = options;
+  const { port, name, logLevel = "verbose" } = options;
+  const relay = options.relay || process.env.RELAY || process.env.RELAY_URL;
   const host = options.host || "127.0.0.1";
   if (!port || !name || !relay) {
     const missing: Array<"port" | "name" | "relay"> = [];
@@ -70,4 +71,3 @@ export async function portalTunnel(options: PortalTunnelOptions): Promise<ChildP
   }
   return proc;
 }
-

@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
-	"time"
+    "context"
+    "fmt"
+    "net"
+    "net/http"
+    "os"
+    "os/signal"
+    "strings"
+    "syscall"
+    "time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -23,16 +24,16 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURL string
-	flagPort      int
-	flagName      string
+    flagServerURLs []string
+    flagPort       int
+    flagName       string
 )
 
 func init() {
-	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "youtube-chat", "backend display name")
+    flags := rootCmd.PersistentFlags()
+    flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+    flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
+    flags.StringVar(&flagName, "name", "youtube-chat", "backend display name")
 }
 
 func main() {
@@ -70,27 +71,41 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 	}
 	handler := stripPeer(baseHandler)
 
-	// Relay client (http-backend style)
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
-		c.BootstrapServers = []string{flagServerURL}
-	})
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	defer client.Close()
+    // Relay clients/listeners (multi-relay)
+    cred := sdk.NewCredential()
+    var clients []*sdk.RDClient
+    var listeners []net.Listener
+    for _, raw := range flagServerURLs {
+        if raw == "" { continue }
+        for _, p := range strings.Split(raw, ",") {
+            u := strings.TrimSpace(p)
+            if u == "" { continue }
+            client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{u} })
+            if err != nil {
+                log.Error().Err(err).Str("url", u).Msg("new client failed")
+                continue
+            }
+            clients = append(clients, client)
+            ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+            if err != nil {
+                return fmt.Errorf("listen (%s): %w", u, err)
+            }
+            listeners = append(listeners, ln)
+        }
+    }
+    if len(listeners) == 0 {
+        return fmt.Errorf("no valid relay servers provided via --server-url or RELAY/RELAY_URL env")
+    }
 
-	cred := sdk.NewCredential()
-	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
-
-	// Serve over relay
-	go func() {
-		if err := http.Serve(listener, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[ytchat] relay http error")
-		}
-	}()
+    // Serve over relay
+    for i, ln := range listeners {
+        idx := i
+        go func() {
+            if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+                log.Error().Err(err).Int("listener", idx).Msg("[ytchat] relay http error")
+            }
+        }()
+    }
 
 	// Optional local HTTP
 	var httpSrv *http.Server
@@ -106,16 +121,17 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 
 	// Unified shutdown watcher
 	go func() {
-		<-ctx.Done()
-		_ = listener.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-				log.Error().Err(err).Msg("[ytchat] http server shutdown error")
-			}
-		}
-	}()
+        <-ctx.Done()
+        for _, ln := range listeners { _ = ln.Close() }
+        for _, c := range clients { _ = c.Close() }
+        if httpSrv != nil {
+            sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+            defer cancel()
+            if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+                log.Error().Err(err).Msg("[ytchat] http server shutdown error")
+            }
+        }
+    }()
 
 	<-ctx.Done()
 	log.Info().Msg("[ytchat] shutdown complete")

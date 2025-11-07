@@ -1,21 +1,22 @@
 package main
 
 import (
-	"context"
-	"embed"
-	"errors"
-	"fmt"
-	"io"
-	"io/fs"
-	"net/http"
-	"os"
-	"os/exec"
-	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"syscall"
-	"time"
+    "context"
+    "embed"
+    "errors"
+    "fmt"
+    "io"
+    "io/fs"
+    "net"
+    "net/http"
+    "os"
+    "os/exec"
+    "os/signal"
+    "path/filepath"
+    "strconv"
+    "strings"
+    "syscall"
+    "time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -33,20 +34,20 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURL     string
-	flagPort          int
-	flagName          string
-	flagMaxSizeMB     int64
-	flagFFmpegWrapper string
+    flagServerURLs    []string
+    flagPort          int
+    flagName          string
+    flagMaxSizeMB     int64
+    flagFFmpegWrapper string
 )
 
 func init() {
-	f := rootCmd.PersistentFlags()
-	f.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
-	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
-	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
-	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
-	f.StringVar(&flagFFmpegWrapper, "ffmpeg-wrapper", os.Getenv("FFMPEG_WRAPPER"), "optional command prefix to run ffmpeg (e.g. 'docker exec ffmpeg ffmpeg')")
+    f := rootCmd.PersistentFlags()
+    f.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+    f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
+    f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
+    f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
+    f.StringVar(&flagFFmpegWrapper, "ffmpeg-wrapper", os.Getenv("FFMPEG_WRAPPER"), "optional command prefix to run ffmpeg (e.g. 'docker exec ffmpeg ffmpeg')")
 }
 
 func main() {
@@ -76,23 +77,40 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/convert", handleConvert)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	// Relay
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{flagServerURL} })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	defer client.Close()
-	cred := sdk.NewCredential()
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[ffmpeg] relay http serve error")
-		}
-	}()
-	log.Info().Msgf("[ffmpeg] serving over relay; id=%s", cred.ID())
+    // Relay (multi)
+    cred := sdk.NewCredential()
+    var clients []*sdk.RDClient
+    var listeners []net.Listener
+    for _, raw := range flagServerURLs {
+        if raw == "" { continue }
+        for _, p := range strings.Split(raw, ",") {
+            u := strings.TrimSpace(p)
+            if u == "" { continue }
+            client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{u} })
+            if err != nil {
+                log.Error().Err(err).Str("url", u).Msg("new client failed")
+                continue
+            }
+            clients = append(clients, client)
+            ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+            if err != nil {
+                return fmt.Errorf("listen (%s): %w", u, err)
+            }
+            listeners = append(listeners, ln)
+        }
+    }
+    if len(listeners) == 0 {
+        return fmt.Errorf("no valid relay servers provided via --server-url or RELAY/RELAY_URL env")
+    }
+    for i, ln := range listeners {
+        idx := i
+        go func() {
+            if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+                log.Error().Err(err).Int("listener", idx).Msg("[ffmpeg] relay http serve error")
+            }
+        }()
+    }
+    log.Info().Msgf("[ffmpeg] serving over relay; id=%s", cred.ID())
 
 	// Optional local
 	var httpSrv *http.Server
@@ -107,14 +125,15 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = httpSrv.Shutdown(sctx)
-		}
-	}()
+        <-ctx.Done()
+        for _, ln := range listeners { _ = ln.Close() }
+        for _, c := range clients { _ = c.Close() }
+        if httpSrv != nil {
+            sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+            defer cancel()
+            _ = httpSrv.Shutdown(sctx)
+        }
+    }()
 
 	<-ctx.Done()
 	log.Info().Msg("[ffmpeg] shutdown complete")

@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,20 +26,21 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURL string
-	flagPort      int
-	flagName      string
-	flagDataPath  string
-	flagCredKey   string
+	flagServerURLs []string
+	flagPort       int
+	flagName       string
+	flagDataPath   string
+	flagCredKey    string
 )
 
 func init() {
-	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relayserver base URL to auto-fetch multiaddrs from /health")
-	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "free-chat", "backend display name")
-	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
-	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
+    flags := rootCmd.PersistentFlags()
+
+    flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relayserver base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+    flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
+    flags.StringVar(&flagName, "name", "free-chat", "backend display name")
+    flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
+    flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
 }
 
 func main() {
@@ -74,16 +77,36 @@ func runChat(cmd *cobra.Command, args []string) error {
 	// Build router
 	handler := NewHandler(flagName, hub)
 
-	// client (http-backend style)
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
-		c.BootstrapServers = []string{flagServerURL}
-	})
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	defer client.Close()
-
-	cred := sdk.NewCredential()
+    // Build clients and listeners for all provided relays
+    cred := sdk.NewCredential()
+    var clients []*sdk.RDClient
+    var listeners []net.Listener
+    for _, raw := range flagServerURLs {
+        if raw == "" {
+            continue
+        }
+        parts := strings.Split(raw, ",")
+        for _, p := range parts {
+            u := strings.TrimSpace(p)
+            if u == "" {
+                continue
+            }
+            client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{u} })
+            if err != nil {
+                log.Error().Err(err).Str("url", u).Msg("new client failed")
+                continue
+            }
+            clients = append(clients, client)
+            ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+            if err != nil {
+                return fmt.Errorf("listen (%s): %w", u, err)
+            }
+            listeners = append(listeners, ln)
+        }
+    }
+    if len(listeners) == 0 {
+        return fmt.Errorf("no valid relay servers provided via --server-url or RELAY/RELAY_URL env")
+    }
 	if flagCredKey != "" {
 		key, err := base64.StdEncoding.DecodeString(flagCredKey)
 		if err != nil {
@@ -95,17 +118,15 @@ func runChat(cmd *cobra.Command, args []string) error {
 		}
 		cred = cred2
 	}
-	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
-
-	// Serve over relay
-	go func() {
-		if err := http.Serve(listener, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[chat] relay http error")
-		}
-	}()
+    // Serve over each relay listener
+    for i, ln := range listeners {
+        idx := i
+        go func() {
+            if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+                log.Error().Err(err).Int("listener", idx).Msg("[chat] relay http error")
+            }
+        }()
+    }
 
 	// Optional local server on --port
 	var httpSrv *http.Server
@@ -119,18 +140,19 @@ func runChat(cmd *cobra.Command, args []string) error {
 		}()
 	}
 
-	// Unified shutdown watcher
-	go func() {
-		<-ctx.Done()
-		_ = listener.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-				log.Error().Err(err).Msg("[chat] http server shutdown error")
-			}
-		}
-	}()
+    // Unified shutdown watcher
+    go func() {
+        <-ctx.Done()
+        for _, ln := range listeners { _ = ln.Close() }
+        for _, c := range clients { _ = c.Close() }
+        if httpSrv != nil {
+            sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+            defer cancel()
+            if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
+                log.Error().Err(err).Msg("[chat] http server shutdown error")
+            }
+        }
+    }()
 
 	// Wait for cancel, then clean up hub/store
 	<-ctx.Done()

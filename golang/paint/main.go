@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -32,14 +33,14 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURL string
-	flagPort      int
-	flagName      string
+	flagServerURLs []string
+	flagPort       int
+	flagName       string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringVar(&flagServerURL, "server-url", "wss://portal.gosuda.org/relay", "relay websocket URL")
+	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "paint", "backend display name")
 }
@@ -251,20 +252,34 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Create SDK client and connect to relay(s)
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
-		c.BootstrapServers = []string{flagServerURL}
-	})
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	defer client.Close()
-
-	// Register lease and obtain a net.Listener that accepts relayed connections
+	// Create SDK clients/listeners and connect to relay(s)
 	cred := sdk.NewCredential()
-	listener, err := client.Listen(cred, flagName, []string{"http/1.1"})
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+	var clients []*sdk.RDClient
+	var listeners []net.Listener
+	for _, raw := range flagServerURLs {
+		if raw == "" {
+			continue
+		}
+		for _, p := range strings.Split(raw, ",") {
+			u := strings.TrimSpace(p)
+			if u == "" {
+				continue
+			}
+			client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{u} })
+			if err != nil {
+				log.Error().Err(err).Str("url", u).Msg("new client failed")
+				continue
+			}
+			clients = append(clients, client)
+			ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+			if err != nil {
+				return fmt.Errorf("listen (%s): %w", u, err)
+			}
+			listeners = append(listeners, ln)
+		}
+	}
+	if len(listeners) == 0 {
+		return fmt.Errorf("no valid relay servers provided via --server-url or RELAY/RELAY_URL env")
 	}
 
 	// Setup HTTP handler
@@ -332,18 +347,26 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/ws", canvas.handleWS)
 
-	// 5) Serve HTTP over relay listener
+	// 5) Serve HTTP over relay listener(s)
 	log.Info().Msgf("[paint] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
-	go func() {
-		if err := http.Serve(listener, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[paint] http serve error")
-		}
-	}()
+	for i, ln := range listeners {
+		idx := i
+		go func() {
+			if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+				log.Error().Err(err).Int("listener", idx).Msg("[paint] http serve error")
+			}
+		}()
+	}
 
 	// Single watcher for shutdown
 	go func() {
 		<-ctx.Done()
-		_ = listener.Close()
+		for _, ln := range listeners {
+			_ = ln.Close()
+		}
+		for _, c := range clients {
+			_ = c.Close()
+		}
 	}()
 
 	// Optional: also serve locally on --port like http-backend
