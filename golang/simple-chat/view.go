@@ -314,7 +314,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Simple Chat — {{.Name}}</title>
   <style>
     :root{
@@ -325,6 +325,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       --muted: #9ca3af;
       --accent: #22c55e;
       --cursor: #22c55e;
+      --chat-height: 420px; /* default chat log height (desktop) */
     }
     *{ box-sizing: border-box }
     /* Prefer locally-installed D2Coding for Korean monospaced rendering */
@@ -353,7 +354,14 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .nick { display:flex; align-items:center; gap:8px }
     .nick input{ background:transparent; border:1px solid var(--border); color:var(--fg); padding:6px 8px; border-radius:6px; font-family:inherit; font-size:13px; width:180px }
     .nick button{ background:transparent; border:1px solid var(--border); color:var(--fg); padding:6px 8px; border-radius:6px; font-family:inherit; font-size:13px; cursor:pointer }
-    .screen { height:420px; overflow:auto; padding:14px; font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; line-height:1.5; contain: layout style paint; will-change: scroll-position; }
+    .screen { height: var(--chat-height); overflow:auto; padding:14px; font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px; line-height:1.5; contain: layout style paint; will-change: scroll-position; }
+    /* Resize handle under chat log */
+    .resizer { height: 10px; cursor: row-resize; border-top:1px solid var(--border); background: transparent; position: relative; touch-action: none; }
+    .resizer::after {
+      content: '';
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 40px; height: 3px; border-radius: 2px; background: #374151;
+    }
     .line { white-space: pre-wrap; word-break: break-word; contain: layout style; }
     .ts { color:var(--muted) }
     .usr { color:#60a5fa }
@@ -441,7 +449,9 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       .nick { order: 4; width: 100%; }
       .nick input { width: 100%; font-size: 16px; }
       .nick button { font-size: 16px; }
-      .screen { height: 50vh; font-size: 13px; }
+      :root { --chat-height: 50vh; }
+      .screen { height: var(--chat-height); font-size: 13px; }
+      .resizer { height: 14px; }
     }
   </style>
 </head>
@@ -470,6 +480,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
         <div class="term-actions"><span class="userspill"><span id="users-count">0</span> Online</span></div>
       </div>
       <div id="log" class="screen"></div>
+      <div id="resizer" class="resizer" role="separator" aria-orientation="horizontal" aria-label="Resize chat"></div>
       <div id="new-message-bubble" class="new-message-bubble"></div>
       <div class="promptline">
         <span id="prompt"></span>
@@ -499,6 +510,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
   </div>
   <script>
     const log = document.getElementById('log');
+    const resizer = document.getElementById('resizer');
     const user = document.getElementById('user');
     const cmd = document.getElementById('cmd');
     const roll = document.getElementById('roll');
@@ -513,6 +525,84 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     const usersModalOverlay = document.getElementById('users-modal-overlay');
     const usersModalClose = document.getElementById('users-modal-close');
     const usersList = document.getElementById('users-list');
+
+    // Persisted chat height
+    const CHAT_HEIGHT_KEY = 'chatHeightPx';
+    function clampChatHeight(px) {
+      const minH = 200; // minimum px
+      const maxH = Math.min(window.innerHeight - 140, 1200); // leave space for prompt/termbar
+      return Math.max(minH, Math.min(maxH, Math.floor(px)));
+    }
+    function applyChatHeight(px) {
+      const clamped = clampChatHeight(px);
+      log.style.height = clamped + 'px';
+      try { localStorage.setItem(CHAT_HEIGHT_KEY, String(clamped)); } catch(_) {}
+    }
+    // Initialize height from localStorage (desktop only). On mobile, we start from CSS 50vh but still allow custom.
+    try {
+      const saved = localStorage.getItem(CHAT_HEIGHT_KEY);
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val > 0) {
+          log.style.height = clampChatHeight(val) + 'px';
+        }
+      }
+    } catch(_) {}
+
+    // Drag-to-resize (mouse, touch, and pen via Pointer Events)
+    (function enableResize(){
+      if (!resizer) return;
+      let startY = 0;
+      let startH = 0;
+      let dragging = false;
+
+      function onPointerDown(e){
+        dragging = true;
+        startY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+        startH = log.getBoundingClientRect().height;
+        document.body.style.userSelect = 'none';
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp, { once: true });
+      }
+      function onPointerMove(e){
+        if (!dragging) return;
+        const currentY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
+        const delta = currentY - startY;
+        const next = clampChatHeight(startH + delta);
+        log.style.height = next + 'px';
+      }
+      function onPointerUp(){
+        dragging = false;
+        document.body.style.userSelect = '';
+        const h = log.getBoundingClientRect().height;
+        applyChatHeight(h);
+        window.removeEventListener('pointermove', onPointerMove);
+      }
+
+      // Support legacy mouse/touch if PointerEvent not available
+      if (window.PointerEvent) {
+        resizer.addEventListener('pointerdown', onPointerDown);
+      } else {
+        resizer.addEventListener('mousedown', (e) => { e.preventDefault(); onPointerDown(e); });
+        resizer.addEventListener('touchstart', (e) => { onPointerDown(e); }, { passive: true });
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp, { once: true });
+      }
+
+      // Double-click to reset height to default
+      resizer.addEventListener('dblclick', () => {
+        // Use CSS variable default: desktop 420px, mobile 50vh -> translate to px
+        const fallback = Math.max(300, Math.floor(window.innerHeight * 0.5));
+        log.style.height = fallback + 'px';
+        applyChatHeight(fallback);
+      });
+
+      // Re-clamp on resize/orientation change
+      window.addEventListener('resize', () => {
+        const h = log.getBoundingClientRect().height;
+        log.style.height = clampChatHeight(h) + 'px';
+      });
+    })();
 
     // Store current online users
     let onlineUsers = [];
