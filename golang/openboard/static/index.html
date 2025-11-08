@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>OpenBoard</title>
+  <style>
+    :root{ --bg:#0b1220; --panel:#0f172a; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22c55e }
+    *{box-sizing:border-box}
+    body{margin:0; background:var(--bg); color:var(--fg); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial}
+    .wrap{max-width:980px; margin:0 auto; padding:16px}
+    header{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:12px}
+    h1{margin:0; font-size:20px}
+    .panel{background:var(--panel); border:1px solid var(--border); border-radius:12px; overflow:hidden}
+    .grid{display:grid; grid-template-columns:1fr; gap:12px}
+    .toolbar{display:flex; gap:8px; padding:12px; border-bottom:1px solid var(--border); align-items:center; flex-wrap:wrap}
+    .muted{color:var(--muted); font-size:12px}
+    .form{display:grid; gap:10px; padding:12px}
+    input[type="text"], textarea{width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--fg); font-size:14px}
+    textarea{min-height:200px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+    button{padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--fg); cursor:pointer}
+    button:hover{border-color:var(--accent)}
+    table{width:100%; border-collapse:collapse}
+    th,td{padding:10px 12px; border-bottom:1px solid var(--border); text-align:left}
+    th{color:#cbd5e1; background:#0b1329}
+    .badge{display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid var(--border); font-size:12px; color:var(--fg)}
+    .empty{padding:24px; text-align:center; color:var(--muted)}
+    @media (max-width: 640px){ .wrap{padding:12px} h1{font-size:18px} }
+  </style>
+  <script>
+    async function submitForm(ev){
+      ev.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const title = document.getElementById('title').value.trim();
+      const html = document.getElementById('html').value;
+      const res = await fetch('/api/pages',{method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name, title, html})});
+      const j = await res.json();
+      if(!res.ok || j.error){ alert(j.error||'저장 실패'); return }
+      await loadPages();
+      (document.getElementById('html').value='');
+    }
+    function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])) }
+    async function loadPages(){
+      try{
+        const res = await fetch('/api/pages');
+        const data = await res.json();
+        const tbody = document.getElementById('tbody');
+        const items = (data.pages||[]);
+        if(!items.length){ tbody.innerHTML = '<tr><td colspan="4" class="empty">아직 게시글이 없습니다. 위 폼에서 새로운 HTML을 추가하세요.</td></tr>'; return }
+        tbody.innerHTML = items.map(p=>`<tr>
+          <td>${escapeHtml(p.title||p.name)}</td>
+          <td><code>${escapeHtml(p.name)}</code></td>
+          <td>${new Date(p.updated_at).toLocaleString()}</td>
+          <td><a href="/p/${encodeURIComponent(p.name)}" target="_blank">샌드박스</a> &nbsp;|&nbsp; <a href="/raw/${encodeURIComponent(p.name)}" target="_blank">RAW</a></td>
+        </tr>`).join('');
+      }catch(e){
+        document.getElementById('tbody').innerHTML = '<tr><td colspan="4" class="empty">목록을 불러오지 못했습니다.</td></tr>';
+      }
+    }
+    window.addEventListener('DOMContentLoaded', loadPages);
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>OpenBoard — 사용자 가꾸는 게시판</h1>
+      <span class="muted">주의: HTML/JS가 그대로 호스팅됩니다. 악성 스크립트에 유의하세요.</span>
+    </header>
+    <div class="grid">
+      <div class="panel">
+        <div class="toolbar"><span class="badge">새 글 작성</span><span class="muted">이름은 자유롭게 입력하세요</span></div>
+        <form class="form" onsubmit="submitForm(event)">
+          <label>Name <input id="name" type="text" required /></label>
+          <label>Title <input id="title" type="text" placeholder="제목 (선택)" /></label>
+          <label>HTML <textarea id="html" placeholder="여기에 자유롭게 HTML/JS/CSS를 입력하세요"></textarea></label>
+          <div style="display:flex; gap:8px; justify-content:flex-end">
+            <button type="submit">저장</button>
+          </div>
+        </form>
+      </div>
+      <div class="panel">
+        <div class="toolbar"><span class="badge">게시글 목록</span></div>
+        <div style="overflow:auto">
+          <table>
+            <thead><tr><th>제목</th><th>Name</th><th>수정시각</th><th>보기</th></tr></thead>
+            <tbody id="tbody"><tr><td colspan="4" class="empty">로드 중…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

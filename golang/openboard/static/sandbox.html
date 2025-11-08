@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>OpenBoard — Sandbox</title>
+  <style>
+    html,body{height:100%}
+    body{margin:0; background:#000;}
+    iframe{width:100%; height:100%; border:0; display:block; background:#fff}
+  </style>
+  <script>
+    function getSlug(){
+      var p = location.pathname; // /p/{slug}
+      var i = p.indexOf('/p/');
+      var slug = i>=0 ? p.slice(i+3) : '';
+      return slug.replace(/\/+$/,'');
+    }
+    function init(){
+      var slug = getSlug();
+      var url = '/raw/' + encodeURIComponent(slug);
+      // Optional: allow removing sandbox via query ?unsafe=1 (not recommended)
+      var unsafe = new URLSearchParams(location.search).get('unsafe') === '1';
+      var frame = document.getElementById('frame');
+      frame.src = url;
+      if (unsafe) frame.removeAttribute('sandbox');
+    }
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</head>
+<body>
+  <iframe id="frame" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>
+</body>
+</html>
