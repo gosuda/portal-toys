@@ -181,26 +181,32 @@ func (c *wsClient) readPump() {
 			break
 		}
 		// inspect message type for chat handling
-		var peek struct {
-			T    string `json:"t"`
-			Name string `json:"name"`
-			Text string `json:"text"`
-			TS   int64  `json:"ts"`
-		}
+        var peek struct {
+            T    string `json:"t"`
+            Name string `json:"name"`
+            Text string `json:"text"`
+            TS   int64  `json:"ts"`
+            UID  string `json:"uid"`
+        }
 		if err := json.Unmarshal(message, &peek); err == nil && peek.T == "ka" {
 			// client app-level keepalive; do not broadcast
 			continue
 		} else if err == nil && peek.T == "chat" {
 			// assign UID for this connection if missing
-			uid, ok := c.hub.connUID[c]
-			if !ok || uid == "" {
-				uid = generateUID()
-				c.hub.connUID[c] = uid
-				if _, ok := c.hub.userConns[uid]; !ok {
-					c.hub.userConns[uid] = make(map[*wsClient]bool)
-				}
-				// if first ever connection for this uid, announce join later
-			}
+            uid, ok := c.hub.connUID[c]
+            if !ok || uid == "" {
+                // prefer client-provided stable uid if present
+                if peek.UID != "" {
+                    uid = peek.UID
+                } else {
+                    uid = generateUID()
+                }
+                c.hub.connUID[c] = uid
+                if _, ok := c.hub.userConns[uid]; !ok {
+                    c.hub.userConns[uid] = make(map[*wsClient]bool)
+                }
+                // if first ever connection for this uid, announce join later
+            }
 			// track connection membership
 			firstConn := len(c.hub.userConns[uid]) == 0
 			c.hub.userConns[uid][c] = true
@@ -533,6 +539,16 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     const sendQueue = [];
     let kaTimer = null;
 
+    const UID_KEY = 'ytchat.uid';
+    let clientId = null;
+    try{ clientId = localStorage.getItem(UID_KEY); }catch{}
+    if(!clientId){
+      try{
+        clientId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : (Date.now().toString(36) + '-' + Math.random().toString(16).slice(2));
+        try{ localStorage.setItem(UID_KEY, clientId); }catch{}
+      }catch{ clientId = Date.now().toString(36) + '-' + Math.random().toString(16).slice(2); }
+    }
+
     function flushQueue(){
       while (sock && sock.readyState === 1 && sendQueue.length) {
         try { sock.send(sendQueue.shift()); } catch { break; }
@@ -542,7 +558,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
     function scheduleKA(){
       if (kaTimer) clearInterval(kaTimer);
       kaTimer = setInterval(()=>{
-        try{ if(sock && sock.readyState===1) sock.send(JSON.stringify({t:'ka', ts:Date.now()})); }catch{}
+        try{ if(sock && sock.readyState===1) sock.send(JSON.stringify({t:'ka', uid: clientId, ts:Date.now()})); }catch{}
       }, 25000);
     }
 
@@ -625,6 +641,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
 
     // Messaging
     function send(msg){
+      if (msg && typeof msg === 'object' && !msg.uid) msg.uid = clientId;
       const s = JSON.stringify(msg);
       if(sock && sock.readyState===1){ try{ sock.send(s); }catch{ sendQueue.push(s); } }
       else { if (sendQueue.length < 64) sendQueue.push(s); }
