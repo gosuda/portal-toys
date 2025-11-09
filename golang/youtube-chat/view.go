@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +22,11 @@ type drawHub struct {
 	history     [][]byte
 	maxHistory  int
 	snapshotReq chan chan [][]byte
+
+	// chat user tracking (borrowed from simple-chat)
+	connUID   map[*wsClient]string
+	userConns map[string]map[*wsClient]bool
+	userName  map[string]string
 }
 
 func newDrawHub() *drawHub {
@@ -31,6 +38,9 @@ func newDrawHub() *drawHub {
 		history:     make([][]byte, 0, 256),
 		maxHistory:  5000,
 		snapshotReq: make(chan chan [][]byte, 8),
+		connUID:     make(map[*wsClient]string),
+		userConns:   make(map[string]map[*wsClient]bool),
+		userName:    make(map[string]string),
 	}
 	go h.run()
 	return h
@@ -59,14 +69,19 @@ func (h *drawHub) run() {
 			if err := json.Unmarshal(msg, &peek); err == nil && peek.T == "clear" {
 				h.history = h.history[:0]
 			} else {
-				if len(h.history) >= h.maxHistory {
-					copy(h.history[0:], h.history[1:])
-					h.history[len(h.history)-1] = nil
-					h.history = h.history[:len(h.history)-1]
+				// Do not persist ephemeral chat system messages
+				if peek.T == "chat-roster" || peek.T == "chat-joined" || peek.T == "chat-left" {
+					// broadcast only, skip history append
+				} else {
+					if len(h.history) >= h.maxHistory {
+						copy(h.history[0:], h.history[1:])
+						h.history[len(h.history)-1] = nil
+						h.history = h.history[:len(h.history)-1]
+					}
+					b := make([]byte, len(msg))
+					copy(b, msg)
+					h.history = append(h.history, b)
 				}
-				b := make([]byte, len(msg))
-				copy(b, msg)
-				h.history = append(h.history, b)
 			}
 			for c := range h.clients {
 				select {
@@ -86,6 +101,33 @@ type wsClient struct {
 	send chan []byte
 }
 
+// rosterMessage builds a JSON message with the current connected user list.
+func (h *drawHub) rosterMessage() []byte {
+	// collect active names for users that still have at least one connection
+	users := make([]string, 0, len(h.userName))
+	for uid, name := range h.userName {
+		if set, ok := h.userConns[uid]; !ok || len(set) == 0 {
+			continue
+		}
+		if name == "" {
+			name = "anon"
+		}
+		users = append(users, name)
+	}
+	sort.Strings(users)
+	b, _ := json.Marshal(map[string]any{
+		"t":     "chat-roster",
+		"users": users,
+		"ts":    time.Now().UnixMilli(),
+	})
+	return b
+}
+
+// generateUID returns a simple per-connection unique id.
+func generateUID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -96,6 +138,28 @@ var upgrader = websocket.Upgrader{
 
 func (c *wsClient) readPump() {
 	defer func() {
+		// handle user disconnect announcements
+		if uid, ok := c.hub.connUID[c]; ok {
+			// remove this connection from the user's set
+			if set, ok2 := c.hub.userConns[uid]; ok2 {
+				delete(set, c)
+				if len(set) == 0 {
+					delete(c.hub.userConns, uid)
+					// last connection for this uid -> announce left and prune username
+					if name := c.hub.userName[uid]; name != "" {
+						b, _ := json.Marshal(map[string]any{"t": "chat-left", "name": name, "ts": time.Now().UnixMilli()})
+						c.hub.broadcast <- b
+					}
+					delete(c.hub.userName, uid)
+				} else {
+					c.hub.userConns[uid] = set
+				}
+			}
+			delete(c.hub.connUID, c)
+			// update roster for everyone
+			c.hub.broadcast <- c.hub.rosterMessage()
+		}
+
 		c.hub.unregister <- c
 		_ = c.conn.Close()
 	}()
@@ -109,6 +173,66 @@ func (c *wsClient) readPump() {
 		if err != nil {
 			break
 		}
+		// inspect message type for chat handling
+		var peek struct {
+			T    string `json:"t"`
+			Name string `json:"name"`
+			Text string `json:"text"`
+			TS   int64  `json:"ts"`
+		}
+		if err := json.Unmarshal(message, &peek); err == nil && peek.T == "chat" {
+			// assign UID for this connection if missing
+			uid, ok := c.hub.connUID[c]
+			if !ok || uid == "" {
+				uid = generateUID()
+				c.hub.connUID[c] = uid
+				if _, ok := c.hub.userConns[uid]; !ok {
+					c.hub.userConns[uid] = make(map[*wsClient]bool)
+				}
+				// if first ever connection for this uid, announce join later
+			}
+			// track connection membership
+			firstConn := len(c.hub.userConns[uid]) == 0
+			c.hub.userConns[uid][c] = true
+			// default name
+			name := peek.Name
+			if name == "" {
+				name = "anon"
+			}
+			// detect rename
+			renamed := false
+			if cur, ok := c.hub.userName[uid]; !ok {
+				c.hub.userName[uid] = name
+			} else if cur != name {
+				c.hub.userName[uid] = name
+				renamed = true
+			}
+			// announce join if this is the first connection
+			if firstConn {
+				b, _ := json.Marshal(map[string]any{"t": "chat-joined", "name": name, "ts": time.Now().UnixMilli()})
+				c.hub.broadcast <- b
+				// broadcast roster
+				c.hub.broadcast <- c.hub.rosterMessage()
+			} else if renamed {
+				// just update roster on rename
+				c.hub.broadcast <- c.hub.rosterMessage()
+			}
+			// ensure ts present on outbound chat message
+			if peek.TS == 0 {
+				var m map[string]any
+				if err := json.Unmarshal(message, &m); err == nil {
+					m["ts"] = time.Now().UnixMilli()
+					b, _ := json.Marshal(m)
+					c.hub.broadcast <- b
+				} else {
+					c.hub.broadcast <- message
+				}
+			} else {
+				c.hub.broadcast <- message
+			}
+			continue
+		}
+		// non-chat messages forwarded as-is
 		c.hub.broadcast <- message
 	}
 }
@@ -220,74 +344,63 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
   <title>YouTube Chat</title>
   <style>
     :root{
-      --chrome:#f3f4f6; --chrome-line:#d1d5db; --panel:#ffffff; --ink:#111827; --muted:#6b7280;
-      --btn:#f9fafb; --btn-line:#d1d5db; --btn-hover:#eef2f7; --accent:#2563eb;
+      --bg:#0d1117; --panel:#111827; --border:#1f2937; --fg:#e5e7eb; --muted:#9ca3af; --accent:#22c55e; --cursor:#22c55e;
     }
     *{ box-sizing:border-box }
-    body{ margin:0; background:var(--chrome); color:var(--ink); font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif }
-    .wrap{ margin:0 auto; padding:16px }
+    /* Prefer locally-installed D2Coding for Korean monospaced rendering */
+    @font-face { font-family: 'D2Coding'; src: local('D2Coding'), local('D2Coding Ligature'), local('D2Coding Nerd'); font-display: swap; }
+    body{ margin:0; background:var(--bg); color:var(--fg); font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial }
+    .wrap{ margin:0 auto; padding:20px; max-width:2160px }
     .title{ font-weight:800; margin:0 0 8px 0; font-size:14px; color:var(--muted) }
-    .btn{ background:var(--btn); border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; cursor:pointer; font-weight:700; color:#111; min-width:44px; min-height:38px; text-align:center }
-    .btn:hover{ background:var(--btn-hover) }
-    .input{ border:1px solid var(--btn-line); border-radius:8px; padding:10px 12px; background:#fff; min-height:38px; min-width:220px }
-    .app-title{ font-weight:800; font-size:28px; margin:0 0 6px 0 }
-    .main {
-  margin:16px auto 0 auto;  /* 상단 16px, 좌우 자동 */
-  display:grid;
-  grid-template-columns: 2fr 1fr; /* 플레이어:채팅 비율 */
-  grid-template-areas: 'player chat';
-  gap:16px; /* 플레이어-채팅 간격 */
-  max-width: 2000px; /* 전체 폭 제한 */
-}
-    .col-player {
-  width: 100%;
-  max-width: 1800px; /* 원하는 최대 크기 */
-}
-    /* 채팅 높이 동기화 */
-.col-chat {
-  min-height:0;
-  overflow:hidden;
-}
-    .panel{ background:var(--panel); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; display:flex; flex-direction:column }
-    .player {
-  width: 100%;
-  aspect-ratio: 16/9; /* 반응형 비율 유지 */
-  background:#000;
-  border:1px solid var(--chrome-line);
-  border-radius:8px;
-  overflow:hidden;
-}
+    .btn{ background:transparent; border:1px solid var(--border); border-radius:8px; padding:10px 12px; cursor:pointer; color:var(--fg); min-width:44px; min-height:38px; text-align:center }
+    .btn:hover{ border-color:var(--accent); background:#0b1220 }
+    .input{ border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:#0b1220; color:var(--fg); min-height:38px; min-width:220px }
+    .app-title{ font-weight:800; font-size:24px; margin:0 0 8px 0 }
+    .main{ margin:16px auto 0 auto; display:grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); grid-template-areas: 'player chat'; gap:16px; }
+    .col-player{ grid-area:player; width:100% }
+    .col-chat{ grid-area:chat; min-height:0; overflow:hidden }
+    .panel{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px; display:flex; flex-direction:column }
+    .player{ width:100%; aspect-ratio:16/9; background:#000; border:1px solid var(--border); border-radius:8px; overflow:hidden }
     .status{ margin-top:8px; color:var(--muted); font-size:12px }
     .queue{ margin-top:6px }
-    .queue-list{ border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa; min-height:56px; max-height:240px; overflow:auto }
+    .queue-list{ border:1px solid var(--border); border-radius:8px; padding:8px; background:#0b1220; min-height:56px; max-height:240px; overflow:auto }
     .queue-tools{ margin-top:4px; margin-bottom:4px; font-size:12px; color:var(--muted); text-align:right }
     .link{ color:var(--accent); text-decoration:underline; cursor:pointer }
-    .queue-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px dashed #e5e7eb; cursor:pointer }
+    .queue-item{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 4px; border-bottom:1px dashed #1f2a37; cursor:pointer }
     .queue-item:last-child{ border-bottom:none }
     .queue-item .meta{ color:var(--muted); font-size:12px }
-    .queue-item.active{ background:#eef2ff }
-    .btn-icon{ background:var(--btn); border:1px solid var(--btn-line); border-radius:6px; padding:4px 8px; cursor:pointer; }
+    .queue-item.active{ background:#0b1a14 }
+    .btn-icon{ background:transparent; border:1px solid var(--border); color:var(--fg); border-radius:6px; padding:4px 8px; cursor:pointer }
+    .btn-icon:hover{ border-color:var(--accent) }
     .chat{ display:flex; flex-direction:column; height:100% }
     .chat-head{ display:flex; gap:12px; align-items:center; margin-bottom:10px }
-    .chat-log{ flex:1 1 auto; min-height:0; overflow:auto; border:1px solid var(--chrome-line); border-radius:8px; padding:8px; background:#fafafa }
+    .chat-roster{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px }
+    .pill{ border:1px solid var(--border); background:#0b1220; border-radius:999px; padding:4px 8px; font-size:12px; color:var(--muted) }
+    .chat-log{ flex:1 1 auto; min-height:0; overflow:auto; border:1px solid var(--border); border-radius:8px; padding:8px; background:#0b1220; font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:14px }
     .chat-msg{ margin:0 0 6px 0; line-height:1.35 }
     .chat-msg .who{ font-weight:700 }
     .chat-msg .time{ color:var(--muted); font-size:11px; margin-left:6px }
+    .chat-msg.sys{ color:var(--muted) }
     .chat-input{ display:flex; gap:12px; margin-top:10px }
     .chat-input input{ flex:1 }
     .yt-add{ margin-top:12px }
     .yt-row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap }
     .yt-actions-right{ margin-left:auto; display:flex; gap:12px; align-items:center }
     .queue-empty{ color:var(--muted); font-size:13px; padding:8px; text-align:center }
-    /* 작은 화면 대응 */
-@media (max-width: 900px){
-  .main {
-    grid-template-columns:1fr;
-    grid-template-areas:
-      'player'
-      'chat';
-  }
-}
+    /* Responsiveness */
+    @media (max-width: 1280px){ .main{ grid-template-columns: minmax(0,3fr) minmax(0,2fr); } }
+    @media (max-width: 900px){
+      .main{ grid-template-columns:1fr; grid-template-areas:'player' 'chat'; }
+      .queue-list{ max-height: 180px; }
+      .chat-log{ max-height: 42vh; }
+    }
+
+    /* Pretty scrollbars */
+    .chat-log, .queue-list{ scrollbar-width: thin; scrollbar-color: #374151 #0b1220; }
+    .chat-log::-webkit-scrollbar, .queue-list::-webkit-scrollbar{ width:10px; height:10px }
+    .chat-log::-webkit-scrollbar-track, .queue-list::-webkit-scrollbar-track{ background:#0b1220; border-radius:8px }
+    .chat-log::-webkit-scrollbar-thumb, .queue-list::-webkit-scrollbar-thumb{ background:#1f2937; border-radius:8px; border:2px solid #0b1220 }
+    .chat-log::-webkit-scrollbar-thumb:hover, .queue-list::-webkit-scrollbar-thumb:hover{ background:#374151 }
   </style>
   </head>
 <body>
@@ -326,6 +439,7 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
           <input id="nick" class="input" type="text" placeholder="anon" style="min-width:140px" />
           <button id="roll" class="btn" title="랜덤 닉네임">🎲</button>
         </div>
+        <div id="roster" class="chat-roster"></div>
         <div id="log" class="chat-log"></div>
         <div class="chat-input">
           <input id="msg" class="input" type="text" placeholder="메시지 입력 후 Enter" />
@@ -487,6 +601,21 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       p.appendChild(who); p.appendChild(time); p.appendChild(body);
       log.appendChild(p); log.scrollTop = log.scrollHeight;
     }
+    function addSys(text, ts){
+      const p = document.createElement('p'); p.className='chat-msg sys';
+      const time = document.createElement('span'); time.className='time'; time.textContent = fmtTime(ts||Date.now());
+      const body = document.createElement('span'); body.className='body'; body.textContent = ' ' + text;
+      p.appendChild(time); p.appendChild(body);
+      log.appendChild(p); log.scrollTop = log.scrollHeight;
+    }
+    function renderRoster(users){
+      const box = document.getElementById('roster');
+      box.innerHTML = '';
+      if(!Array.isArray(users) || users.length===0){ return; }
+      users.forEach(u=>{
+        const el = document.createElement('span'); el.className='pill'; el.textContent = u; box.appendChild(el);
+      });
+    }
 
     // Queue state (거꾸로 정렬: 최신이 위)
     const playlist = [];
@@ -584,6 +713,18 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
           }
           case 'chat': {
             addMsg(m.name||'익명', m.text||'', m.ts||Date.now());
+            break;
+          }
+          case 'chat-roster': {
+            renderRoster(Array.isArray(m.users)?m.users:[]);
+            break;
+          }
+          case 'chat-joined': {
+            addSys((m.name||'anon') + ' joined', m.ts||Date.now());
+            break;
+          }
+          case 'chat-left': {
+            addSys((m.name||'anon') + ' left', m.ts||Date.now());
             break;
           }
         }
