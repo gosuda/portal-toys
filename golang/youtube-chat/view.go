@@ -87,8 +87,15 @@ func (h *drawHub) run() {
 				select {
 				case c.send <- msg:
 				default:
-					delete(h.clients, c)
-					close(c.send)
+					// Channel full: drop one oldest message to make room, then retry once.
+					select {
+					case <-c.send:
+					default:
+					}
+					select {
+					case c.send <- msg:
+					default:
+					}
 				}
 			}
 		}
@@ -164,9 +171,9 @@ func (c *wsClient) readPump() {
 		_ = c.conn.Close()
 	}()
 	c.conn.SetReadLimit(1 << 20)
-	_ = c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	_ = c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
-		return c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return c.conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 	})
 	for {
 		_, message, err := c.conn.ReadMessage()
@@ -180,7 +187,10 @@ func (c *wsClient) readPump() {
 			Text string `json:"text"`
 			TS   int64  `json:"ts"`
 		}
-		if err := json.Unmarshal(message, &peek); err == nil && peek.T == "chat" {
+		if err := json.Unmarshal(message, &peek); err == nil && peek.T == "ka" {
+			// client app-level keepalive; do not broadcast
+			continue
+		} else if err == nil && peek.T == "chat" {
 			// assign UID for this connection if missing
 			uid, ok := c.hub.connUID[c]
 			if !ok || uid == "" {
@@ -238,7 +248,7 @@ func (c *wsClient) readPump() {
 }
 
 func (c *wsClient) writePump() {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(25 * time.Second)
 	defer func() {
 		ticker.Stop()
 		_ = c.conn.Close()
@@ -316,7 +326,7 @@ func NewHandler(name string, hub *drawHub) http.Handler {
 		if err != nil {
 			return
 		}
-		client := &wsClient{hub: hub, conn: conn, send: make(chan []byte, 64)}
+		client := &wsClient{hub: hub, conn: conn, send: make(chan []byte, 256)}
 		hub.register <- client
 		go client.writePump()
 
@@ -516,10 +526,109 @@ var indexPage = template.Must(template.New("paint").Parse(`<!doctype html>
       const basePath = location.pathname.endsWith('/') ? location.pathname : (location.pathname + '/');
       return p + '://' + location.host + basePath + 'ws';
     }
-    const sock = new WebSocket(wsURL());
+    // Robust WebSocket with auto-reconnect and send queue
+    let sock = null;
+    let reconnectDelay = 500; // ms (exponential backoff up to 10s)
+    const maxReconnectDelay = 10000;
+    const sendQueue = [];
+    let kaTimer = null;
+
+    function flushQueue(){
+      while (sock && sock.readyState === 1 && sendQueue.length) {
+        try { sock.send(sendQueue.shift()); } catch { break; }
+      }
+    }
+
+    function scheduleKA(){
+      if (kaTimer) clearInterval(kaTimer);
+      kaTimer = setInterval(()=>{
+        try{ if(sock && sock.readyState===1) sock.send(JSON.stringify({t:'ka', ts:Date.now()})); }catch{}
+      }, 25000);
+    }
+
+    function connect(){
+      try { if (sock) { try{ sock.close(); }catch(_){} } } catch(_){}
+      sock = new WebSocket(wsURL());
+      sock.onopen = () => {
+        reconnectDelay = 500;
+        flushQueue();
+        scheduleKA();
+      };
+      sock.onclose = () => {
+        if (kaTimer) { clearInterval(kaTimer); kaTimer = null; }
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, maxReconnectDelay);
+      };
+      sock.onerror = () => { try{ sock.close(); }catch(_){} };
+      sock.onmessage = (ev)=>{
+        try{
+          const m = JSON.parse(ev.data);
+          switch(m.t){
+            case 'yt': {
+              showYouTube(m.id || parseYouTubeId(m.url||''), m.url||'');
+              break;
+            }
+            case 'ytq-add': {
+              const id = m.id || parseYouTubeId(m.url||'');
+              if(!id) break;
+              playlist.unshift({ id, url: m.url||'', by: m.by||'anon', ts: m.ts||Date.now() });
+              if (currentIdx !== -1) currentIdx++;
+              renderQueue();
+              scheduleStartFromTop();
+              break;
+            }
+            case 'ytq-clear': {
+              playlist.length = 0; currentIdx = -1; renderQueue(); ytPlayer.innerHTML=''; ytStatus.textContent='';
+              break;
+            }
+            case 'ytq-del': {
+              let di = (typeof m.idx === 'number') ? m.idx : -1;
+              if (!(di >=0 && di < playlist.length) && m.id){ di = playlist.findIndex(it => it.id === m.id); }
+              if (di >= 0 && di < playlist.length) {
+                const wasCurrent = (di === currentIdx);
+                playlist.splice(di, 1);
+                if (di < currentIdx) {
+                  currentIdx--;
+                } else if (wasCurrent) {
+                  if (currentIdx >= playlist.length) currentIdx = playlist.length - 1;
+                  if (currentIdx >= 0) {
+                    const it = playlist[currentIdx]; showYouTube(it.id, it.url);
+                  } else {
+                    ytPlayer.innerHTML=''; ytStatus.textContent='';
+                  }
+                }
+                renderQueue();
+              }
+              break;
+            }
+            case 'chat': {
+              addMsg(m.name||'익명', m.text||'', m.ts||Date.now());
+              break;
+            }
+            case 'chat-roster': {
+              renderRoster(Array.isArray(m.users)?m.users:[]);
+              break;
+            }
+            case 'chat-joined': {
+              addSys((m.name||'anon') + ' joined', m.ts||Date.now());
+              break;
+            }
+            case 'chat-left': {
+              addSys((m.name||'anon') + ' left', m.ts||Date.now());
+              break;
+            }
+          }
+        }catch{}
+      };
+    }
+    connect();
 
     // Messaging
-    function send(msg){ if(sock.readyState===1) sock.send(JSON.stringify(msg)); }
+    function send(msg){
+      const s = JSON.stringify(msg);
+      if(sock && sock.readyState===1){ try{ sock.send(s); }catch{ sendQueue.push(s); } }
+      else { if (sendQueue.length < 64) sendQueue.push(s); }
+    }
     function sendChat(text){ const name = (nickEl.value||'anon').trim() || 'anon'; send({t:'chat', name, text, ts: Date.now()}); }
     function sendQAdd(url, id){ const by=(nickEl.value||'anon').trim()||'anon'; send({t:'ytq-add', url, id, by, ts: Date.now()}); }
     function sendQAddBy(url, id, by){ by=(by||'anon').trim()||'anon'; send({t:'ytq-add', url, id, by, ts: Date.now()}); }
