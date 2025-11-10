@@ -3,7 +3,7 @@
 BIN_DIR   := $(CURDIR)/bin
 BIN       := $(BIN_DIR)/portal-tunnel$(if $(filter Windows_NT,$(OS)),.exe,)
 PKG       := gosuda.org/portal/cmd/portal-tunnel
-VERSION   := v1.4.0
+VERSION   := v1.4.1
 GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)@$(VERSION)
 # Unified relay configuration: prefer RELAY, then RELAY_URL, else default
 RELAY ?= $(RELAY_URL)
