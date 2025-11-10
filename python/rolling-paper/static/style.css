@@ -1,0 +1,71 @@
+/* copied from Go example for consistency */
+:root {
+  color-scheme: light;
+  --border: #c9c9c9;
+  --ink: #1c1c1c;
+  --muted: #6b6b6b;
+  --accent: #0e0e0e;
+  --accent-light: #f2f2f2;
+  --success-bg: #e8f6ed;
+  --success-border: #c2e0cf;
+  --error-bg: #fde8e8;
+  --error-border: #f3c1c1;
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", Arial, "돋움", Dotum, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  margin: 0; background: #f7f7f7; color: var(--ink); line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+
+a { color: inherit; text-decoration: none; }
+
+header { background: var(--accent); color: #f6f6f6; padding: 14px 24px; border-bottom: 3px solid #2b2b2b; }
+.logo { font-size: 20px; letter-spacing: 0.05em; }
+
+.container { max-width: 760px; margin: 32px auto; padding: 28px; background: #fff; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+
+h1 { margin: 0 0 24px; font-size: 26px; letter-spacing: -0.01em; border-bottom: 2px solid var(--border); padding-bottom: 8px; }
+
+form { margin-bottom: 32px; }
+
+input[type="text"], textarea { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 12px; font: inherit; font-size: 15px; margin-bottom: 12px; }
+textarea { min-height: 140px; resize: vertical; }
+
+.char-counter { text-align: right; font-size: 12px; color: var(--muted); margin-top: -6px; margin-bottom: 12px; }
+
+button { width: 100%; border: none; border-radius: 4px; padding: 12px; font-size: 15px; background: var(--accent); color: #fff; cursor: pointer; transition: background .2s ease; }
+button:hover { background: #050505; }
+
+.status-message { display: none; margin-top: 10px; padding: 10px 12px; border-radius: 4px; font-size: 14px; }
+.status-message.success { display: block; background: var(--success-bg); border: 1px solid var(--success-border); color: #205d30; }
+.status-message.error { display: block; background: var(--error-bg); border: 1px solid var(--error-border); color: #9e1c1c; }
+
+h2 { font-size: 20px; margin: 0 0 18px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+
+#message-board { min-height: 40px; }
+
+.message-item { border: 1px solid var(--border); border-radius: 4px; padding: 16px; margin-bottom: 14px; background: var(--accent-light); }
+.message-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.message-nickname { font-size: 15px; font-weight: 600; }
+.message-timestamp { font-size: 12px; color: var(--muted); }
+.message-content { margin: 0; font-size: 15px; }
+
+.embed-wrap { margin-top: 8px; position: relative; }
+.embed { width: 100%; max-height: 70vh; display: block; border: 1px solid var(--border); border-radius: 6px; background: #000; }
+iframe.embed { background: #fff; }
+.ratio { width: 100%; }
+.ratio-16x9 { aspect-ratio: 16/9; }
+.ratio > iframe.embed { width: 100%; height: 100%; border: 0; }
+.embed-actions { position: absolute; top: 6px; right: 6px; display: flex; gap: 6px; }
+.embed-actions button { border: 1px solid var(--border); background: #fff; color: var(--ink); border-radius: 16px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+
+/* Utility */
+.row-end { margin-top: 8px; display: flex; justify-content: flex-end; }
+.btn-vote { width: auto; padding: 6px 10px; font-size: 13px; border: 1px solid var(--border); background: #fff; color: var(--ink); border-radius: 6px; cursor: pointer; }
+.prewrap { white-space: pre-wrap; }
+

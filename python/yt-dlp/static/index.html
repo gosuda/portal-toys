@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>yt-dlp Host</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <a class="logo" href="/">yt‑dlp Host</a>
+  </header>
+  <div class="container">
+    <h1>Download by URL</h1>
+    <form id="dl-form">
+      <input type="url" id="url" name="url" placeholder="https://…" required />
+      <button type="submit">Start Download</button>
+      <div id="msg" class="status-message"></div>
+    </form>
+
+    <h2>Jobs</h2>
+    <div id="jobs"></div>
+  </div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const jobsEl = $('#jobs');
+    const msgEl = $('#msg');
+
+    async function post(url, data) {
+      const body = new URLSearchParams(data).toString();
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'request failed');
+      return json;
+    }
+
+    function renderJob(j) {
+      const wrap = document.createElement('div');
+      wrap.className = 'message-item';
+      const title = document.createElement('div');
+      title.className = 'message-header';
+      title.innerHTML = `<strong>${j.id}</strong> <span style="font-size:12px;color:#666">${j.status} ${j.progress?.toFixed?.(1) || 0}%</span>`;
+      wrap.appendChild(title);
+      const body = document.createElement('div');
+      body.className = 'message-content';
+      const files = (j.files || []).map(f => `<div><a href="/files/${f}">${f.split('/').pop()}</a></div>`).join('');
+      const log = (j.log || []).slice(-6).map(l => `<div class="prewrap" style="font-size:12px;color:#666">${l}</div>`).join('');
+      const err = j.error ? `<div class="status-message error" style="margin-top:8px">${j.error}</div>` : '';
+      body.innerHTML = `<div>URL: <code>${j.url}</code></div>${files ? `<div style="margin-top:8px">Files:${files}</div>` : ''}${log ? `<div style="margin-top:8px">Log:${log}</div>` : ''}${err}`;
+      wrap.appendChild(body);
+      return wrap;
+    }
+
+    async function refresh() {
+      try {
+        const res = await fetch('/api/jobs');
+        const list = await res.json();
+        jobsEl.innerHTML = '';
+        for (const j of list.reverse()) jobsEl.appendChild(renderJob(j));
+      } catch (e) { /* ignore */ }
+    }
+
+    $('#dl-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      msgEl.className = 'status-message';
+      try {
+        const url = $('#url').value.trim();
+        const out = await post('/api/download', { url });
+        msgEl.textContent = `Job started: ${out.id}`;
+        msgEl.className = 'status-message success';
+        $('#url').value = '';
+        refresh();
+      } catch (err) {
+        msgEl.textContent = err.message || 'failed';
+        msgEl.className = 'status-message error';
+      }
+    });
+
+    setInterval(refresh, 2000);
+    refresh();
+  </script>
+</body>
+</html>

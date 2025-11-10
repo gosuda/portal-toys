@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rolling Paper (Python)</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <a class="logo" href="/">Rolling Paper (Python)</a>
+    </header>
+
+    <div class="container">
+        <h1>메시지 남기기</h1>
+
+        <form id="messageForm">
+            <input type="text" id="nicknameInput" name="nickname" placeholder="닉네임 (선택)">
+            <textarea id="messageInput" name="message" placeholder="메시지 또는 URL/HTML(srcdoc로 샌드박스 렌더링)을 입력하세요." required></textarea>
+            <div id="charCounter" class="char-counter">0 / -</div>
+            <button id="submitButton" type="submit" disabled>남기기</button>
+            <div id="statusMessage" class="status-message"></div>
+        </form>
+
+        <h2>남겨진 메시지</h2>
+        <div id="message-board">
+            <p>메시지를 불러오는 중입니다…</p>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const $ = (s) => document.querySelector(s);
+            const el = (tag, attrs = {}, ...children) => {
+                const n = document.createElement(tag);
+                for (const [k, v] of Object.entries(attrs)) {
+                    if (k === 'class') n.className = v;
+                    else if (k === 'text') n.textContent = v;
+                    else n.setAttribute(k, v);
+                }
+                for (const c of children) n.appendChild(c);
+                return n;
+            };
+            const api = (p) => p; // same origin
+            const proxify = (u) => api(`/api/proxy?u=` + encodeURIComponent(u));
+
+            const els = {
+                board: $('#message-board'),
+                form: $('#messageForm'),
+                msg: $('#messageInput'),
+                nick: $('#nicknameInput'),
+                status: $('#statusMessage'),
+                counter: $('#charCounter'),
+                submitBtn: $('#submitButton'),
+            };
+
+            let MAX_LEN = null;
+
+            const updateCounter = () => {
+                const len = els.msg.value.length;
+                if (!els.counter) return;
+                if (typeof MAX_LEN === 'number' && MAX_LEN > 0) {
+                    els.counter.textContent = `${len} / ${MAX_LEN}`;
+                } else {
+                    els.counter.textContent = `${len}`;
+                }
+            };
+
+            const setStatus = (message, type) => {
+                els.status.textContent = message;
+                els.status.className = `status-message ${type}`;
+            };
+
+            const jsonFetch = async (path, opts) => {
+                const res = await fetch(api(path), opts);
+                let body = {};
+                try { body = await res.json(); } catch {}
+                return { ok: res.ok, body };
+            };
+
+            const makeVoteButton = (msg, threshold, onDeleted) => {
+                const btn = el('button', { type: 'button', class: 'btn-vote' });
+                const setText = (count, thr) => {
+                    const t = thr || threshold || 3;
+                    btn.textContent = `삭제 투표 (${count || 0}/${t})`;
+                };
+                setText(msg.voteCount || 0, threshold);
+                btn.addEventListener('click', async () => {
+                    try {
+                        const body = `id=${encodeURIComponent(msg.id)}`;
+                        const { ok, body: out } = await jsonFetch('/api/vote-delete', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body,
+                        });
+                        if (!ok) return alert(out.message || '투표 실패');
+                        if (out.deleted) onDeleted();
+                        else setText(out.voteCount || 0, out.threshold || threshold);
+                    } catch { alert('네트워크 오류'); }
+                });
+                return btn;
+            };
+
+            const renderContent = (raw) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'embed-wrap';
+                const s = String(raw || '').trim();
+                if (!s) { wrap.textContent = ''; return wrap; }
+                const looksHTML = /<[^>]+>/.test(s);
+                const looksURL = /^(https?:)?\/\//i.test(s) || /^data:(image|audio|video)\//i.test(s);
+                if (looksHTML) {
+                    const iframe = document.createElement('iframe');
+                    iframe.className = 'embed';
+                    iframe.loading = 'lazy';
+                    iframe.referrerPolicy = 'no-referrer';
+                    iframe.sandbox = 'allow-scripts allow-same-origin';
+                    iframe.srcdoc = s;
+                    wrap.appendChild(iframe);
+                    return wrap;
+                }
+                if (looksURL) {
+                    const u = s.split('?')[0].split('#')[0].toLowerCase();
+                    if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(u) || /^data:image\//.test(s)) { const img = document.createElement('img'); img.className='embed'; img.alt='image'; img.setAttribute('referrerpolicy','no-referrer'); img.src=proxify(s); wrap.appendChild(img); return wrap; }
+                    if (/\.(mp4|webm|ogv|mov|m4v)$/.test(u) || /^data:video\//.test(s)) { const v = document.createElement('video'); v.className='embed'; v.controls=true; v.playsInline=true; v.setAttribute('controlsList','nodownload'); const src=document.createElement('source'); src.src=proxify(s); v.appendChild(src); wrap.appendChild(v); return wrap; }
+                    if (/\.(mp3|wav|ogg|m4a|flac)$/.test(u) || /^data:audio\//.test(s)) { const a = document.createElement('audio'); a.className='embed'; a.controls=true; const src=document.createElement('source'); src.src=proxify(s); a.appendChild(src); wrap.appendChild(a); return wrap; }
+                    const f = document.createElement('iframe'); f.className='embed'; f.loading='lazy'; f.referrerPolicy='no-referrer'; f.sandbox='allow-scripts allow-same-origin'; f.src=s; wrap.appendChild(f); return wrap;
+                }
+                const p = document.createElement('p'); p.className='prewrap'; p.textContent = s; wrap.appendChild(p); return wrap;
+            };
+
+            const createMessageItem = (msg, threshold) => {
+                const item = el('div', { class: 'message-item' });
+                const header = el('div', { class: 'message-header' },
+                    el('span', { class: 'message-nickname', text: msg.nickname || '익명' }),
+                    el('span', { class: 'message-timestamp', text: new Date(msg.timestamp).toLocaleString() }),
+                );
+                const content = el('div', { class: 'message-content' });
+                content.appendChild(renderContent(msg.content || ''));
+                const delWrap = el('div', { class: 'row-end' });
+                const delBtn = makeVoteButton(msg, threshold, () => item.remove());
+                delWrap.appendChild(delBtn);
+                item.appendChild(header);
+                item.appendChild(content);
+                item.appendChild(delWrap);
+                return item;
+            };
+
+            const renderMessages = (payload) => {
+                const messages = Array.isArray(payload) ? payload : (Array.isArray(payload.messages) ? payload.messages : []);
+                const threshold = (typeof payload.threshold === 'number' && payload.threshold > 0) ? payload.threshold : 3;
+                if (payload && typeof payload.maxLen === 'number' && payload.maxLen > 0) {
+                    MAX_LEN = payload.maxLen;
+                    if (els.msg) els.msg.setAttribute('maxlength', String(MAX_LEN));
+                    if (els.submitBtn) els.submitBtn.disabled = false;
+                    updateCounter();
+                }
+                if (!messages.length) {
+                    els.board.innerHTML = '<p>아직 메시지가 없습니다.</p>';
+                    return;
+                }
+                const frag = document.createDocumentFragment();
+                messages.forEach((m) => frag.appendChild(createMessageItem(m, threshold)));
+                els.board.innerHTML = '';
+                els.board.appendChild(frag);
+            };
+
+            const fetchMessages = async () => {
+                try {
+                    const { ok, body } = await jsonFetch('/api/messages');
+                    if (!ok) throw new Error('http');
+                    renderMessages(body);
+                } catch (err) {
+                    console.error('fetch messages failed:', err);
+                    els.board.innerHTML = '<p>메시지를 불러오지 못했습니다.</p>';
+                }
+            };
+
+            const submitMessage = async (e) => {
+                e.preventDefault();
+                const message = els.msg.value.trim();
+                const nickname = els.nick.value.trim();
+                if (!message) return setStatus('메시지를 입력하세요.', 'error');
+                if (!(typeof MAX_LEN === 'number' && MAX_LEN > 0)) return setStatus('설정을 불러오는 중입니다. 잠시 후 다시 시도하세요.', 'error');
+                if (message.length > MAX_LEN) return setStatus(`메시지는 ${MAX_LEN}자까지 가능합니다.`, 'error');
+                const body = `message=${encodeURIComponent(message)}&nickname=${encodeURIComponent(nickname)}`;
+                try {
+                    const { ok, body: out } = await jsonFetch('/api/submit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body,
+                    });
+                    if (ok) {
+                        setStatus(out.message || '메시지가 저장되었습니다.', 'success');
+                        els.msg.value = '';
+                        fetchMessages();
+                    } else {
+                        setStatus(out.message || '전송에 실패했습니다.', 'error');
+                    }
+                } catch (err) {
+                    console.error('submit failed:', err);
+                    setStatus('네트워크 오류가 발생했습니다.', 'error');
+                }
+            };
+
+            window.addEventListener('load', () => {
+                fetchMessages();
+                els.form.addEventListener('submit', submitMessage);
+                if (els.msg) {
+                    els.msg.addEventListener('input', updateCounter);
+                    updateCounter();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
+

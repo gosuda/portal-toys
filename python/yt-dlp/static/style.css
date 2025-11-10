@@ -1,0 +1,26 @@
+:root {
+  --border: #c9c9c9;
+  --ink: #1c1c1c;
+  --muted: #6b6b6b;
+  --accent: #0e0e0e;
+  --accent-light: #f2f2f2;
+}
+
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; background:#f7f7f7; color:var(--ink); }
+a { color: inherit; text-decoration: none; }
+header { background: var(--accent); color: #f6f6f6; padding: 14px 24px; border-bottom: 3px solid #2b2b2b; }
+.logo { font-size: 20px; letter-spacing: 0.05em; }
+.container { max-width: 760px; margin: 32px auto; padding: 28px; background: #fff; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+h1 { margin: 0 0 16px; font-size: 24px; }
+form { margin-bottom: 24px; }
+input[type="url"] { width:100%; padding:12px; border:1px solid var(--border); border-radius:4px; font:inherit; margin-bottom:12px; }
+button { width:100%; padding:12px; border:none; border-radius:4px; background:var(--accent); color:#fff; cursor:pointer; }
+.status-message { display:none; margin-top:10px; padding:10px 12px; border-radius:4px; font-size:14px; }
+.status-message.success { display:block; background:#e8f6ed; border:1px solid #c2e0cf; color:#205d30; }
+.status-message.error { display:block; background:#fde8e8; border:1px solid #f3c1c1; color:#9e1c1c; }
+.message-item { border:1px solid var(--border); border-radius:4px; padding:12px; margin-bottom:12px; background: var(--accent-light); }
+.message-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+.message-content { font-size:14px; }
+.prewrap { white-space: pre-wrap; }
+

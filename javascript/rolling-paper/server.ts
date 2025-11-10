@@ -27,7 +27,7 @@ function argValue(key: string): string | undefined {
 const CLI_PORT = Number(argValue("port") || process.env.PORT || 8080);
 const CLI_HOST = argValue("host") || "127.0.0.1";
 const CLI_NAME = argValue("name") || process.env.TUNNEL_NAME || "js-rolling-paper";
-const CLI_SERVER_URL = argValue("server-url") || process.env.RELAY || process.env.RELAY_URL || "wss://portal.gosuda.org/relay";
+const CLI_SERVER_URL = argValue("server-url") || process.env.RELAY || process.env.RELAY_URL;
 
 type Note = {
   id: string;
