@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Gateway</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <a class="logo" href="/">LLM Gateway</a>
+  </header>
+  <div class="container">
+    <div class="row">
+      <label>Provider</label>
+      <select id="provider"></select>
+    </div>
+    <div class="row">
+      <label>Model</label>
+      <input id="model" placeholder="e.g. llama3" />
+    </div>
+    <div class="chat" id="chat"></div>
+    <div class="row">
+      <textarea id="input" placeholder="Type your message…"></textarea>
+    </div>
+    <div class="row">
+      <label><input type="checkbox" id="stream" checked /> Stream</label>
+      <button id="send">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const chatEl = $('#chat');
+    const providerEl = $('#provider');
+    const modelEl = $('#model');
+    const inputEl = $('#input');
+    const streamEl = $('#stream');
+
+    const messages = [];
+    let providers = [];
+
+    function addLine(role, text) {
+      const item = document.createElement('div');
+      item.className = 'msg ' + role;
+      item.textContent = text;
+      chatEl.appendChild(item);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return item;
+    }
+
+    async function loadProviders() {
+      const res = await fetch('/api/providers');
+      const data = await res.json();
+      providers = data.providers || [];
+      providerEl.innerHTML = '';
+      for (const p of providers) {
+        const opt = document.createElement('option');
+        opt.value = p.name; opt.textContent = `${p.name} (${p.engine})`;
+        providerEl.appendChild(opt);
+      }
+      if (providers[0]) {
+        providerEl.value = providers[0].name;
+        const models = providers[0].models || [];
+        if (models[0]) modelEl.value = models[0];
+      }
+    }
+
+    async function send() {
+      const content = inputEl.value.trim();
+      if (!content) return;
+      inputEl.value = '';
+      messages.push({ role: 'user', content });
+      addLine('user', content);
+
+      const prov = providerEl.value;
+      const model = modelEl.value.trim();
+      const stream = !!streamEl.checked;
+
+      const assistant = addLine('assistant', '');
+      let buffer = '';
+      const body = JSON.stringify({ provider: prov, model, messages, stream });
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      if (!stream) {
+        const json = await res.json().catch(() => ({}));
+        const text = json.content || json.error || '[no content]';
+        assistant.textContent = text;
+        messages.push({ role: 'assistant', content: text });
+        return;
+      }
+      if (!res.ok) {
+        // If streaming was requested but server returned an error, surface it
+        let errText = '[request failed]';
+        try { const j = await res.json(); errText = j.error || JSON.stringify(j); } catch { errText = res.status + ' ' + res.statusText; }
+        assistant.textContent = errText;
+        messages.push({ role: 'assistant', content: errText });
+        return;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += dec.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() || '';
+        for (const chunk of parts) {
+          if (!chunk.startsWith('data:')) continue;
+          const payload = chunk.slice(5).trim();
+          if (!payload) continue;
+          try {
+            const obj = JSON.parse(payload);
+            if (obj.done) { /* ignore */ }
+            else if (obj.delta) { assistant.textContent += obj.delta; }
+          } catch {}
+        }
+      }
+      messages.push({ role: 'assistant', content: assistant.textContent });
+    }
+
+    $('#send').addEventListener('click', send);
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) send();
+    });
+    loadProviders();
+  </script>
+</body>
+</html>
