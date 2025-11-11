@@ -6,8 +6,7 @@ PKG       := gosuda.org/portal/cmd/portal-tunnel
 VERSION   := v1.4.1
 GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)@$(VERSION)
 # Unified relay configuration: prefer RELAY, then RELAY_URL, else default
-RELAY ?= $(RELAY_URL)
-RELAY ?= wss://portal.gosuda.org/relay
+RELAY ?= wss://portal.gosuda.org/relay,wss://portal.thumbgo.kr/relay
 PORT ?= 8080
 
 tunnel: tunnel-install tunnel-run
