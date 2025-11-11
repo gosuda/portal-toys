@@ -23,15 +23,3 @@ tunnel-help:
 
 clean:
 	rm -f "$(BIN)"
-
-# --- Python single-binary build (yt-dlp host) ---
-PY_OS := $(OS)
-PY_SEP := $(if $(filter Windows_NT,$(PY_OS)),;,:)
-PY_ADD_DATA := python/yt-dlp/static$(PY_SEP)static
-
-py-yt-dlp-build:
-	python -m pip install --upgrade pip
-	python -m pip install -r python/yt-dlp/requirements.txt
-	python -m pip install pyinstaller
-	pyinstaller --noconfirm --onefile --name portal-yt-dlp --add-data "$(PY_ADD_DATA)" python/yt-dlp/main.py
-	@echo "Built dist/portal-yt-dlp$(if $(filter Windows_NT,$(OS)),.exe,)"
