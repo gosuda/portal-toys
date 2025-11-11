@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>이미지 갤러리</title>
+    <style>
+      :root {
+        --bg: #0b0c0f;
+        --panel: #121419;
+        --border: #20242d;
+        --text: #e7eaf0;
+        --muted: #a6adbb;
+        --accent: #4fa3ff;
+        --accent-2: #7bc6ff;
+        --shadow: 0 6px 24px rgba(0,0,0,0.25);
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f7f8fb;
+          --panel: #ffffff;
+          --border: #e6e8ef;
+          --text: #121419;
+          --muted: #556070;
+          --accent: #2563eb;
+          --accent-2: #3b82f6;
+          --shadow: 0 6px 18px rgba(0,0,0,0.08);
+        }
+      }
+
+      html, body { height: 100%; }
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, sans-serif;
+        background: radial-gradient(1200px 600px at 10% -10%, rgba(79,163,255,0.15), transparent 60%),
+                    radial-gradient(1000px 500px at 110% 0%, rgba(59,130,246,0.12), transparent 50%),
+                    var(--bg);
+        color: var(--text);
+        margin: 0;
+      }
+
+      .container { max-width: 1200px; margin: 0 auto; padding: 28px 20px 40px; }
+      .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 18px; }
+      .title { font-size: 22px; font-weight: 700; letter-spacing: .2px; }
+      .flash { color: var(--accent-2); font-size: 13px; margin-left: auto; }
+
+      .btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: linear-gradient(180deg, var(--panel), rgba(255,255,255,0.02)); color: var(--text); text-decoration: none; cursor: pointer; transition: transform .08s ease, background .2s ease, border-color .2s ease; }
+      .btn:hover { border-color: var(--accent); transform: translateY(-1px); }
+      .btn.primary { background: linear-gradient(180deg, var(--accent), var(--accent-2)); color: white; border-color: transparent; box-shadow: var(--shadow); }
+      .btn.primary:hover { filter: saturate(1.1); }
+
+      /* Mobile-first: at most 2 columns on mobile */
+      .gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+      @media (max-width: 420px) { .gallery { grid-template-columns: 1fr; } }
+      /* Scale up gradually on wider screens */
+      @media (min-width: 640px) { .gallery { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; } }
+      @media (min-width: 1024px) { .gallery { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); } }
+
+      .item { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); transition: transform .12s ease, box-shadow .2s ease, border-color .2s ease; }
+      .item:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--border), var(--accent) 35%); box-shadow: 0 10px 36px rgba(0,0,0,0.28); }
+      .thumb-wrap { position: relative; display: block; aspect-ratio: 4 / 3; background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.02)); }
+      .view-link { display: block; width: 100%; height: 100%; }
+      .thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .badge { position: absolute; right: 10px; top: 10px; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgba(0,0,0,0.45); color: #fff; backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.15); }
+      .overlay { position: absolute; inset: 0; display: flex; align-items: start; justify-content: end; padding: 8px; opacity: 0; transition: opacity .15s ease; pointer-events: none; }
+      .item:hover .overlay { opacity: 1; }
+      .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(0,0,0,0.5); color: white; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(6px); text-decoration: none; pointer-events: auto; }
+      .icon-btn:hover { background: rgba(0,0,0,0.6); transform: translateY(-1px); }
+
+      .meta { padding: 10px 12px 12px; }
+      .sub { margin-top: 6px; font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+      .empty { color: var(--muted); margin-top: 24px; }
+
+      /* Pretty upload dropzone */
+      .upload-card { margin: 12px 0 22px; padding: 18px; border: 1px dashed color-mix(in oklab, var(--border), var(--accent) 30%); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); border-radius: 14px; box-shadow: var(--shadow); }
+      .dropzone { display: grid; grid-template-columns: 40px 1fr auto; gap: 14px; align-items: center; }
+      .dz-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: linear-gradient(180deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: var(--shadow); }
+      .dz-text { font-size: 14px; color: var(--muted); }
+      .dz-strong { color: var(--text); font-weight: 600; }
+      .dz-input { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="toolbar">
+        <div class="title">이미지 갤러리</div>
+        <div class="flash">{{ get_flashed_messages()|join(', ') }}</div>
+      </div>
+
+      <section class="upload-card">
+        <form class="dropzone" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data">
+          <div class="dz-icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 15l5-5 5 5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M12 10v10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+              <path d="M20 16.5A4.5 4.5 0 0015.5 12h-1.04A6 6 0 106 16" stroke="white" stroke-opacity=".9" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="dz-text">
+            <div class="dz-strong">이미지를 드래그앤드롭 하거나 파일을 선택하세요</div>
+            <div>허용 확장자: png, jpg, jpeg, gif, webp, bmp, tiff</div>
+          </div>
+          <label for="file-input" class="btn primary" role="button">파일 선택</label>
+          <input id="file-input" class="dz-input" type="file" name="file" accept="image/*" />
+        </form>
+      </section>
+
+      {% if images %}
+        <section class="gallery">
+          {% for img in images %}
+            <figure class="item" title="{{ img.name }}">
+              <div class="thumb-wrap">
+                <a class="view-link" href="{{ url_for('serve_image', filename=img.name) }}" target="_blank" rel="noopener">
+                  <img class="thumb" loading="lazy" src="{{ url_for('serve_image', filename=img.name) }}" alt="{{ img.name }}" />
+                </a>
+                <span class="badge">{{ (img.size / 1024)|round(0) }} KB</span>
+                <div class="overlay">
+                  <a class="icon-btn" href="{{ url_for('download_image', filename=img.name) }}" title="다운로드" aria-label="다운로드">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M12 3v12" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M7 12l5 5 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M4 20h16" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                    </svg>
+                  </a>
+                </div>
+              </div>
+              <figcaption class="meta">
+                <div class="sub">
+                  <span>{{ img.mtime.strftime('%Y-%m-%d %H:%M') }}</span>
+                </div>
+              </figcaption>
+            </figure>
+          {% endfor %}
+        </section>
+      {% else %}
+        <p class="empty">이미지가 없습니다. 상단에서 업로드해 보세요.</p>
+      {% endif %}
+    </div>
+
+    <script>
+      (function () {
+        var input = document.getElementById('file-input');
+        if (!input) return;
+        input.addEventListener('change', function () {
+          if (input.files && input.files.length > 0) {
+            input.form && input.form.submit();
+          }
+        });
+      })();
+    </script>
+
+  </body>
+  </html>
