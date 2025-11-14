@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "portal-toys (Go 1.25.3)",
+  "image": "mcr.microsoft.com/devcontainers/base:bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "vscode",
+      "upgradePackages": false
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.25.3",
+      "installGoTools": true
+    }
+  },
+  "runArgs": ["--init"],
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "workspaceFolder": "/workspaces/portal-toys",
+  "mounts": [
+    "source=portal-toys-go-pkgmod,target=/go/pkg/mod,type=volume",
+    "source=portal-toys-go-build,target=/home/vscode/.cache/go-build,type=volume"
+  ],
+  "containerEnv": {
+    "GO111MODULE": "on",
+    "GOMODCACHE": "/go/pkg/mod",
+    "GOPATH": "/go"
+  },
+  "forwardPorts": [8080, 4173],
+  "portsAttributes": {
+    "8080": {"label": "HTTP demo", "onAutoForward": "notify"},
+    "4173": {"label": "Vite preview", "onAutoForward": "ignore"}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "ms-azuretools.vscode-docker",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "go.toolsManagement.autoUpdate": true,
+        "go.useLanguageServer": true,
+        "gopls": {
+          "ui.semanticTokens": true
+        }
+      }
+    }
+  }
+}
