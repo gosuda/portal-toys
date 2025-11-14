@@ -25,6 +25,7 @@
     "GOMODCACHE": "/go/pkg/mod",
     "GOPATH": "/go"
   },
+  "postCreateCommand": "bash -lc 'set -euo pipefail && sudo mkdir -p /home/vscode/.cache/go-build /go/pkg/mod && sudo chown -R vscode:vscode /home/vscode/.cache/go-build /go/pkg/mod && cd golang && go mod download'",
   "forwardPorts": [8080, 4173],
   "portsAttributes": {
     "8080": {"label": "HTTP demo", "onAutoForward": "notify"},

@@ -181,32 +181,32 @@ func (c *wsClient) readPump() {
 			break
 		}
 		// inspect message type for chat handling
-        var peek struct {
-            T    string `json:"t"`
-            Name string `json:"name"`
-            Text string `json:"text"`
-            TS   int64  `json:"ts"`
-            UID  string `json:"uid"`
-        }
+		var peek struct {
+			T    string `json:"t"`
+			Name string `json:"name"`
+			Text string `json:"text"`
+			TS   int64  `json:"ts"`
+			UID  string `json:"uid"`
+		}
 		if err := json.Unmarshal(message, &peek); err == nil && peek.T == "ka" {
 			// client app-level keepalive; do not broadcast
 			continue
 		} else if err == nil && peek.T == "chat" {
 			// assign UID for this connection if missing
-            uid, ok := c.hub.connUID[c]
-            if !ok || uid == "" {
-                // prefer client-provided stable uid if present
-                if peek.UID != "" {
-                    uid = peek.UID
-                } else {
-                    uid = generateUID()
-                }
-                c.hub.connUID[c] = uid
-                if _, ok := c.hub.userConns[uid]; !ok {
-                    c.hub.userConns[uid] = make(map[*wsClient]bool)
-                }
-                // if first ever connection for this uid, announce join later
-            }
+			uid, ok := c.hub.connUID[c]
+			if !ok || uid == "" {
+				// prefer client-provided stable uid if present
+				if peek.UID != "" {
+					uid = peek.UID
+				} else {
+					uid = generateUID()
+				}
+				c.hub.connUID[c] = uid
+				if _, ok := c.hub.userConns[uid]; !ok {
+					c.hub.userConns[uid] = make(map[*wsClient]bool)
+				}
+				// if first ever connection for this uid, announce join later
+			}
 			// track connection membership
 			firstConn := len(c.hub.userConns[uid]) == 0
 			c.hub.userConns[uid][c] = true
