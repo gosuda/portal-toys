@@ -1,9 +1,10 @@
 package main
 
-// JobSpec represents a simplified subset of the reference logic.
+// JobFactory creates an executable Job for a role.
+// JobSpec describes a role pulled from reference data.
 type JobSpec struct {
 	Name string
-	Team string // mafia or citizen
+	Team string
 	Desc string
 }
 

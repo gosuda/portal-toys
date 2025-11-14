@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
@@ -11,15 +13,17 @@ import (
 type HTTPServer struct {
 	mgr      *RoomManager
 	upgrader websocket.Upgrader
+	authKey  string
 }
 
 // NewHTTPServer constructs an HTTPServer with sane defaults.
-func NewHTTPServer(mgr *RoomManager) *HTTPServer {
+func NewHTTPServer(mgr *RoomManager, authKey string) *HTTPServer {
 	return &HTTPServer{
 		mgr: mgr,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
+		authKey: authKey,
 	}
 }
 
@@ -40,6 +44,12 @@ func (s *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing room or user", http.StatusBadRequest)
 		return
 	}
+	if s.authKey != "" {
+		if r.Header.Get("X-Mafia-Key") != s.authKey {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
 
 	conn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -49,6 +59,8 @@ func (s *HTTPServer) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	client := NewClient(user, conn, s.mgr)
 	if err := s.mgr.Attach(roomName, client); err != nil {
+		msg := fmt.Sprintf("join failed: %v", err)
+		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, msg), time.Now().Add(2*time.Second))
 		_ = conn.Close()
 		log.Warn().Err(err).Str("room", roomName).Str("user", user).Msg("attach failed")
 		return

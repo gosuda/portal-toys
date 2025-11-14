@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gosuda/portal-toys/mafia/jobs"
 )
 
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -50,12 +52,13 @@ type GameState struct {
 	Alive         map[string]bool
 	Jobs          map[string]*JobSpec
 	Assign        map[string]*AssignedJob
+	Runtime       map[string]jobs.Job
 	Prefix        map[string]map[string]string
 	Vote          map[string]int
-	Defense       string
 	MafiaPick     string
 	DoctorPick    string
 	DetectivePick string
+	Execution     *ExecutionState
 }
 
 type AssignedJob struct {
@@ -63,6 +66,13 @@ type AssignedJob struct {
 	Team    string
 	Desc    string
 	Passive string
+}
+
+type ExecutionState struct {
+	Target string
+	Agree  int
+	Oppose int
+	Voted  map[string]bool
 }
 
 func NewRoom(name string, mgr *RoomManager) *Room {
@@ -84,13 +94,14 @@ func (gs *GameState) Reset() {
 	gs.DayCount = 0
 	gs.Alive = make(map[string]bool)
 	gs.Jobs = make(map[string]*JobSpec)
+	gs.Runtime = make(map[string]jobs.Job)
 	gs.Assign = make(map[string]*AssignedJob)
 	gs.Prefix = make(map[string]map[string]string)
 	gs.Vote = make(map[string]int)
-	gs.Defense = ""
 	gs.MafiaPick = ""
 	gs.DoctorPick = ""
 	gs.DetectivePick = ""
+	gs.Execution = nil
 }
 
 func (r *Room) loop() {
@@ -158,6 +169,7 @@ func (r *Room) removePlayer(c *Client) {
 	}
 	c.room = nil
 }
+
 func (r *Room) pickNextHost() string {
 	for _, name := range r.order {
 		if _, ok := r.players[name]; ok {
@@ -186,6 +198,10 @@ func (r *Room) handleMessage(c *Client, msg ClientMessage) {
 		r.handleNightAction(c, strings.TrimSpace(msg.Target))
 	case "sync":
 		r.sendState(c)
+	case "decision":
+		r.handleDecision(c, msg.Text)
+	case "admin":
+		r.handleAdmin(c, msg)
 	default:
 		c.pushSystem("알 수 없는 명령입니다.")
 	}
@@ -225,11 +241,7 @@ func (r *Room) handleNightAction(c *Client, target string) {
 		c.pushSystem("지금은 능력을 사용할 수 없습니다.")
 		return
 	}
-	job := r.state.Assign[c.name]
-	if job == nil {
-		c.pushSystem("능력이 없습니다.")
-		return
-	}
+	job := r.state.Runtime[c.name]
 	if !r.state.Alive[c.name] {
 		c.pushSystem("사망자는 행동할 수 없습니다.")
 		return
@@ -238,19 +250,13 @@ func (r *Room) handleNightAction(c *Client, target string) {
 		c.pushSystem("대상을 찾을 수 없습니다.")
 		return
 	}
-	switch job.Name {
-	case "마피아":
-		r.state.MafiaPick = target
-		c.pushSystem(fmt.Sprintf("%s 님을 지목했습니다.", target))
-		r.broadcastTeam("mafia", ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("마피아가 %s 님을 지목했습니다.", target)})
-	case "의사":
-		r.state.DoctorPick = target
-		c.pushSystem(fmt.Sprintf("%s 님을 치료 대상으로 선택했습니다.", target))
-	case "경찰":
-		r.state.DetectivePick = target
-		c.pushSystem(fmt.Sprintf("%s 님을 조사 대상으로 선택했습니다.", target))
-	default:
-		c.pushSystem("해당 능력은 아직 구현되지 않았습니다.")
+	if job == nil {
+		c.pushSystem("능력이 없습니다.")
+		return
+	}
+	ctx := &jobs.Context{Room: r.jobAdapter(), Actor: c.name, Target: target}
+	if err := job.NightAction(ctx); err != nil {
+		c.pushSystem(err.Error())
 	}
 }
 
@@ -316,6 +322,7 @@ func (r *Room) assignRoles(players []string) {
 		role := jobQueue[idx]
 		spec := defaultJobs[role]
 		r.state.Assign[player] = &AssignedJob{Name: spec.Name, Team: spec.Team, Desc: spec.Desc}
+		r.state.Runtime[player] = buildJob(spec)
 		if spec.Team == "mafia" {
 			r.state.Prefix[player][player] = spec.Name
 		}
@@ -363,6 +370,7 @@ func (r *Room) resolveNight() {
 	}
 	r.beginDay()
 }
+
 func (r *Room) beginDay() {
 	r.state.Phase = PhaseDay
 	r.state.DayCount++
@@ -405,12 +413,27 @@ func (r *Room) resolveVote() {
 		return
 	}
 	target := winners[0]
-	r.eliminate(target, fmt.Sprintf("투표로 인해 %s 님이 처형되었습니다.", target))
-	r.checkGameOver()
-	if !r.state.Active {
+	r.beginDefense(target)
+}
+
+func (r *Room) beginDefense(target string) {
+	r.state.Phase = PhaseDefense
+	r.state.Execution = &ExecutionState{Target: target, Voted: make(map[string]bool)}
+	r.broadcast(ServerEvent{Type: "phase", Room: r.name, Phase: string(r.state.Phase), Body: fmt.Sprintf("%s 님의 최후 변론 시간입니다.", target)})
+	r.setPhaseTimer(defenseDuration, func(room *Room) {
+		room.beginExecutionVote()
+	})
+}
+
+func (r *Room) beginExecutionVote() {
+	if r.state.Execution == nil {
+		r.beginNight()
 		return
 	}
-	r.beginNight()
+	r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s 님을 처형할지 agree/oppose 로 투표해 주세요.", r.state.Execution.Target)})
+	r.setPhaseTimer(defenseDuration, func(room *Room) {
+		room.resolveDefense()
+	})
 }
 
 func (r *Room) eliminate(name, reason string) {
@@ -468,6 +491,57 @@ func (r *Room) broadcastRoles() {
 	r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: "직업 공개: " + strings.Join(arr, ", ")})
 }
 
+func (r *Room) handleDecision(c *Client, text string) {
+	if r.state.Execution == nil {
+		c.pushSystem("현재 처형 투표가 없습니다.")
+		return
+	}
+	if !r.state.Active || r.state.Phase != PhaseDefense {
+		c.pushSystem("지금은 처형 투표 시간이 아닙니다.")
+		return
+	}
+	if !r.state.Alive[c.name] {
+		c.pushSystem("사망자는 투표할 수 없습니다.")
+		return
+	}
+	exec := r.state.Execution
+	if exec.Voted[c.name] {
+		c.pushSystem("이미 의견을 제출했습니다.")
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "agree", "찬성":
+		exec.Agree++
+		exec.Voted[c.name] = true
+		c.pushSystem("찬성하였습니다.")
+	case "oppose", "반대":
+		exec.Oppose++
+		exec.Voted[c.name] = true
+		c.pushSystem("반대하였습니다.")
+	default:
+		c.pushSystem("agree/oppose 로 입력해 주세요.")
+	}
+}
+
+func (r *Room) resolveDefense() {
+	exec := r.state.Execution
+	if exec == nil {
+		r.beginNight()
+		return
+	}
+	if exec.Agree >= exec.Oppose {
+		r.eliminate(exec.Target, fmt.Sprintf("찬성 %d : 반대 %d 로 처형되었습니다.", exec.Agree, exec.Oppose))
+	} else {
+		r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s 님은 처형을 모면했습니다.", exec.Target)})
+	}
+	r.state.Execution = nil
+	r.checkGameOver()
+	if !r.state.Active {
+		return
+	}
+	r.beginNight()
+}
+
 func (r *Room) broadcast(ev ServerEvent) {
 	for _, cl := range r.players {
 		cl.push(ev)
@@ -502,6 +576,38 @@ func (r *Room) sendState(c *Client) {
 		"day":    r.state.DayCount,
 	}
 	c.push(ServerEvent{Type: "state", Room: r.name, State: snapshot})
+}
+
+func (r *Room) handleAdmin(c *Client, msg ClientMessage) {
+	if c.name != r.host {
+		c.pushSystem("방장만 사용할 수 있습니다.")
+		return
+	}
+	action := strings.ToLower(strings.TrimSpace(msg.Action))
+	target := strings.TrimSpace(msg.Target)
+	switch action {
+	case "kick":
+		if target == "" {
+			c.pushSystem("추방할 대상 닉네임을 지정하세요.")
+			return
+		}
+		if target == c.name {
+			c.pushSystem("자기 자신은 추방할 수 없습니다.")
+			return
+		}
+		if victim, ok := r.players[target]; ok {
+			victim.pushSystem("방장에 의해 강퇴되었습니다.")
+			victim.close()
+			r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s 님이 강퇴되었습니다.", target)})
+		} else {
+			c.pushSystem("해당 플레이어가 존재하지 않습니다.")
+		}
+	case "end":
+		r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: "방장이 게임을 종료했습니다."})
+		r.finishGame()
+	default:
+		c.pushSystem("지원하지 않는 관리자 명령입니다.")
+	}
 }
 
 func (r *Room) setPhaseTimer(d time.Duration, fn func(*Room)) {

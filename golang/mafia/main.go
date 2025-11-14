@@ -29,6 +29,7 @@ var (
 	flagPort       int
 	flagName       string
 	flagCredKey    string
+	flagAuthKey    string
 )
 
 func init() {
@@ -37,6 +38,7 @@ func init() {
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "mafia", "backend display name")
 	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
+	flags.StringVar(&flagAuthKey, "ws-auth-key", os.Getenv("MAFIA_WS_AUTH"), "optional shared secret required from clients via X-Mafia-Key header")
 }
 
 func main() {
@@ -50,7 +52,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	defer stop()
 
 	mgr := NewRoomManager()
-	handler := NewHTTPServer(mgr)
+	handler := NewHTTPServer(mgr, flagAuthKey)
 
 	cred := sdk.NewCredential()
 	if flagCredKey != "" {

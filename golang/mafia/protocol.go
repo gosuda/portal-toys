@@ -8,6 +8,7 @@ type ClientMessage struct {
 	Text   string          `json:"text,omitempty"`
 	Target string          `json:"target,omitempty"`
 	Index  int             `json:"index,omitempty"`
+	Action string          `json:"action,omitempty"`
 	Data   json.RawMessage `json:"data,omitempty"`
 }
 
