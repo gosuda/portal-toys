@@ -24,10 +24,14 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs []string
-	flagName       string
-	flagTargetHost string
-	flagTargetPort int
+	flagServerURLs  []string
+	flagName        string
+	flagTargetHost  string
+	flagTargetPort  int
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
@@ -36,6 +40,10 @@ func init() {
 	flags.StringVar(&flagName, "name", "vscode-relay", "Display name shown on server UI")
 	flags.StringVar(&flagTargetHost, "target-host", "127.0.0.1", "Local host where VSCode Web listens")
 	flags.IntVar(&flagTargetPort, "target-port", 8100, "Local port where VSCode Web listens")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal demo: VSCode Web relay proxy", "lease description")
+	flags.StringVar(&flagOwner, "owner", "VSCode Relay", "lease owner")
+	flags.StringVar(&flagTags, "tags", "dev,vscode", "comma-separated lease tags")
 }
 
 func main() {
@@ -79,7 +87,12 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new relay client failed: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("relay listen failed: %w", err)
 	}

@@ -9,7 +9,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.1
-	gosuda.org/portal v1.4.1
+	gosuda.org/portal v1.4.3
 )
 
 require (

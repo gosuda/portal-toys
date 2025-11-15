@@ -38,6 +38,10 @@ var (
 	flagName          string
 	flagMaxSizeMB     int64
 	flagFFmpegWrapper string
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
 )
 
 func init() {
@@ -47,6 +51,10 @@ func init() {
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
 	f.StringVar(&flagFFmpegWrapper, "ffmpeg-wrapper", os.Getenv("FFMPEG_WRAPPER"), "optional command prefix to run ffmpeg (e.g. 'docker exec ffmpeg ffmpeg')")
+	f.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	f.StringVar(&flagDescription, "description", "Simple ffmpeg file converter (upload → convert → download)", "lease description")
+	f.StringVar(&flagOwner, "owner", "FFmpeg Converter", "lease owner")
+	f.StringVar(&flagTags, "tags", "media,ffmpeg", "comma-separated lease tags")
 }
 
 func main() {
@@ -82,7 +90,12 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

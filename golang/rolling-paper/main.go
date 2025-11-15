@@ -70,6 +70,10 @@ var (
 	flagName          string
 	flagVoteThreshold int
 	flagMaxLen        int
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
 )
 
 func init() {
@@ -79,6 +83,10 @@ func init() {
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
 	flags.IntVar(&flagMaxLen, "max-len", 2500, "maximum message length in characters (>=1)")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal demo: Rolling Paper (relay HTTP backend)", "lease description")
+	flags.StringVar(&flagOwner, "owner", "Rolling Paper", "lease owner")
+	flags.StringVar(&flagTags, "tags", "collab,rolling-paper", "comma-separated lease tags")
 }
 
 func main() {
@@ -113,7 +121,12 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

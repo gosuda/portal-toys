@@ -23,9 +23,13 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs []string
-	flagPort       int
-	flagName       string
+	flagServerURLs  []string
+	flagPort        int
+	flagName        string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
@@ -33,6 +37,10 @@ func init() {
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "youtube-chat", "backend display name")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal demo: collaborative youtube chat (relay HTTP backend)", "lease description")
+	flags.StringVar(&flagOwner, "owner", "YouTube Chat", "lease owner")
+	flags.StringVar(&flagTags, "tags", "chat,youtube", "comma-separated lease tags")
 }
 
 func main() {
@@ -76,7 +84,12 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

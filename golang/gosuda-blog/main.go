@@ -23,10 +23,14 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs []string
-	flagPort       int
-	flagName       string
-	flagDir        string
+	flagServerURLs  []string
+	flagPort        int
+	flagName        string
+	flagDir         string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
@@ -35,6 +39,10 @@ func init() {
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "gosuda-blog", "Display name shown on server UI")
 	flags.StringVar(&flagDir, "dir", "./gosuda-blog/dist", "Directory to serve (built static files)")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal demo: gosuda blog static site (relay HTTP backend)", "lease description")
+	flags.StringVar(&flagOwner, "owner", "gosuda-blog", "lease owner")
+	flags.StringVar(&flagTags, "tags", "blog,gosuda", "comma-separated lease tags")
 }
 
 func main() {
@@ -67,7 +75,12 @@ func runBlog(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

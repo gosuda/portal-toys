@@ -31,9 +31,13 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs []string
-	flagPort       int
-	flagName       string
+	flagServerURLs  []string
+	flagPort        int
+	flagName        string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
@@ -41,6 +45,10 @@ func init() {
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal multiplayer tetris", "lease description")
+	flags.StringVar(&flagOwner, "owner", "Tetris", "lease owner")
+	flags.StringVar(&flagTags, "tags", "game,tetris", "comma-separated lease tags")
 }
 
 func main() {
@@ -686,7 +694,12 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}

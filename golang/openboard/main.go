@@ -23,10 +23,14 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs []string
-	flagPort       int
-	flagName       string
-	flagDataPath   string
+	flagServerURLs  []string
+	flagPort        int
+	flagName        string
+	flagDataPath    string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
@@ -35,6 +39,10 @@ func init() {
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "openboard", "backend display name")
 	flags.StringVar(&flagDataPath, "datapath", "./openboard/data", "directory to persist user pages")
+	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
+	flags.StringVar(&flagDescription, "description", "Portal demo: OpenBoard (user-hosted HTML BBS)", "lease description")
+	flags.StringVar(&flagOwner, "owner", "OpenBoard", "lease owner")
+	flags.StringVar(&flagTags, "tags", "bbs,openboard", "comma-separated lease tags")
 }
 
 func main() {
@@ -57,7 +65,12 @@ func runOpenboard(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
+	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
+		sdk.WithDescription(flagDescription),
+		sdk.WithHide(flagHide),
+		sdk.WithOwner(flagOwner),
+		sdk.WithTags(strings.Split(flagTags, ",")),
+	)
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
