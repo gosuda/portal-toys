@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPFS Community (prototype)</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1rem;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .post-form, .post {
+      background: #020617;
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      border: 1px solid #1f2937;
+    }
+    input, textarea, button {
+      font: inherit;
+    }
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.5rem;
+      border-radius: 0.375rem;
+      border: 1px solid #374151;
+      background: #020617;
+      color: #e5e7eb;
+      margin-bottom: 0.5rem;
+    }
+    input:focus, textarea:focus {
+      outline: 1px solid #3b82f6;
+      border-color: #3b82f6;
+    }
+    button {
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .meta {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-bottom: 0.25rem;
+    }
+    .title {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+    .body {
+      white-space: pre-wrap;
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+    .comments {
+      border-top: 1px solid #1f2937;
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+    }
+    .comment {
+      margin-bottom: 0.4rem;
+      font-size: 0.85rem;
+    }
+    .comment .meta {
+      font-size: 0.7rem;
+      margin-bottom: 0.1rem;
+    }
+    .comment-form {
+      margin-top: 0.4rem;
+    }
+    .empty {
+      font-size: 0.9rem;
+      color: #6b7280;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>IPFS 커뮤니티 (프로토타입)</h1>
+    <span style="font-size:0.8rem;color:#9ca3af;">추후 IPFS 원장 공유 연동 예정</span>
+  </div>
+
+  <section class="post-form">
+    <h2 style="font-size:1rem;margin-bottom:0.5rem;">새 글 작성</h2>
+    <form method="POST" action="/">
+      <input type="hidden" name="kind" value="post">
+      <input name="author" placeholder="작성자 (기본: anon)">
+      <input name="title" required placeholder="제목">
+      <textarea name="body" rows="4" required placeholder="내용"></textarea>
+      <button type="submit">게시</button>
+    </form>
+  </section>
+
+  <section>
+    {{if not .}}
+      <p class="empty">아직 글이 없습니다. 첫 글을 작성해 보세요.</p>
+    {{else}}
+      {{range .}}
+        <article class="post">
+          <div class="meta">{{.Author}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}</div>
+          <div class="title">{{.Title}}</div>
+          <div class="body">{{.Body}}</div>
+          <div class="comments">
+            {{if .Comments}}
+              {{range .Comments}}
+                <div class="comment">
+                  <div class="meta">{{.Author}} · {{.CreatedAt.Format "15:04:05"}}</div>
+                  <div class="body">{{.Body}}</div>
+                </div>
+              {{end}}
+            {{end}}
+            <form method="POST" action="/" class="comment-form">
+              <input type="hidden" name="kind" value="comment">
+              <input type="hidden" name="post_id" value="{{.ID}}">
+              <input name="author" placeholder="작성자 (기본: anon)">
+              <textarea name="body" rows="2" required placeholder="댓글"></textarea>
+              <button type="submit">댓글 달기</button>
+            </form>
+          </div>
+        </article>
+      {{end}}
+    {{end}}
+  </section>
+</body>
+</html>
+
