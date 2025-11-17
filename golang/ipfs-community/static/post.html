@@ -5,6 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} - 커뮤니티 게시글</title>
   <link rel="stylesheet" href="/static/style.css">
+  <script>
+    (function () {
+      try {
+        var params = new URLSearchParams(window.location.search);
+        if (params.get("err") === "badpw") {
+          alert("비밀번호가 틀려서 삭제할 수 없습니다.");
+          params.delete("err");
+          var newUrl = window.location.pathname + (params.toString() ? "?" + params.toString() : "");
+          window.history.replaceState({}, "", newUrl);
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+  </script>
 </head>
 <body>
   <div class="dcwrap list_wrap">
@@ -24,12 +39,21 @@
         <article>
           <div class="view-head">
             <div class="view-title">{{.Title}}</div>
-            <div class="view-meta">
-              {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}
+            <div class="view-meta-row">
+              <div class="view-meta-main">
+                <span class="view-meta-author">{{if .Author}}{{.Author}}{{else}}anon{{end}}</span>
+                <span class="view-meta-sep">·</span>
+                <span class="view-meta-date">{{.CreatedAt.Format "2006-01-02 15:04:05"}}</span>
+              </div>
+              <form method="POST" action="/post/delete/{{.ID}}" class="post-delete-inline">
+                <input type="password" name="password" class="post-delete-password" placeholder="비밀번호" maxlength="20">
+                <button type="submit" class="btn-secondary btn-danger post-delete-btn">삭제</button>
+              </form>
             </div>
           </div>
+
           <div class="view-body">
-            {{- safeHTML .Body -}}
+            <div class="view-body-content">{{- safeHTML .Body -}}</div>
             <div class="view-votes">
               <form method="POST" action="/post/vote/up/{{.ID}}" class="vote-form">
                 <button type="submit" class="btn-vote btn-thumb">👍 {{.Upvotes}}</button>
@@ -51,6 +75,12 @@
                   <div class="comment-date">{{.CreatedAt.Format "01-02 15:04"}}</div>
                 </div>
                 <div class="comment-body">{{- .Body -}}</div>
+                <div class="comment-actions">
+                  <form method="POST" action="/post/comment/delete/{{$.ID}}/{{.ID}}" class="comment-delete-form">
+                    <input type="password" name="password" placeholder="비밀번호" maxlength="20">
+                    <button type="submit" class="btn-secondary btn-danger btn-xs">삭제</button>
+                  </form>
+                </div>
               </div>
             {{end}}
           {{else}}
@@ -58,14 +88,15 @@
           {{end}}
 
           <div class="comment-form">
-            <form method="POST" action="">
-              <div class="comment-form-row">
+            <form method="POST" action="" class="comment-form-inline">
+              <div class="comment-form-author">
                 <input name="author" type="text" placeholder="작성자 (기본: anon)">
+                <input name="password" type="password" placeholder="비밀번호" maxlength="20">
               </div>
-              <div class="comment-form-row">
+              <div class="comment-form-body">
                 <textarea name="body" rows="3" required placeholder="댓글 내용을 입력해 주세요."></textarea>
               </div>
-              <button type="submit" class="btn-primary">댓글 쓰기</button>
+              <button type="submit" class="btn-primary comment-form-submit">댓글 쓰기</button>
             </form>
           </div>
         </section>

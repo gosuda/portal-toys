@@ -59,6 +59,7 @@ func NewHandler() http.Handler {
 		_, _ = w.Write(data)
 	})
 
+	// Index (list) page
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Only exact "/" goes to the list page; others fall through.
 		if r.URL.Path != "/" {
@@ -115,11 +116,12 @@ func NewHandler() http.Handler {
 				title = string([]rune(title)[:140])
 			}
 			body := r.FormValue("body")
+			password := r.FormValue("password")
 			if title == "" || body == "" {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
-			AddPost(author, title, body)
+			AddPost(author, title, body, password)
 			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		default:
@@ -127,6 +129,7 @@ func NewHandler() http.Handler {
 		}
 	})
 
+	// Write new post page
 	mux.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
@@ -148,11 +151,12 @@ func NewHandler() http.Handler {
 				title = string([]rune(title)[:140])
 			}
 			body := r.FormValue("body")
+			password := r.FormValue("password")
 			if title == "" || body == "" {
 				http.Redirect(w, r, "/write", http.StatusSeeOther)
 				return
 			}
-			post := AddPost(author, title, body)
+			post := AddPost(author, title, body, password)
 			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/post/"+post.ID, http.StatusSeeOther)
 		default:
@@ -160,7 +164,7 @@ func NewHandler() http.Handler {
 		}
 	})
 
-	// 추천 / 비추천 처리
+	// Vote (up / down) with simple cookie-based double-vote protection.
 	mux.HandleFunc("/post/vote/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -174,24 +178,112 @@ func NewHandler() http.Handler {
 			return
 		}
 		dir, id := parts[0], parts[1]
+
+		// Prevent multiple votes in the same direction from one browser.
+		// If the user switches direction, adjust counts accordingly.
+		cookieName := "vote-" + id
+		prevDir := ""
+		if c, err := r.Cookie(cookieName); err == nil {
+			prevDir = c.Value
+		}
+		if prevDir == dir {
+			// Already voted in this direction; no-op.
+			http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
+			return
+		}
+
 		var upDelta, downDelta int
 		switch dir {
 		case "up":
-			upDelta = 1
+			if prevDir == "down" {
+				// Switch from downvote to upvote.
+				upDelta = 1
+				downDelta = -1
+			} else {
+				upDelta = 1
+			}
 		case "down":
-			downDelta = 1
+			if prevDir == "up" {
+				// Switch from upvote to downvote.
+				upDelta = -1
+				downDelta = 1
+			} else {
+				downDelta = 1
+			}
 		default:
 			http.NotFound(w, r)
 			return
 		}
+
 		if VotePost(id, upDelta, downDelta) == nil {
 			http.NotFound(w, r)
 			return
 		}
+
+		http.SetCookie(w, &http.Cookie{
+			Name:  cookieName,
+			Value: dir,
+			Path:  "/",
+		})
+
 		_ = SaveSnapshot(r.Context())
 		http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 	})
 
+	// Delete a post using its password (empty password means anyone can delete).
+	mux.HandleFunc("/post/delete/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		id := strings.TrimPrefix(r.URL.Path, "/post/delete/")
+		id = strings.TrimSuffix(id, "/")
+		if id == "" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		password := r.FormValue("password")
+		if !DeletePost(id, password) {
+			// 실패: 잘못된 비밀번호 또는 없는 글 → 에러 플래그와 함께 해당 글로 이동.
+			http.Redirect(w, r, "/post/"+id+"?err=badpw", http.StatusSeeOther)
+			return
+		}
+		_ = SaveSnapshot(r.Context())
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	// Delete a comment using its password.
+	mux.HandleFunc("/post/comment/delete/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/post/comment/delete/")
+		path = strings.TrimSuffix(path, "/")
+		parts := strings.Split(path, "/")
+		if len(parts) != 2 {
+			http.NotFound(w, r)
+			return
+		}
+		postID, commentID := parts[0], parts[1]
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		password := r.FormValue("password")
+		if !DeleteComment(postID, commentID, password) {
+			http.Redirect(w, r, "/post/"+postID+"?err=badpw", http.StatusSeeOther)
+			return
+		}
+		_ = SaveSnapshot(r.Context())
+		http.Redirect(w, r, "/post/"+postID, http.StatusSeeOther)
+	})
+
+	// Post detail + comments
 	mux.HandleFunc("/post/", func(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimPrefix(r.URL.Path, "/post/")
 		id = strings.TrimSuffix(id, "/")
@@ -230,12 +322,14 @@ func NewHandler() http.Handler {
 				http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 				return
 			}
-			AddComment(id, author, body)
+			password := r.FormValue("password")
+			AddComment(id, author, body, password)
 			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	})
+
 	return mux
 }

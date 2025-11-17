@@ -21,18 +21,19 @@
     <main class="write-wrap">
       <section class="left_content">
         <div class="form-box write-form">
-          <h1 class="form-title">새 글 작성</h1>
           <form method="POST" action="/write">
-            <div class="field">
-              <label for="author">작성자 (선택)</label>
-              <input id="author" name="author" type="text" placeholder="기본값: anon" maxlength="8">
+            <div class="field field-row">
+              <div class="field-col">
+                <input id="author" name="author" type="text" placeholder="작성자" maxlength="8">
+              </div>
+              <div class="field-col field-col-right">
+                <input id="password" name="password" type="password" placeholder="비밀번호" maxlength="20">
+              </div>
             </div>
             <div class="field">
-              <label for="title">제목</label>
               <input id="title" name="title" type="text" required placeholder="제목을 입력해 주세요." maxlength="140">
             </div>
             <div class="field">
-              <label for="body">내용</label>
               <textarea id="body" name="body" rows="10" required placeholder="내용을 입력해 주세요."></textarea>
             </div>
             <button type="submit" class="btn-primary">게시하기</button>

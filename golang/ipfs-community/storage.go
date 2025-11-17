@@ -19,6 +19,7 @@ type Post struct {
 	Author    string
 	Title     string
 	Body      string
+	Password  string
 	CreatedAt time.Time
 	Upvotes   int
 	Downvotes int
@@ -30,6 +31,7 @@ type Comment struct {
 	PostID    string
 	Author    string
 	Body      string
+	Password  string
 	CreatedAt time.Time
 }
 
@@ -62,7 +64,7 @@ func nextID() string {
 	return time.Now().Format("20060102150405") + "-" + fmt.Sprintf("%06d", lastID)
 }
 
-func AddPost(author, title, body string) *Post {
+func AddPost(author, title, body, password string) *Post {
 	storeMu.Lock()
 	defer storeMu.Unlock()
 	body = strings.TrimSpace(body)
@@ -80,6 +82,7 @@ func AddPost(author, title, body string) *Post {
 		Author:    author,
 		Title:     title,
 		Body:      body,
+		Password:  password,
 		CreatedAt: time.Now(),
 		Comments:  []Comment{},
 	}
@@ -88,7 +91,7 @@ func AddPost(author, title, body string) *Post {
 	return p
 }
 
-func AddComment(postID, author, body string) *Comment {
+func AddComment(postID, author, body, password string) *Comment {
 	storeMu.Lock()
 	defer storeMu.Unlock()
 	p, ok := posts[postID]
@@ -102,10 +105,55 @@ func AddComment(postID, author, body string) *Comment {
 		PostID:    postID,
 		Author:    author,
 		Body:      body,
+		Password:  password,
 		CreatedAt: time.Now(),
 	}
 	p.Comments = append(p.Comments, c)
 	return &c
+}
+
+// DeletePost deletes a post if the password matches (or if the stored password is empty).
+// Returns true if the post was deleted.
+func DeletePost(id, password string) bool {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	p, ok := posts[id]
+	if !ok {
+		return false
+	}
+	if p.Password != "" && p.Password != password {
+		return false
+	}
+	delete(posts, id)
+	for i, pid := range order {
+		if pid == id {
+			order = append(order[:i], order[i+1:]...)
+			break
+		}
+	}
+	return true
+}
+
+// DeleteComment deletes a single comment on a post if the password matches
+// (or if the stored password is empty). Returns true if deleted.
+func DeleteComment(postID, commentID, password string) bool {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	p, ok := posts[postID]
+	if !ok {
+		return false
+	}
+	for i, c := range p.Comments {
+		if c.ID != commentID {
+			continue
+		}
+		if c.Password != "" && c.Password != password {
+			return false
+		}
+		p.Comments = append(p.Comments[:i], p.Comments[i+1:]...)
+		return true
+	}
+	return false
 }
 
 // VotePost applies a delta to the upvote/downvote counters for a post.
