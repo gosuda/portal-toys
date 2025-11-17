@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -51,37 +52,61 @@ func runServer(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	servers := make([]string, 0, len(flagServerURLs))
+	for _, raw := range flagServerURLs {
+		if trimmed := strings.TrimSpace(raw); trimmed != "" {
+			servers = append(servers, trimmed)
+		}
+	}
+
 	mgr := NewRoomManager()
 	handler := NewHTTPServer(mgr, flagAuthKey)
 
-	cred := sdk.NewCredential()
-	if flagCredKey != "" {
-		key, err := base64.StdEncoding.DecodeString(flagCredKey)
-		if err != nil {
-			return fmt.Errorf("decode cred key: %w", err)
-		}
-		cred2, err := cryptoops.NewCredentialFromPrivateKey(key)
-		if err != nil {
-			return fmt.Errorf("new credential from private key: %w", err)
-		}
-		cred = cred2
-	}
+	var (
+		ln     net.Listener
+		client *sdk.RDClient
+	)
 
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"})
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+	if len(servers) > 0 {
+		cred := sdk.NewCredential()
+		if flagCredKey != "" {
+			key, err := base64.StdEncoding.DecodeString(flagCredKey)
+			if err != nil {
+				return fmt.Errorf("decode cred key: %w", err)
+			}
+			cred2, err := cryptoops.NewCredentialFromPrivateKey(key)
+			if err != nil {
+				return fmt.Errorf("new credential from private key: %w", err)
+			}
+			cred = cred2
+		}
+
+		c, err := sdk.NewClient(func(cfg *sdk.RDClientConfig) {
+			cfg.BootstrapServers = servers
+		})
+		if err != nil {
+			return fmt.Errorf("new client: %w", err)
+		}
+		listener, err := c.Listen(cred, flagName, []string{"http/1.1"})
+		if err != nil {
+			_ = c.Close()
+			return fmt.Errorf("listen: %w", err)
+		}
+		client = c
+		ln = listener
+		log.Info().Msg("[mafia] relay listener enabled")
+	} else {
+		log.Info().Msg("[mafia] relay disabled; running local mode only")
 	}
 
 	mux := handler.Router()
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[mafia] relay http error")
-		}
-	}()
+	if ln != nil {
+		go func() {
+			if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+				log.Error().Err(err).Msg("[mafia] relay http error")
+			}
+		}()
+	}
 
 	var httpSrv *http.Server
 	if flagPort >= 0 {
@@ -96,8 +121,12 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	go func() {
 		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
+		if ln != nil {
+			_ = ln.Close()
+		}
+		if client != nil {
+			_ = client.Close()
+		}
 		if httpSrv != nil {
 			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
