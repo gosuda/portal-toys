@@ -76,6 +76,11 @@ type ExecutionState struct {
 	Voted  map[string]bool
 }
 
+type RosterState struct {
+	Players []string `json:"players"`
+	Host    string   `json:"host"`
+}
+
 func NewRoom(name string, mgr *RoomManager) *Room {
 	r := &Room{
 		name:     name,
@@ -578,7 +583,8 @@ func (r *Room) pushRoster() {
 			order = append(order, name)
 		}
 	}
-	r.broadcast(ServerEvent{Type: "roster", Room: r.name, State: order})
+	state := RosterState{Players: order, Host: r.host}
+	r.broadcast(ServerEvent{Type: "roster", Room: r.name, State: state})
 }
 
 func (r *Room) sendState(c *Client) {

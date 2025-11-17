@@ -13,7 +13,8 @@ const selectedTargetEl = document.getElementById('selected-target');
 let socket;
 let selectedTarget = '';
 let currentPhase = 'lobby';
-
+let currentHost = '';
+let myNickname = '';
 function log(message, author = 'system') {
   const entry = document.createElement('div');
   entry.className = 'log-entry';
@@ -32,12 +33,18 @@ function connect(evt) {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.close();
   }
+
   const nickname = nicknameEl.value.trim();
   const room = roomEl.value.trim();
   if (!nickname || !room) {
     alert('닉네임과 방 이름을 입력하세요.');
     return;
   }
+
+  myNickname = nickname;
+  selectedTarget = '';
+  updateSelectedDisplay();
+
   const base = buildWsBase(wsModeEl.value.trim());
   const url = `${base}/ws?room=${encodeURIComponent(room)}&user=${encodeURIComponent(nickname)}`;
   socket = new WebSocket(url);
@@ -74,7 +81,7 @@ function handleMessage(raw) {
       log(data.body || '', data.author || 'player');
       break;
     case 'roster':
-      renderRoster(data.state || []);
+      renderRoster(data.state);
       break;
     case 'role':
       log(data.body || '역할 알림', 'role');
@@ -91,21 +98,24 @@ function handleMessage(raw) {
   }
 }
 
-function renderRoster(players) {
+function renderRoster(state) {
+  const players = Array.isArray(state) ? state : (state && Array.isArray(state.players) ? state.players : []);
+  currentHost = state && typeof state.host === 'string' ? state.host : '';
   rosterEl.innerHTML = '';
   if (!players.includes(selectedTarget)) {
     selectedTarget = '';
-    updateSelectedDisplay();
   }
+  updateSelectedDisplay();
   players.forEach(name => {
     const btn = document.createElement('button');
-    btn.textContent = name;
+    const isHost = name === currentHost;
+    btn.textContent = isHost ? '[HOST] ' + name : name;
     btn.dataset.selected = String(name === selectedTarget);
+    btn.classList.toggle('host', isHost);
     btn.addEventListener('click', () => handlePlayerInteraction(name));
     rosterEl.appendChild(btn);
   });
 }
-
 function updateSelectedDisplay() {
   if (selectedTarget) {
     selectedTargetEl.textContent = `선택된 대상: ${selectedTarget}`;
@@ -140,8 +150,27 @@ function handlePlayerInteraction(name) {
 
 controlButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.dataset.action === 'start') {
-      send('start');
+    if (btn.dataset.hostOnly === 'true' && myNickname !== currentHost) {
+      alert('방장만 사용할 수 있습니다.');
+      return;
+    }
+    switch (btn.dataset.action) {
+      case 'start':
+        send('start');
+        break;
+      case 'kick':
+        if (!selectedTarget) {
+          alert('먼저 강퇴할 대상을 선택하세요.');
+          return;
+        }
+        if (selectedTarget === myNickname) {
+          alert('자기 자신은 강퇴할 수 없습니다.');
+          return;
+        }
+        send('admin', { action: 'kick', target: selectedTarget });
+        break;
+      default:
+        break;
     }
   });
 });

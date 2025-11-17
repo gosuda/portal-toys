@@ -118,6 +118,17 @@ button.primary:hover {
   box-shadow: 0 8px 20px rgba(99,102,241,0.35);
 }
 
+button.danger {
+  background: linear-gradient(120deg, #f97316, #ef4444);
+  border: none;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button.danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(248,113,113,0.35);
+}
 #log {
   height: 300px;
   overflow-y: auto;
@@ -160,6 +171,12 @@ button.primary:hover {
   border-color: #818cf8;
   background: rgba(99,102,241,0.25);
   transform: translateY(-2px);
+}
+
+.roster-grid button.host {
+  border-color: #fcd34d;
+  background: rgba(234,179,8,0.18);
+  font-weight: 600;
 }
 
 #selected-target {
