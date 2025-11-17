@@ -10,7 +10,7 @@ type soldierJob struct{ spec Spec }
 func NewSoldier(spec Spec) Job { return &soldierJob{spec: spec} }
 
 func (j *soldierJob) Name() string                            { return j.spec.Name }
-func (j *soldierJob) Team() string                            { return j.spec.Team }
+func (j *soldierJob) Team() Team                              { return j.spec.Team }
 func (j *soldierJob) Description() string                     { return j.spec.Desc }
 func (j *soldierJob) NightAction(ctx *Context) error          { return errors.New("능력이 없습니다.") }
 func (j *soldierJob) OnNightResolved(ctx *NightResultContext) {}

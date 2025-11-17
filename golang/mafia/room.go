@@ -64,7 +64,7 @@ type GameState struct {
 
 type AssignedJob struct {
 	Name    string
-	Team    string
+	Team    jobs.Team
 	Desc    string
 	Passive string
 }
@@ -228,8 +228,8 @@ func (r *Room) handleChat(c *Client, text string) {
 			c.pushSystem("밤에는 관전자입니다.")
 			return
 		}
-		if job.Team == "mafia" {
-			r.broadcastTeam("mafia", ServerEvent{Type: "chat", Room: r.name, Author: c.name, Body: fmt.Sprintf("[마피아] %s", text)})
+		if job.Team == jobs.TeamMafia {
+			r.broadcastTeam(jobs.TeamMafia, ServerEvent{Type: "chat", Room: r.name, Author: c.name, Body: fmt.Sprintf("[마피아] %s", text)})
 		} else {
 			c.pushSystem("밤에는 채팅이 제한됩니다.")
 		}
@@ -279,6 +279,10 @@ func (r *Room) handleVote(c *Client, target string) {
 		r.state.Vote = make(map[string]int)
 	}
 	r.state.Vote[target]++
+	if job := r.state.Runtime[c.name]; job != nil {
+		ctx := &jobs.VoteContext{Room: r.jobAdapter(), Actor: c.name, Target: target, Meta: r.state.Meta}
+		job.OnVote(ctx)
+	}
 	r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s 님이 %s 에게 표를 던졌습니다.", c.name, target)})
 }
 
@@ -325,7 +329,7 @@ func (r *Room) assignRoles(players []string) {
 		spec := defaultJobs[role]
 		r.state.Assign[player] = &AssignedJob{Name: spec.Name, Team: spec.Team, Desc: spec.Desc}
 		r.state.Runtime[player] = buildJob(spec)
-		if spec.Team == "mafia" {
+		if spec.Team == jobs.TeamMafia {
 			r.state.Prefix[player][player] = spec.Name
 		}
 		r.players[player].push(ServerEvent{Type: "role", Room: r.name, Body: fmt.Sprintf("당신의 직업은 %s 입니다. %s", spec.Name, spec.Desc)})
@@ -351,7 +355,7 @@ func (r *Room) resolveNight() {
 	if target != "" && target == saved {
 		r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("의사가 %s 님을 치료했습니다.", target)})
 	} else if target != "" {
-		r.eliminate(target, "마피아에게 살해당했습니다.")
+		r.eliminate(target, "마피아에게 살해당했습니다.", "mafia")
 	} else {
 		r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: "마피아가 행동하지 않았습니다."})
 	}
@@ -438,12 +442,12 @@ func (r *Room) beginExecutionVote() {
 	})
 }
 
-func (r *Room) eliminate(name, reason string) {
+func (r *Room) eliminate(name, reason, cause string) {
 	if _, ok := r.state.Alive[name]; !ok {
 		return
 	}
 	if job := r.state.Runtime[name]; job != nil {
-		ctx := &jobs.DeathContext{Room: r.jobAdapter(), Victim: name, Cause: reason, Meta: r.state.Meta}
+		ctx := &jobs.DeathContext{Room: r.jobAdapter(), Victim: name, Cause: reason, CauseType: cause, Meta: r.state.Meta}
 		if job.OnDeath(ctx) {
 			return
 		}
@@ -460,7 +464,7 @@ func (r *Room) checkGameOver() {
 		if job == nil {
 			continue
 		}
-		if job.Team == "mafia" {
+		if job.Team == jobs.TeamMafia {
 			mafiaAlive++
 		} else {
 			citizenAlive++
@@ -538,7 +542,7 @@ func (r *Room) resolveDefense() {
 		return
 	}
 	if exec.Agree >= exec.Oppose {
-		r.eliminate(exec.Target, fmt.Sprintf("찬성 %d : 반대 %d 로 처형되었습니다.", exec.Agree, exec.Oppose))
+		r.eliminate(exec.Target, fmt.Sprintf("찬성 %d : 반대 %d 로 처형되었습니다.", exec.Agree, exec.Oppose), "vote")
 	} else {
 		r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s 님은 처형을 모면했습니다.", exec.Target)})
 	}
@@ -556,7 +560,7 @@ func (r *Room) broadcast(ev ServerEvent) {
 	}
 }
 
-func (r *Room) broadcastTeam(team string, ev ServerEvent) {
+func (r *Room) broadcastTeam(team jobs.Team, ev ServerEvent) {
 	for name := range r.state.Assign {
 		job := r.state.Assign[name]
 		if job != nil && job.Team == team {

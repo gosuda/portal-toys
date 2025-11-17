@@ -1,5 +1,15 @@
 package jobs
 
+// Team represents the alignment of a role.
+type Team string
+
+const (
+	TeamCitizen Team = "citizen"
+	TeamMafia   Team = "mafia"
+	TeamSect    Team = "sect"
+	TeamNeutral Team = "neutral"
+)
+
 // Context carries runtime information for job actions.
 type Context struct {
 	Room   RoomState
@@ -14,11 +24,12 @@ type RoomState interface {
 	IsAlive(name string) bool
 	PushSystem(name, msg string)
 	Broadcast(ev ServerEvent)
-	BroadcastTeam(team string, ev ServerEvent)
+	BroadcastTeam(team Team, ev ServerEvent)
 	SetNightTarget(key, value string)
 	LookupJob(name string) Job
 	SetMeta(key, value string)
 	GetMeta(key string) string
+	AddVote(target string, delta int)
 }
 
 // ServerEvent mirrors the Room broadcast payload (subset used by jobs).
@@ -33,7 +44,7 @@ type ServerEvent struct {
 // Job represents a playable role.
 type Job interface {
 	Name() string
-	Team() string
+	Team() Team
 	Description() string
 	NightAction(ctx *Context) error
 	OnNightResolved(ctx *NightResultContext)
@@ -48,7 +59,7 @@ type Factory func(spec Spec) Job
 // Spec defines the metadata pulled from reference data.
 type Spec struct {
 	Name string
-	Team string
+	Team Team
 	Desc string
 }
 
@@ -65,13 +76,15 @@ type PhaseContext struct {
 
 type VoteContext struct {
 	Room   RoomState
+	Actor  string
 	Target string
 	Meta   map[string]string
 }
 
 type DeathContext struct {
-	Room   RoomState
-	Victim string
-	Cause  string
-	Meta   map[string]string
+	Room      RoomState
+	Victim    string
+	Cause     string
+	CauseType string
+	Meta      map[string]string
 }

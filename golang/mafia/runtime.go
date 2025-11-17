@@ -7,8 +7,9 @@ import (
 var jobRegistry = map[string]jobs.Factory{
 	"마피아": jobs.NewMafia,
 	"의사":  jobs.NewDoctor,
-	"경찰":  jobs.NewDetective,
+	"경찰":  jobs.NewPolice,
 	"군인":  jobs.NewSoldier,
+	"정치인": jobs.NewPolitician,
 	"시민":  jobs.NewCitizen,
 }
 
@@ -45,7 +46,7 @@ func (a *jobRoomAdapter) Broadcast(ev jobs.ServerEvent) {
 	a.r.broadcast(ServerEvent{Type: ev.Type, Room: ev.Room, Body: ev.Body, Phase: ev.Phase, Author: ev.Author})
 }
 
-func (a *jobRoomAdapter) BroadcastTeam(team string, ev jobs.ServerEvent) {
+func (a *jobRoomAdapter) BroadcastTeam(team jobs.Team, ev jobs.ServerEvent) {
 	a.r.broadcastTeam(team, ServerEvent{Type: ev.Type, Room: ev.Room, Body: ev.Body})
 }
 
@@ -76,4 +77,11 @@ func (a *jobRoomAdapter) GetMeta(key string) string {
 		return ""
 	}
 	return a.r.state.Meta[key]
+}
+
+func (a *jobRoomAdapter) AddVote(target string, delta int) {
+	if a.r.state.Vote == nil {
+		a.r.state.Vote = make(map[string]int)
+	}
+	a.r.state.Vote[target] += delta
 }
