@@ -50,6 +50,7 @@ Golang examples
 - [golang/paint](golang/paint/)
 - [golang/rolling-paper](golang/rolling-paper/)
 - [golang/simple-chat](golang/simple-chat/)
+- [golang/simple-community](golang/simple-community/)
 - [golang/tetris](golang/tetris/)
 - [golang/youtube-chat](golang/youtube-chat/)
 - [golang/vscode-chat](golang/vscode-chat/)

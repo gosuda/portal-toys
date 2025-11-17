@@ -17,8 +17,8 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "community-ipfs",
-	Short: "Portal demo: IPFS-backed community board",
+	Use:   "simple-community",
+	Short: "Portal demo: simple community board",
 	RunE:  runCommunity,
 }
 
@@ -37,17 +37,17 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "ipfs-community", "backend display name")
-	flags.StringVar(&flagDBPath, "db-path", "ipfs-community/data", "optional directory for Pebble-backed IPFS ledger")
+	flags.StringVar(&flagName, "name", "simple-community", "backend display name")
+	flags.StringVar(&flagDBPath, "db-path", "simple-community/data", "optional directory for Pebble db")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
-	flags.StringVar(&flagDescription, "description", "Portal demo: IPFS-backed community board", "lease description")
-	flags.StringVar(&flagOwner, "owner", "Community IPFS", "lease owner")
-	flags.StringVar(&flagTags, "tags", "community,ipfs", "comma-separated lease tags")
+	flags.StringVar(&flagDescription, "description", "Portal demo: simple community board", "lease description")
+	flags.StringVar(&flagOwner, "owner", "Community", "lease owner")
+	flags.StringVar(&flagTags, "tags", "community", "comma-separated lease tags")
 }
 
 func main() {
 	if err := rootCmd.Execute(); err != nil {
-		log.Fatal().Err(err).Msg("execute community-ipfs command")
+		log.Fatal().Err(err).Msg("execute simple community command")
 	}
 }
 
