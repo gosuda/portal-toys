@@ -1,0 +1,411 @@
+/* Base layout - GitHub-like light theme */
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  margin: 0;
+  padding: 0;
+  background: #f6f8fa;
+  color: #24292f;
+}
+
+a {
+  color: #0969da;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.dcwrap {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+}
+
+.list_wrap {
+  background: transparent;
+}
+
+/* Header bar */
+.header-bar {
+  padding: 16px 0 8px;
+  border-bottom: 1px solid #d0d7de;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.header-bar-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.header-bar-sub {
+  font-size: 12px;
+  color: #57606a;
+  margin-top: 4px;
+}
+
+.header-bar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Buttons */
+.btn-primary {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid #0969da;
+  background: #0969da;
+  color: #ffffff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #0757b8;
+  border-color: #0757b8;
+}
+
+.btn-secondary {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(27, 31, 36, 0.15);
+  background: #f6f8fa;
+  color: #24292f;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f3f4f6;
+}
+
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* List layout */
+.listwrap {
+  display: flex;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.left_content {
+  flex: 1;
+}
+
+.right_content {
+  width: 280px;
+  max-width: 280px;
+}
+
+.empty {
+  font-size: 14px;
+  color: #6e7781;
+}
+
+/* Tabs + options (simplified DC / GitHub mix) */
+.list_array_option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0 6px;
+  font-size: 13px;
+}
+
+.array_tab {
+  display: inline-flex;
+  border-radius: 6px;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  overflow: hidden;
+}
+
+.array_tab button {
+  border: none;
+  background: transparent;
+  color: #57606a;
+  padding: 6px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.array_tab button.on {
+  background: #ffffff;
+  color: #24292f;
+}
+
+.array_tab button:not(:last-child) {
+  border-right: 1px solid #d0d7de;
+}
+
+.array_tab button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.right_box {
+  font-size: 12px;
+  color: #6e7781;
+}
+
+/* Table (gall_list) */
+.gall_listwrap {
+  margin-top: 6px;
+}
+
+.gall_list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #ffffff;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gall_list caption {
+  display: none;
+}
+
+.gall_list thead {
+  background: #f6f8fa;
+}
+
+.gall_list th,
+.gall_list td {
+  padding: 7px 8px;
+  border-top: 1px solid #d0d7de;
+}
+
+.gall_list thead th {
+  border-top: none;
+}
+
+.gall_list th {
+  font-weight: 500;
+  color: #57606a;
+  text-align: center;
+}
+
+.gall_list tbody tr:nth-child(even) {
+  background: #ffffff;
+}
+
+.gall_list tbody tr:nth-child(odd) {
+  background: #fdfdfd;
+}
+
+.gall_list tbody tr:hover {
+  background: #f6f8fa;
+}
+
+.gall_num,
+.gall_date,
+.gall_reply {
+  text-align: center;
+  color: #57606a;
+}
+
+.gall_tit {
+  color: #24292f;
+}
+
+.gall_tit a {
+  color: #24292f;
+}
+
+.gall_tit a:hover {
+  color: #0969da;
+}
+
+.gall_writer {
+  color: #24292f;
+  text-align: center;
+}
+
+.reply_numbox .reply_num {
+  margin-left: 4px;
+  color: #0969da;
+}
+
+/* Pager (bottom) */
+.bottom_paging_wrap {
+  margin-top: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #6e7781;
+}
+
+.bottom_paging_box {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.bottom_paging_box em {
+  font-style: normal;
+  color: #24292f;
+}
+
+.bottom_paging_box a {
+  color: #57606a;
+}
+
+.bottom_paging_box a:hover {
+  color: #0969da;
+}
+
+.bottom_movebox button {
+  border-radius: 999px;
+  border: 1px solid #d0d7de;
+  background: #ffffff;
+  color: #24292f;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.bottom_movebox button:hover {
+  background: #f3f4f6;
+}
+
+/* Post view */
+.view-wrap {
+  margin-top: 12px;
+}
+
+.view-head {
+  border: 1px solid #d0d7de;
+  border-radius: 6px 6px 0 0;
+  border-bottom: none;
+  padding: 10px 12px;
+  background: #f6f8fa;
+}
+
+.view-title {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.view-meta {
+  font-size: 12px;
+  color: #57606a;
+}
+
+.view-body {
+  padding: 12px 12px 16px;
+  border: 1px solid #d0d7de;
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  font-size: 14px;
+  white-space: pre-wrap;
+  background: #ffffff;
+}
+
+/* Comments */
+.comments-wrap {
+  margin-top: 16px;
+}
+
+.comments-wrap h2 {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.comment-item {
+  padding: 8px 4px;
+  border-top: 1px solid #d0d7de;
+}
+
+.comment-meta {
+  font-size: 11px;
+  color: #57606a;
+  margin-bottom: 2px;
+}
+
+.comment-body {
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.comment-form {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #d0d7de;
+}
+
+.comment-form-row {
+  margin-bottom: 6px;
+}
+
+/* Inputs */
+input,
+textarea {
+  font: inherit;
+}
+
+input[type="text"],
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid #d0d7de;
+  background: #ffffff;
+  color: #24292f;
+}
+
+input[type="text"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: #0969da;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.15);
+}
+
+/* Write form */
+.write-wrap {
+  margin-top: 12px;
+}
+
+.write-form label {
+  display: block;
+  font-size: 12px;
+  color: #57606a;
+  margin-bottom: 3px;
+}
+
+.write-form .field {
+  margin-bottom: 10px;
+}
+
+.write-form button[type="submit"] {
+  margin-top: 4px;
+}
+
+.form-box {
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #d0d7de;
+  padding: 12px 14px;
+}
+
+.form-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+

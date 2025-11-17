@@ -3,146 +3,112 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IPFS Community (prototype)</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 1rem;
-      background: #0f172a;
-      color: #e5e7eb;
-    }
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 0.5rem;
-    }
-    .post-form, .post {
-      background: #020617;
-      border-radius: 0.5rem;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1rem;
-      border: 1px solid #1f2937;
-    }
-    input, textarea, button {
-      font: inherit;
-    }
-    input, textarea {
-      width: 100%;
-      box-sizing: border-box;
-      padding: 0.5rem;
-      border-radius: 0.375rem;
-      border: 1px solid #374151;
-      background: #020617;
-      color: #e5e7eb;
-      margin-bottom: 0.5rem;
-    }
-    input:focus, textarea:focus {
-      outline: 1px solid #3b82f6;
-      border-color: #3b82f6;
-    }
-    button {
-      padding: 0.4rem 0.9rem;
-      border-radius: 999px;
-      border: none;
-      background: #3b82f6;
-      color: white;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    button:hover {
-      background: #2563eb;
-    }
-    .meta {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      margin-bottom: 0.25rem;
-    }
-    .title {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.3rem;
-    }
-    .body {
-      white-space: pre-wrap;
-      font-size: 0.9rem;
-      margin-bottom: 0.5rem;
-    }
-    .comments {
-      border-top: 1px solid #1f2937;
-      margin-top: 0.5rem;
-      padding-top: 0.5rem;
-    }
-    .comment {
-      margin-bottom: 0.4rem;
-      font-size: 0.85rem;
-    }
-    .comment .meta {
-      font-size: 0.7rem;
-      margin-bottom: 0.1rem;
-    }
-    .comment-form {
-      margin-top: 0.4rem;
-    }
-    .empty {
-      font-size: 0.9rem;
-      color: #6b7280;
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 0.75rem;
-    }
-  </style>
+  <title>커뮤니티 게시판 - 목록</title>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
-  <div class="header">
-    <h1>IPFS 커뮤니티 (프로토타입)</h1>
-    <span style="font-size:0.8rem;color:#9ca3af;">추후 IPFS 원장 공유 연동 예정</span>
-  </div>
+<body class="darkmode">
+  <div id="top" class="dcwrap list_wrap">
+    <header class="header-bar">
+      <div>
+        <div class="header-bar-title">커뮤니티 게시판</div>
+        <div class="header-bar-sub">자유롭게 글과 이야기를 나누는 공간입니다.</div>
+      </div>
+      <div class="header-bar-actions">
+        <button type="button" class="btn-secondary" onclick="location.href='/?page=1'">전체글</button>
+        <button type="button" class="btn-primary" onclick="location.href='/write'">글쓰기</button>
+      </div>
+    </header>
 
-  <section class="post-form">
-    <h2 style="font-size:1rem;margin-bottom:0.5rem;">새 글 작성</h2>
-    <form method="POST" action="/">
-      <input type="hidden" name="kind" value="post">
-      <input name="author" placeholder="작성자 (기본: anon)">
-      <input name="title" required placeholder="제목">
-      <textarea name="body" rows="4" required placeholder="내용"></textarea>
-      <button type="submit">게시</button>
-    </form>
-  </section>
-
-  <section>
-    {{if not .}}
-      <p class="empty">아직 글이 없습니다. 첫 글을 작성해 보세요.</p>
-    {{else}}
-      {{range .}}
-        <article class="post">
-          <div class="meta">{{.Author}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}</div>
-          <div class="title">{{.Title}}</div>
-          <div class="body">{{.Body}}</div>
-          <div class="comments">
-            {{if .Comments}}
-              {{range .Comments}}
-                <div class="comment">
-                  <div class="meta">{{.Author}} · {{.CreatedAt.Format "15:04:05"}}</div>
-                  <div class="body">{{.Body}}</div>
-                </div>
-              {{end}}
-            {{end}}
-            <form method="POST" action="/" class="comment-form">
-              <input type="hidden" name="kind" value="comment">
-              <input type="hidden" name="post_id" value="{{.ID}}">
-              <input name="author" placeholder="작성자 (기본: anon)">
-              <textarea name="body" rows="2" required placeholder="댓글"></textarea>
-              <button type="submit">댓글 달기</button>
-            </form>
+    <main id="container" class="listwrap">
+      <section class="left_content">
+        <div class="list_array_option clear">
+          <div class="array_tab left_box">
+            <button type="button" class="on">전체글</button>
+            <button type="button" disabled>개념글</button>
+            <button type="button" disabled>공지</button>
           </div>
-        </article>
-      {{end}}
-    {{end}}
-  </section>
+          <div class="right_box">
+            페이지당 20개 · 최신글 우선
+          </div>
+        </div>
+
+        <div class="gall_listwrap list">
+          <table class="gall_list">
+            <caption>게시글 리스트</caption>
+            <colgroup>
+              <col style="width:8%">
+              <col>
+              <col style="width:18%">
+              <col style="width:13%">
+              <col style="width:8%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th scope="col">번호</th>
+                <th scope="col">제목</th>
+                <th scope="col">글쓴이</th>
+                <th scope="col">작성일</th>
+                <th scope="col">댓글</th>
+              </tr>
+            </thead>
+            <tbody class="listwrap2">
+              {{if not .Posts}}
+                <tr>
+                  <td colspan="5" class="gall_tit">
+                    <p class="empty">아직 작성된 글이 없습니다. 첫 글을 남겨보세요.</p>
+                  </td>
+                </tr>
+              {{else}}
+                {{range $i, $p := .Posts}}
+                  <tr class="ub-content">
+                    <td class="gall_num">{{inc $i}}</td>
+                    <td class="gall_tit ub-word">
+                      <a href="/post/{{$p.ID}}">{{$p.Title}}</a>
+                      {{if $p.Comments}}
+                        <a class="reply_numbox" href="/post/{{$p.ID}}">
+                          <span class="reply_num">[{{len $p.Comments}}]</span>
+                        </a>
+                      {{end}}
+                    </td>
+                    <td class="gall_writer ub-writer">
+                      {{if $p.Author}}{{$p.Author}}{{else}}anon{{end}}
+                    </td>
+                    <td class="gall_date">
+                      {{$p.CreatedAt.Format "01-02 15:04"}}
+                    </td>
+                    <td class="gall_reply">
+                      {{len $p.Comments}}
+                    </td>
+                  </tr>
+                {{end}}
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+
+        {{if .TotalPages}}
+        <div class="bottom_paging_wrap">
+          <div class="bottom_paging_box iconpaging">
+            {{if gt .Page 1}}
+              <a href="/?page={{dec .Page}}">이전</a>
+            {{else}}
+              <span>이전</span>
+            {{end}}
+            <span><em>{{.Page}}</em> / {{.TotalPages}}</span>
+            {{if lt .Page .TotalPages}}
+              <a href="/?page={{inc .Page}}">다음</a>
+            {{else}}
+              <span>다음</span>
+            {{end}}
+          </div>
+          <div class="bottom_movebox">
+            <!-- 간단 버전: 현재는 이동 버튼만 표시 -->
+            <button type="button" onclick="location.href='/?page=1'">처음으로</button>
+          </div>
+        </div>
+        {{end}}
+      </section>
+    </main>
+  </div>
 </body>
 </html>
-

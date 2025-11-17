@@ -18,19 +18,19 @@ Pick one of the paths below.
 
 - Go
   - `cd golang`
-  - Start: `go run ./rolling-paper --server-url wss://portal.gosuda.org/relay,wss://portal.thumbgo.kr/relay --name my-rolling --port 8081`
+  - Start: `go run ./rolling-paper --server-url portal.gosuda.org,portal.thumbgo.kr,portal.iwanhae.kr --name my-rolling --port 8081`
   - Local access: open `http://127.0.0.1:8081`
   - Relay access: via your relay UI using the registered name (`--name`)
 
 - JavaScript
   - `make tunnel && cd javascript/rolling-paper && npm install`
-  - Start: `npm start --server-url wss://portal.gosuda.org/relay,wss://portal.thumbgo.kr/relay --name my-js-rolling --port 8082`
+  - Start: `npm start --server-url portal.gosuda.org,portal.thumbgo.kr,portal.iwanhae.kr --name my-js-rolling --port 8082`
   - Local access: `http://127.0.0.1:8082`
   - On first run, it may ask you to install `portal-tunnel` (see Tunneling below).
 
 - Python
   - `make tunnel && cd python/rolling-paper`
-  - Start: `python main.py --server-url wss://portal.gosuda.org/relay,wss://portal.thumbgo.kr/relay --name my-py-rolling --port 8083`
+  - Start: `python main.py --server-url portal.gosuda.org,portal.thumbgo.kr,portal.iwanhae.kr --name my-py-rolling --port 8083`
   - Local access: `http://127.0.0.1:8083`
   - The script can auto-start a tunnel if `portal-tunnel` is installed (configure via `TUNNEL_ENABLED`, `TUNNEL_BIN`).
 

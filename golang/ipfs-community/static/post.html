@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} - 커뮤니티 게시판</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="dcwrap list_wrap">
+    <header class="header-bar">
+      <div>
+        <div class="header-bar-title">커뮤니티 게시판</div>
+        <div class="header-bar-sub">자유롭게 글과 이야기를 나누는 공간입니다.</div>
+      </div>
+      <div class="header-bar-actions">
+        <button type="button" class="btn-secondary" onclick="location.href='/'">&larr; 목록으로</button>
+        <button type="button" class="btn-primary" onclick="location.href='/write'">새 글 작성</button>
+      </div>
+    </header>
+
+    <main class="view-wrap">
+      <section class="left_content">
+        <article>
+          <div class="view-head">
+            <div class="view-title">{{.Title}}</div>
+            <div class="view-meta">
+              {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}
+            </div>
+          </div>
+          <div class="view-body">
+            {{.Body}}
+          </div>
+        </article>
+
+        <section class="comments-wrap">
+          <h2>댓글</h2>
+          {{if .Comments}}
+            {{range .Comments}}
+              <div class="comment-item">
+                <div class="comment-meta">
+                  {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "01-02 15:04"}}
+                </div>
+                <div class="comment-body">{{.Body}}</div>
+              </div>
+            {{end}}
+          {{else}}
+            <p class="empty">아직 댓글이 없습니다. 첫 댓글을 남겨보세요.</p>
+          {{end}}
+
+          <div class="comment-form">
+            <form method="POST" action="">
+              <div class="comment-form-row">
+                <input name="author" type="text" placeholder="작성자 (기본: anon)">
+              </div>
+              <div class="comment-form-row">
+                <textarea name="body" rows="3" required placeholder="댓글 내용을 입력하세요."></textarea>
+              </div>
+              <button type="submit" class="btn-primary">댓글 쓰기</button>
+            </form>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
+

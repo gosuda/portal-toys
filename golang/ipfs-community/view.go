@@ -1,10 +1,12 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"fmt"
 	"html/template"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -33,6 +35,13 @@ type Store struct {
 	posts  map[string]*Post
 	order  []string
 	lastID int64
+}
+
+// IndexPageData is the view model for the list page.
+type IndexPageData struct {
+	Posts      []*Post
+	Page       int
+	TotalPages int
 }
 
 func NewStore() *Store {
@@ -84,6 +93,12 @@ func (s *Store) AddComment(postID, author, body string) *Comment {
 	return &c
 }
 
+func (s *Store) GetPost(id string) *Post {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.posts[id]
+}
+
 func (s *Store) ListPosts() []*Post {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -96,49 +111,182 @@ func (s *Store) ListPosts() []*Post {
 	return out
 }
 
-//go:embed static/index.html
-var indexHTML string
+// ListPostsPaged returns a single page of posts (newest first) and
+// the resolved current page and total pages for pagination UI.
+func (s *Store) ListPostsPaged(page, perPage int) (posts []*Post, currentPage, totalPages int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if perPage <= 0 {
+		perPage = 20
+	}
+	total := len(s.order)
+	if total == 0 {
+		return []*Post{}, 1, 1
+	}
+	totalPages = (total + perPage - 1) / perPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+	start := min((page-1)*perPage, total)
+	end := start + perPage
+	if end > total {
+		end = total
+	}
+	out := make([]*Post, 0, end-start)
+	for _, id := range s.order[start:end] {
+		if p, ok := s.posts[id]; ok {
+			out = append(out, p)
+		}
+	}
+	return out, page, totalPages
+}
 
-var indexTmpl = template.Must(template.New("index").Parse(indexHTML))
+//go:embed static/*
+var staticFS embed.FS
+
+var (
+	indexTmpl = template.Must(
+		template.New("index").
+			Funcs(template.FuncMap{
+				"inc": func(i int) int { return i + 1 },
+				"dec": func(i int) int {
+					if i <= 1 {
+						return 1
+					}
+					return i - 1
+				},
+			}).
+			ParseFS(staticFS, "static/index.html"),
+	)
+	postTmpl  = template.Must(template.New("post").ParseFS(staticFS, "static/post.html"))
+	writeTmpl = template.Must(template.New("write").ParseFS(staticFS, "static/write.html"))
+)
 
 // NewHandler builds the HTTP handler for the community UI.
 func NewHandler(store *Store) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/static/style.css", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/css; charset=utf-8")
+		data, err := staticFS.ReadFile("static/style.css")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(data)
+	})
+
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Only exact "/" goes to the list page; others fall through.
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 		switch r.Method {
 		case http.MethodGet:
-			posts := store.ListPosts()
-			_ = indexTmpl.Execute(w, posts)
+			page := 1
+			if ps := r.URL.Query().Get("page"); ps != "" {
+				if n, err := strconv.Atoi(ps); err == nil && n > 0 {
+					page = n
+				}
+			}
+			posts, cur, totalPages := store.ListPostsPaged(page, 20)
+			data := IndexPageData{
+				Posts:      posts,
+				Page:       cur,
+				TotalPages: totalPages,
+			}
+			_ = indexTmpl.Execute(w, data)
 		case http.MethodPost:
 			if err := r.ParseForm(); err != nil {
 				http.Error(w, "bad form", http.StatusBadRequest)
 				return
 			}
-			kind := r.FormValue("kind")
+			author := r.FormValue("author")
+			if author == "" {
+				author = "anon"
+			}
+			title := r.FormValue("title")
+			body := r.FormValue("body")
+			if title == "" || body == "" {
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			store.AddPost(author, title, body)
+			http.Redirect(w, r, "/", http.StatusSeeOther)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/write", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_ = writeTmpl.Execute(w, nil)
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			author := r.FormValue("author")
+			if author == "" {
+				author = "anon"
+			}
+			title := r.FormValue("title")
+			body := r.FormValue("body")
+			if title == "" || body == "" {
+				http.Redirect(w, r, "/write", http.StatusSeeOther)
+				return
+			}
+			post := store.AddPost(author, title, body)
+			http.Redirect(w, r, "/post/"+post.ID, http.StatusSeeOther)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	mux.HandleFunc("/post/", func(w http.ResponseWriter, r *http.Request) {
+		id := strings.TrimPrefix(r.URL.Path, "/post/")
+		id = strings.TrimSuffix(id, "/")
+		if id == "" {
+			http.NotFound(w, r)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			post := store.GetPost(id)
+			if post == nil {
+				http.NotFound(w, r)
+				return
+			}
+			_ = postTmpl.Execute(w, post)
+		case http.MethodPost:
+			if err := r.ParseForm(); err != nil {
+				http.Error(w, "bad form", http.StatusBadRequest)
+				return
+			}
+			post := store.GetPost(id)
+			if post == nil {
+				http.NotFound(w, r)
+				return
+			}
 			author := r.FormValue("author")
 			if author == "" {
 				author = "anon"
 			}
 			body := r.FormValue("body")
-
-			switch kind {
-			case "post":
-				title := r.FormValue("title")
-				if title == "" || body == "" {
-					http.Redirect(w, r, "/", http.StatusSeeOther)
-					return
-				}
-				store.AddPost(author, title, body)
-			case "comment":
-				postID := r.FormValue("post_id")
-				if postID == "" || body == "" {
-					http.Redirect(w, r, "/", http.StatusSeeOther)
-					return
-				}
-				store.AddComment(postID, author, body)
+			if body == "" {
+				http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
+				return
 			}
-
-			http.Redirect(w, r, "/", http.StatusSeeOther)
+			store.AddComment(id, author, body)
+			http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
