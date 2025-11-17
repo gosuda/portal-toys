@@ -1,13 +1,18 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
+
+//go:embed static
+var staticFS embed.FS
 
 // HTTPServer wires HTTP routes to the room manager.
 type HTTPServer struct {
@@ -30,6 +35,11 @@ func NewHTTPServer(mgr *RoomManager, authKey string) *HTTPServer {
 // Router exposes the HTTP mux used for both Portal relay and optional local serve.
 func (s *HTTPServer) Router() http.Handler {
 	mux := http.NewServeMux()
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		log.Fatal().Err(err).Msg("embed static")
+	}
+	mux.Handle("/", http.FileServer(http.FS(sub)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

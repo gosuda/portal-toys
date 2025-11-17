@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mafia Room</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <img src="placeholder.svg" alt="Mafia illustration" />
+    <div>
+      <h1>Portal Mafia</h1>
+      <p>Portal Relay 기반 멀티룸 마피아 게임 – Go 백엔드 프리뷰</p>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>연결</h2>
+      <form id="connect-form">
+        <label>닉네임
+          <input id="nickname" required placeholder="Detective Kim" />
+        </label>
+        <label>방 이름
+          <input id="room" required placeholder="lobby-1" />
+          <small class="hint">입력한 이름의 방이 없다면 자동으로 생성됩니다.</small>
+        </label>
+        <label>WebSocket 주소
+          <input id="ws-url" placeholder="wss://portal.example/ws" />
+        </label>
+        <button type="submit" class="primary">Connect</button>
+      </form>
+      <div id="status" class="status">Disconnected</div>
+    </section>
+    <section>
+      <h2>게임 로그</h2>
+      <div id="log"></div>
+      <div id="chat-input">
+        <input id="chat-text" placeholder="메시지를 입력하세요" />
+        <button id="chat-send" class="primary">Send</button>
+      </div>
+    </section>
+    <section>
+      <h2>참가자</h2>
+      <ul id="roster"></ul>
+      <h3>조작</h3>
+      <div id="controls">
+        <button data-action="start" class="primary">게임 시작</button>
+        <label>표 투표 대상
+          <input id="vote-target" placeholder="플레이어 이름" />
+        </label>
+        <button data-action="vote">투표하기</button>
+        <label>밤 능력 대상
+          <input id="action-target" placeholder="플레이어 이름" />
+        </label>
+        <button data-action="night">능력 사용</button>
+      </div>
+    </section>
+  </main>
+  <script src="main.js" type="module"></script>
+</body>
+</html>

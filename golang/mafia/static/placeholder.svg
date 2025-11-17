@@ -1,0 +1,6 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <rect width="200" height="200" rx="16" fill="#1f2937"/>
+  <circle cx="100" cy="80" r="35" fill="#4b5563"/>
+  <path d="M30 180c0-39 70-39 70-39s70 0 70 39" fill="#4b5563"/>
+  <text x="100" y="190" font-size="18" text-anchor="middle" fill="#9ca3af">Mafia</text>
+</svg>
