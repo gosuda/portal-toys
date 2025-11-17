@@ -14,3 +14,7 @@ func (j *doctorJob) NightAction(ctx *Context) error {
 	ctx.Room.PushSystem(ctx.Actor, fmt.Sprintf("%s 님을 치료 대상으로 선택했습니다.", ctx.Target))
 	return nil
 }
+func (j *doctorJob) OnNightResolved(ctx *NightResultContext) {}
+func (j *doctorJob) OnDayStart(ctx *PhaseContext)            {}
+func (j *doctorJob) OnVote(ctx *VoteContext)                 {}
+func (j *doctorJob) OnDeath(ctx *DeathContext) bool          { return false }

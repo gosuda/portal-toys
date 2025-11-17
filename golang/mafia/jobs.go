@@ -24,6 +24,11 @@ var defaultJobs = map[string]JobSpec{
 		Team: "citizen",
 		Desc: "밤마다 한 명을 조사해 그 사람의 직업을 확인합니다.",
 	},
+	"군인": {
+		Name: "군인",
+		Team: "citizen",
+		Desc: "마피아의 공격을 한 번 버텨낼 수 있습니다.",
+	},
 	"시민": {
 		Name: "시민",
 		Team: "citizen",

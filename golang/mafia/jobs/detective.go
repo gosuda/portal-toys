@@ -18,3 +18,7 @@ func (j *detectiveJob) NightAction(ctx *Context) error {
 	ctx.Room.PushSystem(ctx.Actor, fmt.Sprintf("%s 님은 %s", ctx.Target, result))
 	return nil
 }
+func (j *detectiveJob) OnNightResolved(ctx *NightResultContext) {}
+func (j *detectiveJob) OnDayStart(ctx *PhaseContext)            {}
+func (j *detectiveJob) OnVote(ctx *VoteContext)                 {}
+func (j *detectiveJob) OnDeath(ctx *DeathContext) bool          { return false }

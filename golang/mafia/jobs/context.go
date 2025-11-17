@@ -5,6 +5,7 @@ type Context struct {
 	Room   RoomState
 	Actor  string
 	Target string
+	Meta   map[string]string
 }
 
 // RoomState is implemented by the Go Room adapter so jobs can interact with state.
@@ -16,6 +17,8 @@ type RoomState interface {
 	BroadcastTeam(team string, ev ServerEvent)
 	SetNightTarget(key, value string)
 	LookupJob(name string) Job
+	SetMeta(key, value string)
+	GetMeta(key string) string
 }
 
 // ServerEvent mirrors the Room broadcast payload (subset used by jobs).
@@ -33,6 +36,10 @@ type Job interface {
 	Team() string
 	Description() string
 	NightAction(ctx *Context) error
+	OnNightResolved(ctx *NightResultContext)
+	OnDayStart(ctx *PhaseContext)
+	OnVote(ctx *VoteContext)
+	OnDeath(ctx *DeathContext) bool
 }
 
 // Factory creates a job instance from spec metadata.
@@ -43,4 +50,28 @@ type Spec struct {
 	Name string
 	Team string
 	Desc string
+}
+
+// Additional lifecycle contexts for future hooks.
+type NightResultContext struct {
+	Room RoomState
+	Meta map[string]string
+}
+
+type PhaseContext struct {
+	Room RoomState
+	Meta map[string]string
+}
+
+type VoteContext struct {
+	Room   RoomState
+	Target string
+	Meta   map[string]string
+}
+
+type DeathContext struct {
+	Room   RoomState
+	Victim string
+	Cause  string
+	Meta   map[string]string
 }

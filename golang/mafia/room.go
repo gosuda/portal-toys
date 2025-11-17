@@ -59,6 +59,7 @@ type GameState struct {
 	DoctorPick    string
 	DetectivePick string
 	Execution     *ExecutionState
+	Meta          map[string]string
 }
 
 type AssignedJob struct {
@@ -95,6 +96,7 @@ func (gs *GameState) Reset() {
 	gs.Alive = make(map[string]bool)
 	gs.Jobs = make(map[string]*JobSpec)
 	gs.Runtime = make(map[string]jobs.Job)
+	gs.Meta = make(map[string]string)
 	gs.Assign = make(map[string]*AssignedJob)
 	gs.Prefix = make(map[string]map[string]string)
 	gs.Vote = make(map[string]int)
@@ -254,7 +256,7 @@ func (r *Room) handleNightAction(c *Client, target string) {
 		c.pushSystem("능력이 없습니다.")
 		return
 	}
-	ctx := &jobs.Context{Room: r.jobAdapter(), Actor: c.name, Target: target}
+	ctx := &jobs.Context{Room: r.jobAdapter(), Actor: c.name, Target: target, Meta: r.state.Meta}
 	if err := job.NightAction(ctx); err != nil {
 		c.pushSystem(err.Error())
 	}
@@ -439,6 +441,12 @@ func (r *Room) beginExecutionVote() {
 func (r *Room) eliminate(name, reason string) {
 	if _, ok := r.state.Alive[name]; !ok {
 		return
+	}
+	if job := r.state.Runtime[name]; job != nil {
+		ctx := &jobs.DeathContext{Room: r.jobAdapter(), Victim: name, Cause: reason, Meta: r.state.Meta}
+		if job.OnDeath(ctx) {
+			return
+		}
 	}
 	delete(r.state.Alive, name)
 	r.broadcast(ServerEvent{Type: "log", Room: r.name, Body: fmt.Sprintf("%s (%s) %s", name, r.state.Assign[name].Name, reason)})

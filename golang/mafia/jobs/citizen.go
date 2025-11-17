@@ -13,3 +13,8 @@ func (j *passiveJob) Description() string { return j.spec.Desc }
 func (j *passiveJob) NightAction(ctx *Context) error {
 	return errors.New("능력이 없습니다.")
 }
+
+func (j *passiveJob) OnNightResolved(ctx *NightResultContext) {}
+func (j *passiveJob) OnDayStart(ctx *PhaseContext)            {}
+func (j *passiveJob) OnVote(ctx *VoteContext)                 {}
+func (j *passiveJob) OnDeath(ctx *DeathContext) bool          { return false }

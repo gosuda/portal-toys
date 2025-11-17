@@ -15,3 +15,7 @@ func (j *mafiaJob) NightAction(ctx *Context) error {
 	ctx.Room.BroadcastTeam("mafia", ServerEvent{Type: "log", Room: ctx.Room.Name(), Body: fmt.Sprintf("마피아가 %s 님을 지목했습니다.", ctx.Target)})
 	return nil
 }
+func (j *mafiaJob) OnNightResolved(ctx *NightResultContext) {}
+func (j *mafiaJob) OnDayStart(ctx *PhaseContext)            {}
+func (j *mafiaJob) OnVote(ctx *VoteContext)                 {}
+func (j *mafiaJob) OnDeath(ctx *DeathContext) bool          { return false }

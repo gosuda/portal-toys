@@ -8,6 +8,7 @@ var jobRegistry = map[string]jobs.Factory{
 	"마피아": jobs.NewMafia,
 	"의사":  jobs.NewDoctor,
 	"경찰":  jobs.NewDetective,
+	"군인":  jobs.NewSoldier,
 	"시민":  jobs.NewCitizen,
 }
 
@@ -61,4 +62,18 @@ func (a *jobRoomAdapter) SetNightTarget(key, value string) {
 
 func (a *jobRoomAdapter) LookupJob(name string) jobs.Job {
 	return a.r.state.Runtime[name]
+}
+
+func (a *jobRoomAdapter) SetMeta(key, value string) {
+	if a.r.state.Meta == nil {
+		a.r.state.Meta = make(map[string]string)
+	}
+	a.r.state.Meta[key] = value
+}
+
+func (a *jobRoomAdapter) GetMeta(key string) string {
+	if a.r.state.Meta == nil {
+		return ""
+	}
+	return a.r.state.Meta[key]
 }
