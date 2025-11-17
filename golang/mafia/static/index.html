@@ -25,8 +25,11 @@
           <input id="room" required placeholder="lobby-1" />
           <small class="hint">입력한 이름의 방이 없다면 자동으로 생성됩니다.</small>
         </label>
-        <label>WebSocket 주소
-          <input id="ws-url" placeholder="wss://portal.example/ws" />
+        <label>연결 모드
+          <select id="ws-mode">
+            <option value="local">로컬 (예: 개발용)</option>
+            <option value="online">온라인 (Portal 릴레이)</option>
+          </select>
         </label>
         <button type="submit" class="primary">Connect</button>
       </form>
@@ -42,18 +45,13 @@
     </section>
     <section>
       <h2>참가자</h2>
-      <ul id="roster"></ul>
+      <p class="hint">플레이어 버튼을 눌러 투표/능력 대상을 선택하세요.</p>
+      <div id="roster" class="roster-grid"></div>
+      <div id="selected-target">선택된 플레이어 없음</div>
       <h3>조작</h3>
       <div id="controls">
         <button data-action="start" class="primary">게임 시작</button>
-        <label>표 투표 대상
-          <input id="vote-target" placeholder="플레이어 이름" />
-        </label>
-        <button data-action="vote">투표하기</button>
-        <label>밤 능력 대상
-          <input id="action-target" placeholder="플레이어 이름" />
-        </label>
-        <button data-action="night">능력 사용</button>
+        <small class="hint">플레이어 버튼을 클릭하면 단계에 따라 자동 실행됩니다.</small>
       </div>
     </section>
   </main>

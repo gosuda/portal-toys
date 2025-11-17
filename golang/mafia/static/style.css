@@ -139,20 +139,36 @@ button.primary:hover {
   margin-bottom: 0;
 }
 
-#roster {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
-#roster li {
-  padding: 0.55rem 0.75rem;
-  border-radius: 10px;
+.roster-grid button {
+  border-radius: 12px;
+  padding: 0.6rem;
+  border: 1px solid rgba(148,163,184,0.2);
   background: rgba(30,41,59,0.7);
-  border: 1px solid rgba(148,163,184,0.15);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.roster-grid button[data-selected="true"] {
+  border-color: #818cf8;
+  background: rgba(99,102,241,0.25);
+  transform: translateY(-2px);
+}
+
+#selected-target {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(15,23,42,0.5);
+  border: 1px solid rgba(148,163,184,0.2);
+  margin-bottom: 0.8rem;
+  font-size: 0.9rem;
 }
 
 #controls {

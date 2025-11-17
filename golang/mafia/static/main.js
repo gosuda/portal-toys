@@ -6,12 +6,13 @@ const chatBtn = document.getElementById('chat-send');
 const connectForm = document.getElementById('connect-form');
 const nicknameEl = document.getElementById('nickname');
 const roomEl = document.getElementById('room');
-const wsUrlEl = document.getElementById('ws-url');
-const voteTargetEl = document.getElementById('vote-target');
-const actionTargetEl = document.getElementById('action-target');
+const wsModeEl = document.getElementById('ws-mode');
 const controlButtons = document.querySelectorAll('#controls button');
+const selectedTargetEl = document.getElementById('selected-target');
 
 let socket;
+let selectedTarget = '';
+let currentPhase = 'lobby';
 
 function log(message, author = 'system') {
   const entry = document.createElement('div');
@@ -37,7 +38,7 @@ function connect(evt) {
     alert('닉네임과 방 이름을 입력하세요.');
     return;
   }
-  const base = wsUrlEl.value.trim() || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+  const base = buildWsBase(wsModeEl.value.trim());
   const url = `${base}/ws?room=${encodeURIComponent(room)}&user=${encodeURIComponent(nickname)}`;
   socket = new WebSocket(url);
   socket.addEventListener('open', () => setStatus('Connected', 'ok'));
@@ -79,7 +80,8 @@ function handleMessage(raw) {
       log(data.body || '역할 알림', 'role');
       break;
     case 'phase':
-      log(`Phase → ${data.phase}: ${data.body || ''}`);
+      currentPhase = data.phase || currentPhase;
+      log(`Phase → ${currentPhase}: ${data.body || ''}`);
       break;
     case 'state':
       log(`상태 업데이트: ${JSON.stringify(data.state)}`);
@@ -91,11 +93,25 @@ function handleMessage(raw) {
 
 function renderRoster(players) {
   rosterEl.innerHTML = '';
+  if (!players.includes(selectedTarget)) {
+    selectedTarget = '';
+    updateSelectedDisplay();
+  }
   players.forEach(name => {
-    const li = document.createElement('li');
-    li.textContent = name;
-    rosterEl.appendChild(li);
+    const btn = document.createElement('button');
+    btn.textContent = name;
+    btn.dataset.selected = String(name === selectedTarget);
+    btn.addEventListener('click', () => handlePlayerInteraction(name));
+    rosterEl.appendChild(btn);
   });
+}
+
+function updateSelectedDisplay() {
+  if (selectedTarget) {
+    selectedTargetEl.textContent = `선택된 대상: ${selectedTarget}`;
+  } else {
+    selectedTargetEl.textContent = '선택된 플레이어 없음';
+  }
 }
 
 connectForm.addEventListener('submit', connect);
@@ -112,17 +128,28 @@ chatInput.addEventListener('keydown', evt => {
   }
 });
 
+function handlePlayerInteraction(name) {
+  selectedTarget = name;
+  updateSelectedDisplay();
+  if (currentPhase === 'vote' || currentPhase === 'defense') {
+    send('vote', { target: name });
+  } else if (currentPhase === 'night') {
+    send('action', { target: name });
+  }
+}
+
 controlButtons.forEach(btn => {
   btn.addEventListener('click', () => {
-    const action = btn.dataset.action;
-    if (action === 'start') {
+    if (btn.dataset.action === 'start') {
       send('start');
-    } else if (action === 'vote') {
-      send('vote', { target: voteTargetEl.value.trim() });
-    } else if (action === 'night') {
-      send('action', { target: actionTargetEl.value.trim() });
     }
   });
 });
 
 setStatus('Disconnected');
+function buildWsBase(mode) {
+  if (mode === 'online') {
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+  }
+  return `${location.protocol === 'https:' ? 'wss' : 'ws'}://127.0.0.1:${location.port || 80}`;
+}
