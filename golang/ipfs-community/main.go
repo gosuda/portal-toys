@@ -52,15 +52,15 @@ func main() {
 }
 
 func runCommunity(cmd *cobra.Command, args []string) error {
-	ledger, err := openIPFSLedger(flagDBPath)
-	if err != nil {
-		return fmt.Errorf("open ipfs ledger: %w", err)
+	bootCtx := context.Background()
+	if err := InitStore(flagDBPath); err != nil {
+		return err
 	}
-	if err := loadFromLedger(context.Background(), ledger); err != nil {
-		log.Warn().Err(err).Msg("[community] failed to bootstrap from ipfs ledger")
+	if err := LoadSnapshot(bootCtx); err != nil {
+		log.Warn().Err(err).Msg("[community] failed to bootstrap from local snapshot")
 	}
 
-	router := NewHandler(ledger)
+	router := NewHandler()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

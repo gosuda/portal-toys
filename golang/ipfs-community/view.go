@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"html/template"
 	"net/http"
 	"strconv"
@@ -20,6 +21,16 @@ var (
 			}
 			return i - 1
 		},
+		"score": func(up, down int) string {
+			n := up - down
+			if n > 0 {
+				return fmt.Sprintf("+%d", n)
+			}
+			if n < 0 {
+				return fmt.Sprintf("-%d", -n)
+			}
+			return "0"
+		},
 		// Renders trusted HTML in post body (no escaping).
 		"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 	}
@@ -36,7 +47,7 @@ var (
 )
 
 // NewHandler builds the HTTP handler for the community UI.
-func NewHandler(ledger *ipfsLedger) http.Handler {
+func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/static/style.css", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
@@ -62,9 +73,27 @@ func NewHandler(ledger *ipfsLedger) http.Handler {
 					page = n
 				}
 			}
-			posts, cur, totalPages := ListPostsPaged(page, 20)
+
+			const perPage = 20
+			postsPage, cur, totalPages := ListPostsPaged(page, perPage)
+
+			all := ListPosts()
+			total := len(all)
+			startNumber := total - (cur-1)*perPage
+			if startNumber < 1 {
+				startNumber = len(postsPage)
+			}
+
+			rows := make([]*IndexPost, 0, len(postsPage))
+			for i, p := range postsPage {
+				rows = append(rows, &IndexPost{
+					Post:   p,
+					Number: startNumber - i,
+				})
+			}
+
 			data := IndexPageData{
-				Posts:      posts,
+				Posts:      rows,
 				Page:       cur,
 				TotalPages: totalPages,
 			}
@@ -78,14 +107,20 @@ func NewHandler(ledger *ipfsLedger) http.Handler {
 			if author == "" {
 				author = "anon"
 			}
+			if len([]rune(author)) > 8 {
+				author = string([]rune(author)[:8])
+			}
 			title := r.FormValue("title")
+			if len([]rune(title)) > 140 {
+				title = string([]rune(title)[:140])
+			}
 			body := r.FormValue("body")
 			if title == "" || body == "" {
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
 			AddPost(author, title, body)
-			_ = saveToLedger(r.Context(), ledger)
+			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -105,18 +140,56 @@ func NewHandler(ledger *ipfsLedger) http.Handler {
 			if author == "" {
 				author = "anon"
 			}
+			if len([]rune(author)) > 8 {
+				author = string([]rune(author)[:8])
+			}
 			title := r.FormValue("title")
+			if len([]rune(title)) > 140 {
+				title = string([]rune(title)[:140])
+			}
 			body := r.FormValue("body")
 			if title == "" || body == "" {
 				http.Redirect(w, r, "/write", http.StatusSeeOther)
 				return
 			}
 			post := AddPost(author, title, body)
-			_ = saveToLedger(r.Context(), ledger)
+			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/post/"+post.ID, http.StatusSeeOther)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// 추천 / 비추천 처리
+	mux.HandleFunc("/post/vote/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		path := strings.TrimPrefix(r.URL.Path, "/post/vote/")
+		path = strings.TrimSuffix(path, "/")
+		parts := strings.Split(path, "/")
+		if len(parts) != 2 {
+			http.NotFound(w, r)
+			return
+		}
+		dir, id := parts[0], parts[1]
+		var upDelta, downDelta int
+		switch dir {
+		case "up":
+			upDelta = 1
+		case "down":
+			downDelta = 1
+		default:
+			http.NotFound(w, r)
+			return
+		}
+		if VotePost(id, upDelta, downDelta) == nil {
+			http.NotFound(w, r)
+			return
+		}
+		_ = SaveSnapshot(r.Context())
+		http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 	})
 
 	mux.HandleFunc("/post/", func(w http.ResponseWriter, r *http.Request) {
@@ -149,13 +222,16 @@ func NewHandler(ledger *ipfsLedger) http.Handler {
 			if author == "" {
 				author = "anon"
 			}
+			if len([]rune(author)) > 8 {
+				author = string([]rune(author)[:8])
+			}
 			body := r.FormValue("body")
 			if body == "" {
 				http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 				return
 			}
 			AddComment(id, author, body)
-			_ = saveToLedger(r.Context(), ledger)
+			_ = SaveSnapshot(r.Context())
 			http.Redirect(w, r, "/post/"+id, http.StatusSeeOther)
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

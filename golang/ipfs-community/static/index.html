@@ -6,7 +6,7 @@
   <title>커뮤니티 게시판 - 목록</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body class="darkmode">
+<body>
   <div id="top" class="dcwrap list_wrap">
     <header class="header-bar">
       <div>
@@ -27,9 +27,6 @@
             <button type="button" disabled>개념글</button>
             <button type="button" disabled>공지</button>
           </div>
-          <div class="right_box">
-            페이지당 20개 · 최신글 우선
-          </div>
         </div>
 
         <div class="gall_listwrap list">
@@ -41,6 +38,7 @@
               <col style="width:18%">
               <col style="width:13%">
               <col style="width:8%">
+              <col style="width:8%">
             </colgroup>
             <thead>
               <tr>
@@ -49,19 +47,20 @@
                 <th scope="col">글쓴이</th>
                 <th scope="col">작성일</th>
                 <th scope="col">댓글</th>
+                <th scope="col">추천</th>
               </tr>
             </thead>
             <tbody class="listwrap2">
               {{if not .Posts}}
                 <tr>
-                  <td colspan="5" class="gall_tit">
-                    <p class="empty">아직 작성된 글이 없습니다. 첫 글을 남겨보세요.</p>
+                  <td colspan="6" class="gall_tit">
+                    <p class="empty">아직 작성된 글이 없습니다. 첫 글을 남겨보세요!</p>
                   </td>
                 </tr>
               {{else}}
                 {{range $i, $p := .Posts}}
                   <tr class="ub-content">
-                    <td class="gall_num">{{inc $i}}</td>
+                    <td class="gall_num">{{$p.Number}}</td>
                     <td class="gall_tit ub-word">
                       <a href="/post/{{$p.ID}}">{{$p.Title}}</a>
                       {{if $p.Comments}}
@@ -77,7 +76,10 @@
                       {{$p.CreatedAt.Format "01-02 15:04"}}
                     </td>
                     <td class="gall_reply">
-                      {{len $p.Comments}}
+                      <span class="reply-count">{{len $p.Comments}}</span>
+                    </td>
+                    <td class="gall_reply">
+                      <span class="score">{{score $p.Upvotes $p.Downvotes}}</span>
                     </td>
                   </tr>
                 {{end}}
@@ -102,7 +104,6 @@
             {{end}}
           </div>
           <div class="bottom_movebox">
-            <!-- 간단 버전: 현재는 이동 버튼만 표시 -->
             <button type="button" onclick="location.href='/?page=1'">처음으로</button>
           </div>
         </div>
@@ -112,3 +113,4 @@
   </div>
 </body>
 </html>
+

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}} - 커뮤니티 게시판</title>
+  <title>{{.Title}} - 커뮤니티 게시글</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -15,7 +15,7 @@
       </div>
       <div class="header-bar-actions">
         <button type="button" class="btn-secondary" onclick="location.href='/'">&larr; 목록으로</button>
-        <button type="button" class="btn-primary" onclick="location.href='/write'">새 글 작성</button>
+        <button type="button" class="btn-primary" onclick="location.href='/write'">새 글 쓰기</button>
       </div>
     </header>
 
@@ -28,7 +28,17 @@
               {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}
             </div>
           </div>
-          <div class="view-body">{{- safeHTML .Body -}}</div>
+          <div class="view-body">
+            {{- safeHTML .Body -}}
+            <div class="view-votes">
+              <form method="POST" action="/post/vote/up/{{.ID}}" class="vote-form">
+                <button type="submit" class="btn-vote btn-thumb">👍 {{.Upvotes}}</button>
+              </form>
+              <form method="POST" action="/post/vote/down/{{.ID}}" class="vote-form">
+                <button type="submit" class="btn-vote btn-unthumb">👎 {{.Downvotes}}</button>
+              </form>
+            </div>
+          </div>
         </article>
 
         <section class="comments-wrap">
@@ -37,7 +47,8 @@
             {{range .Comments}}
               <div class="comment-item">
                 <div class="comment-meta">
-                  {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "01-02 15:04"}}
+                  <div class="comment-author">{{if .Author}}{{.Author}}{{else}}anon{{end}}</div>
+                  <div class="comment-date">{{.CreatedAt.Format "01-02 15:04"}}</div>
                 </div>
                 <div class="comment-body">{{- .Body -}}</div>
               </div>
@@ -52,7 +63,7 @@
                 <input name="author" type="text" placeholder="작성자 (기본: anon)">
               </div>
               <div class="comment-form-row">
-                <textarea name="body" rows="3" required placeholder="댓글 내용을 입력하세요."></textarea>
+                <textarea name="body" rows="3" required placeholder="댓글 내용을 입력해 주세요."></textarea>
               </div>
               <button type="submit" class="btn-primary">댓글 쓰기</button>
             </form>

@@ -25,15 +25,15 @@
           <form method="POST" action="/write">
             <div class="field">
               <label for="author">작성자 (선택)</label>
-              <input id="author" name="author" type="text" placeholder="기본값: anon">
+              <input id="author" name="author" type="text" placeholder="기본값: anon" maxlength="8">
             </div>
             <div class="field">
               <label for="title">제목</label>
-              <input id="title" name="title" type="text" required placeholder="제목을 입력하세요.">
+              <input id="title" name="title" type="text" required placeholder="제목을 입력해 주세요." maxlength="140">
             </div>
             <div class="field">
               <label for="body">내용</label>
-              <textarea id="body" name="body" rows="10" required placeholder="내용을 입력하세요."></textarea>
+              <textarea id="body" name="body" rows="10" required placeholder="내용을 입력해 주세요."></textarea>
             </div>
             <button type="submit" class="btn-primary">게시하기</button>
           </form>
@@ -43,4 +43,3 @@
   </div>
 </body>
 </html>
-

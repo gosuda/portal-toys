@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cockroachdb/pebble/v2"
 )
 
 // Post is a simple community post with optional comments.
@@ -17,6 +20,8 @@ type Post struct {
 	Title     string
 	Body      string
 	CreatedAt time.Time
+	Upvotes   int
+	Downvotes int
 	Comments  []Comment
 }
 
@@ -28,9 +33,16 @@ type Comment struct {
 	CreatedAt time.Time
 }
 
+// IndexPost is a view model for the list page, carrying
+// a display number in addition to the post contents.
+type IndexPost struct {
+	*Post
+	Number int
+}
+
 // IndexPageData is the view model for the list page.
 type IndexPageData struct {
-	Posts      []*Post
+	Posts      []*IndexPost
 	Page       int
 	TotalPages int
 }
@@ -40,11 +52,11 @@ var (
 	posts   = make(map[string]*Post)
 	order   = make([]string, 0, 64)
 	lastID  int64
+
+	db *pebble.DB
 )
 
 func nextID() string {
-	storeMu.Lock()
-	defer storeMu.Unlock()
 	lastID++
 	// Timestamp plus zero-padded counter; string-sorts by creation time.
 	return time.Now().Format("20060102150405") + "-" + fmt.Sprintf("%06d", lastID)
@@ -54,6 +66,14 @@ func AddPost(author, title, body string) *Post {
 	storeMu.Lock()
 	defer storeMu.Unlock()
 	body = strings.TrimSpace(body)
+	if len(order) > 0 {
+		if last := posts[order[0]]; last != nil {
+			if last.Author == author && last.Title == title && last.Body == body {
+				// Reuse the existing post instead of creating a new one.
+				return last
+			}
+		}
+	}
 	id := nextID()
 	p := &Post{
 		ID:        id,
@@ -86,6 +106,26 @@ func AddComment(postID, author, body string) *Comment {
 	}
 	p.Comments = append(p.Comments, c)
 	return &c
+}
+
+// VotePost applies a delta to the upvote/downvote counters for a post.
+// Positive deltas increase the counters; negative deltas decrease them.
+func VotePost(id string, upDelta, downDelta int) *Post {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	p, ok := posts[id]
+	if !ok {
+		return nil
+	}
+	p.Upvotes += upDelta
+	p.Downvotes += downDelta
+	if p.Upvotes < 0 {
+		p.Upvotes = 0
+	}
+	if p.Downvotes < 0 {
+		p.Downvotes = 0
+	}
+	return p
 }
 
 func GetPost(id string) *Post {
@@ -149,21 +189,22 @@ type snapshot struct {
 	Posts []*Post `json:"posts"`
 }
 
-func loadFromLedger(ctx context.Context, ledger *ipfsLedger) error {
-	if ledger == nil {
+// InitStore initializes the Pebble-backed datastore for snapshots.
+func InitStore(dir string) error {
+	if dir == "" {
 		return nil
 	}
-	root, err := ledger.RootCID(ctx)
+	dbPath := filepath.Join(dir, "pebble-snapshot")
+	pdb, err := pebble.Open(dbPath, &pebble.Options{})
 	if err != nil {
-		return err
+		return fmt.Errorf("open pebble db: %w", err)
 	}
-	if !root.Defined() {
-		return nil
-	}
-	data, err := ledger.GetRaw(ctx, root)
-	if err != nil {
-		return err
-	}
+	db = pdb
+	return nil
+}
+
+// LoadSnapshotBytes applies a snapshot JSON blob (same format as SaveSnapshot uses).
+func LoadSnapshotBytes(data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
@@ -190,17 +231,32 @@ func loadFromLedger(ctx context.Context, ledger *ipfsLedger) error {
 	return nil
 }
 
-func saveToLedger(ctx context.Context, ledger *ipfsLedger) error {
-	if ledger == nil {
+// LoadSnapshot loads the last stored snapshot from the Pebble datastore, if any.
+func LoadSnapshot(ctx context.Context) error {
+	if db == nil {
+		return nil
+	}
+	data, closer, err := db.Get([]byte("snapshot-json"))
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil
+		}
+		return fmt.Errorf("load snapshot: %w", err)
+	}
+	defer closer.Close()
+	buf := make([]byte, len(data))
+	copy(buf, data)
+	return LoadSnapshotBytes(buf)
+}
+
+// SaveSnapshot writes the current snapshot to the Pebble datastore.
+func SaveSnapshot(ctx context.Context) error {
+	if db == nil {
 		return nil
 	}
 	data, err := json.Marshal(snapshot{Posts: ListPosts()})
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal snapshot: %w", err)
 	}
-	c, err := ledger.PutRaw(ctx, data)
-	if err != nil {
-		return err
-	}
-	return ledger.SetRootCID(ctx, c)
+	return db.Set([]byte("snapshot-json"), data, pebble.Sync)
 }
