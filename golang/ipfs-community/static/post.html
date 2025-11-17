@@ -28,9 +28,7 @@
               {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "2006-01-02 15:04:05"}}
             </div>
           </div>
-          <div class="view-body">
-            {{.Body}}
-          </div>
+          <div class="view-body">{{- safeHTML .Body -}}</div>
         </article>
 
         <section class="comments-wrap">
@@ -41,7 +39,7 @@
                 <div class="comment-meta">
                   {{if .Author}}{{.Author}}{{else}}anon{{end}} · {{.CreatedAt.Format "01-02 15:04"}}
                 </div>
-                <div class="comment-body">{{.Body}}</div>
+                <div class="comment-body">{{- .Body -}}</div>
               </div>
             {{end}}
           {{else}}
@@ -65,4 +63,3 @@
   </div>
 </body>
 </html>
-

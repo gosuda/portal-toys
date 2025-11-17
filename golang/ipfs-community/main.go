@@ -37,8 +37,8 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "community-ipfs", "backend display name")
-	flags.StringVar(&flagDBPath, "db-path", "", "optional directory for Pebble-backed IPFS ledger")
+	flags.StringVar(&flagName, "name", "ipfs-community", "backend display name")
+	flags.StringVar(&flagDBPath, "db-path", "ipfs-community/data", "optional directory for Pebble-backed IPFS ledger")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagDescription, "description", "Portal demo: IPFS-backed community board", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Community IPFS", "lease owner")
@@ -52,9 +52,15 @@ func main() {
 }
 
 func runCommunity(cmd *cobra.Command, args []string) error {
-	store := NewStore()
+	ledger, err := openIPFSLedger(flagDBPath)
+	if err != nil {
+		return fmt.Errorf("open ipfs ledger: %w", err)
+	}
+	if err := loadFromLedger(context.Background(), ledger); err != nil {
+		log.Warn().Err(err).Msg("[community] failed to bootstrap from ipfs ledger")
+	}
 
-	router := NewHandler(store)
+	router := NewHandler(ledger)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
