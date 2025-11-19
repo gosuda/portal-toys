@@ -1,17 +1,70 @@
 package main
 
 import (
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
+
+// sanitizeString removes control characters and limits string length to prevent issues.
+// It preserves valid Unicode including emojis, CJK characters, and printable symbols.
+func sanitizeString(s string, maxLen int) string {
+	if s == "" {
+		return ""
+	}
+
+	// Remove control characters but keep tabs, newlines, and valid Unicode
+	var builder strings.Builder
+	builder.Grow(len(s))
+
+	for _, r := range s {
+		// Skip control characters except tab and newline
+		if unicode.IsControl(r) && r != '\t' && r != '\n' {
+			continue
+		}
+		// Skip invalid Unicode replacement character if it appears
+		if r == unicode.ReplacementChar {
+			continue
+		}
+		builder.WriteRune(r)
+	}
+
+	result := builder.String()
+
+	// Trim to max length (count runes, not bytes)
+	if len([]rune(result)) > maxLen {
+		runes := []rune(result)
+		result = string(runes[:maxLen])
+	}
+
+	return strings.TrimSpace(result)
+}
+
+// writeJSON writes a JSON-encoded message to the websocket connection.
+// Unlike gorilla's default WriteJSON, this disables HTML escaping to preserve
+// characters like <, >, &, etc. in their original form.
+func writeJSON(conn *websocket.Conn, v interface{}) error {
+	w, err := conn.NextWriter(websocket.TextMessage)
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false) // Don't escape <, >, &, etc.
+	if err := enc.Encode(v); err != nil {
+		return err
+	}
+	return w.Close()
+}
 
 // simple in-memory chat hub
 type hub struct {
@@ -77,7 +130,7 @@ func (h *hub) broadcast(m message) {
 		if mu != nil {
 			mu.Lock()
 			_ = c.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			_ = c.WriteJSON(m)
+			_ = writeJSON(c, m)
 			mu.Unlock()
 		}
 	}
@@ -173,7 +226,7 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 	for _, m := range backlog {
 		mu.Lock()
 		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-		_ = conn.WriteJSON(m)
+		_ = writeJSON(conn, m)
 		mu.Unlock()
 	}
 
@@ -250,11 +303,16 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 			// Reset read deadline on each message
 			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			if err := conn.ReadJSON(&req); err != nil {
+				log.Debug().Err(err).Msg("[chat] failed to read JSON from client")
 				return
 			}
+			// Sanitize nickname: limit length and remove control characters
+			req.User = sanitizeString(req.User, 100)
 			if req.User == "" {
 				req.User = "anon"
 			}
+			// Sanitize message text: limit length and remove control characters
+			req.Text = sanitizeString(req.Text, 10000)
 			if req.UID == "" {
 				// Fallback to a per-connection unique id if client didn't provide one
 				req.UID = strconv.FormatInt(time.Now().UnixNano(), 10)
@@ -269,7 +327,7 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 					h.userConns[req.UID] = map[*websocket.Conn]struct{}{}
 				}
 				if len(h.userConns[req.UID]) == 0 {
-					announce = true
+						announce = true
 				}
 				h.userConns[req.UID][conn] = struct{}{}
 			}
@@ -314,7 +372,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Simple Chat — {{.Name}}</title>
   <style>
     :root{
@@ -394,7 +452,17 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .users-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
     .users-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
     .userspill { cursor: pointer; }
-    .promptline { display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--border); font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .promptline { display:flex; align-items:center; gap:8px; padding:12px 14px; border-top:1px solid var(--border); font-family: 'D2Coding', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--panel); }
+
+    /* Mobile: Fixed input at bottom */
+    @media (max-width: 640px) {
+      body { padding: 0; }
+      .wrap { max-width: 100%; margin: 0; ; display: flex; flex-direction: column; height: 100vh }
+      .header { padding: 12px; margin-bottom: 0; }
+      .term { flex: 1; display: flex; flex-direction: column; height: 100dvh; border-radius: 0; border-left: none; border-right: none; }
+      .screen { flex: 1; overflow-y: auto; }
+      .new-message-bubble { bottom: calc(60px + 16px); }
+    }
     .image-upload-btn { width: 20px; height: 20px; padding: 2px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; transition: all 0.2s ease; }
     .image-upload-btn:hover { background: var(--panel); border-color: var(--accent); }
     .image-upload-btn svg { width: 16px; height: 16px; fill: var(--fg); }
@@ -450,8 +518,8 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       .nick input { width: 100%; font-size: 16px; }
       .nick button { font-size: 16px; }
       :root { --chat-height: 50vh; }
-      .screen { height: var(--chat-height); font-size: 13px; }
-      .resizer { height: 14px; }
+      .screen { flex: 1; font-size: 13px; }
+      .resizer { display: none }
     }
   </style>
 </head>
@@ -681,6 +749,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     function renderRoster(users){
       onlineUsers = users || [];
       const count = onlineUsers.length;
+      logWS('INFO', 'Roster updated: ' + count + ' users online', users);
       if (usersCount) usersCount.textContent = String(count);
     }
 
@@ -722,7 +791,11 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     let appendTimer = null;
 
     function append(msg){
-      if (msg.event === 'roster') { renderRoster(msg.users || []); return; }
+      if (msg.event === 'roster') {
+        logWS('DEBUG', 'Roster event received with ' + (msg.users ? msg.users.length : 0) + ' users', msg.users);
+        renderRoster(msg.users || []);
+        return;
+      }
 
       const div = document.createElement('div');
       div.className = 'line';
@@ -733,10 +806,12 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       let isActualMessage = false;
 
       if (msg.event === 'rename') {
+        logWS('DEBUG', 'Rename event (not displayed): ' + nick);
         // Don't show rename events
         return;
       } else if (msg.event === 'joined' || msg.event === 'left') {
         const verb = msg.event === 'joined' ? 'joined' : 'left';
+        logWS('INFO', 'User ' + verb + ': ' + nick);
         div.className = 'line event';
         div.innerHTML = '<span class="ts">[' + ts + ']</span> system: ' + sanitizeNickname(nick) + ' ' + verb;
       } else {
@@ -865,45 +940,82 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     let reconnectTimer = null;
     let reconnectAttempts = 0;
     let heartbeatTimer = null;
+    let connectionStartTime = 0;
+    let lastMessageTime = 0;
+    let messageCount = 0;
+    let heartbeatCount = 0;
     const maxReconnectDelay = 30000; // 30 seconds max
     const initialReconnectDelay = 1000; // 1 second initial
     const heartbeatInterval = 20000; // 20 seconds - send heartbeat to keep connection alive (prevents proxy timeouts)
 
+    function logWS(level, message, data) {
+      const timestamp = new Date().toISOString();
+      const wsState = ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'NULL';
+      const prefix = '[' + timestamp + '] [' + level + '] [WS:' + wsState + ']';
+
+      if (data) {
+        console.log(prefix, message, data);
+      } else {
+        console.log(prefix, message);
+      }
+    }
+
     function getReconnectDelay() {
       // Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s, 30s...
       const delay = Math.min(initialReconnectDelay * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+      logWS('DEBUG', 'Reconnect delay calculated: ' + delay + 'ms (attempt ' + reconnectAttempts + ')');
       return delay;
     }
 
     function updateConnectionStatus(connected, reconnecting = false) {
+      logWS('INFO', 'Connection status update: connected=' + connected + ', reconnecting=' + reconnecting);
+
       const greenDot = document.querySelector('.dot.green');
       const yellowDot = document.querySelector('.dot.yellow');
+      const redDot = document.querySelector('.dot.red');
+
       if (greenDot) {
         greenDot.style.opacity = connected ? '1' : '0.3';
+      }
+      if (redDot) {
+        redDot.style.opacity = (!connected && !reconnecting) ? '1' : '0.3';
       }
       if (yellowDot && reconnecting) {
         // Pulse animation for reconnecting state
         yellowDot.style.animation = 'pulse 1.5s ease-in-out infinite';
+        yellowDot.style.opacity = '1';
       } else if (yellowDot) {
         yellowDot.style.animation = '';
+        yellowDot.style.opacity = '1';
       }
     }
 
     function startHeartbeat() {
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      logWS('INFO', 'Starting heartbeat timer (interval: ' + heartbeatInterval + 'ms)');
+      if (heartbeatTimer) {
+        logWS('WARN', 'Clearing existing heartbeat timer');
+        clearInterval(heartbeatTimer);
+      }
+      heartbeatCount = 0;
       heartbeatTimer = setInterval(() => {
         if (ws && ws.readyState === WebSocket.OPEN) {
+          heartbeatCount++;
+          logWS('DEBUG', 'Sending heartbeat #' + heartbeatCount);
           try {
             // Send empty message as heartbeat (text is empty, so server won't broadcast)
             ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
+            logWS('DEBUG', 'Heartbeat sent successfully');
           } catch(e) {
-            console.error('Heartbeat failed:', e);
+            logWS('ERROR', 'Heartbeat failed', e);
           }
+        } else {
+          logWS('WARN', 'Heartbeat skipped: WebSocket not OPEN (state: ' + (ws ? ws.readyState : 'null') + ')');
         }
       }, heartbeatInterval);
     }
 
     function stopHeartbeat() {
+      logWS('INFO', 'Stopping heartbeat timer (sent ' + heartbeatCount + ' heartbeats)');
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
@@ -911,59 +1023,135 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     }
 
     function connectWebSocket() {
+      logWS('INFO', '=== connectWebSocket() called ===');
+      logWS('DEBUG', 'Current state: reconnectAttempts=' + reconnectAttempts + ', reconnectTimer=' + (reconnectTimer ? 'active' : 'null'));
+
       if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
-        return; // Already connected or connecting
+        logWS('WARN', 'Already connected or connecting, skipping. State: ' + ws.readyState);
+        return;
       }
 
-      ws = new WebSocket(wsURL);
+      connectionStartTime = Date.now();
+      messageCount = 0;
+      logWS('INFO', 'Creating new WebSocket connection to: ' + wsURL);
+
+      try {
+        ws = new WebSocket(wsURL);
+        logWS('INFO', 'WebSocket object created, readyState: ' + ws.readyState);
+      } catch(e) {
+        logWS('ERROR', 'Failed to create WebSocket', e);
+        return;
+      }
 
       ws.onopen = () => {
+        const connectionTime = Date.now() - connectionStartTime;
+        logWS('INFO', '✓ WebSocket OPENED (took ' + connectionTime + 'ms)');
         reconnectAttempts = 0;
         updateConnectionStatus(true);
-        startHeartbeat(); // Start sending periodic heartbeats
+        startHeartbeat();
+
+        logWS('DEBUG', 'Sending initial user info message');
         try{
           ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
-        }catch(_){ }
+          logWS('DEBUG', 'Initial message sent successfully');
+        }catch(e){
+          logWS('ERROR', 'Failed to send initial message', e);
+        }
       };
 
       ws.onmessage = (e) => {
-        try{ append(JSON.parse(e.data)); }catch(_){ }
+        messageCount++;
+        lastMessageTime = Date.now();
+        const timeSinceConnection = lastMessageTime - connectionStartTime;
+        logWS('DEBUG', 'Message #' + messageCount + ' received (connection age: ' + Math.round(timeSinceConnection/1000) + 's)');
+
+        try{
+          const msg = JSON.parse(e.data);
+          append(msg);
+        }catch(err){
+          logWS('ERROR', 'Failed to parse message', err);
+
+          // Try to find the problematic position
+          const errorMatch = err.message.match(/position (\d+)/);
+          if (errorMatch) {
+            const pos = parseInt(errorMatch[1]);
+            const start = Math.max(0, pos - 50);
+            const end = Math.min(e.data.length, pos + 50);
+            const context = e.data.substring(start, end);
+            logWS('ERROR', 'Error at position ' + pos + ', context:', context);
+            logWS('ERROR', 'Character at error:', e.data.charCodeAt(pos) + ' (' + e.data.charAt(pos) + ')');
+          }
+
+          logWS('ERROR', 'Full message length:', e.data.length);
+          logWS('ERROR', 'Message preview:', e.data.substring(0, 200));
+
+          // Don't crash - just skip this message
+          showConnectionMessage('메시지 파싱 오류 발생 (건너뜀)');
+        }
       };
 
       ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
+        const timeSinceConnection = Date.now() - connectionStartTime;
+        logWS('ERROR', '✗ WebSocket ERROR (connection age: ' + Math.round(timeSinceConnection/1000) + 's)', err);
       };
 
       ws.onclose = (e) => {
+        const timeSinceConnection = Date.now() - connectionStartTime;
+        logWS('INFO', '✗ WebSocket CLOSED (connection age: ' + Math.round(timeSinceConnection/1000) + 's)');
+        logWS('INFO', 'Close details: code=' + e.code + ', reason="' + e.reason + '", wasClean=' + e.wasClean);
+        logWS('INFO', 'Stats: received ' + messageCount + ' messages, sent ' + heartbeatCount + ' heartbeats');
+
         updateConnectionStatus(false, false);
-        stopHeartbeat(); // Stop heartbeat when disconnected
+        stopHeartbeat();
 
         // Always attempt to reconnect regardless of close code
         const delay = getReconnectDelay();
         reconnectAttempts++;
+        logWS('INFO', 'Scheduling reconnect in ' + delay + 'ms (attempt #' + reconnectAttempts + ')');
         updateConnectionStatus(false, true);
 
-        if (reconnectTimer) clearTimeout(reconnectTimer);
+        if (reconnectTimer) {
+          logWS('WARN', 'Clearing existing reconnect timer');
+          clearTimeout(reconnectTimer);
+        }
         reconnectTimer = setTimeout(() => {
+          logWS('DEBUG', 'Reconnect timer fired');
+          reconnectTimer = null;
           connectWebSocket();
         }, delay);
       };
     }
 
     // Initial connection
+    logWS('INFO', '========== Application Starting ==========');
+    logWS('INFO', 'Client UID: ' + clientUID);
+    logWS('INFO', 'WebSocket URL: ' + wsURL);
+    logWS('INFO', 'Heartbeat interval: ' + heartbeatInterval + 'ms');
     connectWebSocket();
 
     function send(){
       const payload = { user: (user.value || 'anon'), text: cmd.value.trim(), uid: clientUID };
-      if(!payload.text) return;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        return; // Can't send if not connected
+      if(!payload.text) {
+        logWS('DEBUG', 'send() called with empty text, ignoring');
+        return;
       }
+
+      logWS('INFO', 'Attempting to send message: "' + payload.text.substring(0, 50) + (payload.text.length > 50 ? '...' : '') + '"');
+
+      // Check connection and reconnect if needed
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        logWS('ERROR', 'Cannot send: WebSocket not OPEN (state: ' + (ws ? ws.readyState : 'null') + ')');
+        showConnectionMessage('연결되지 않았습니다. 연결 후 다시 시도하세요.');
+        return;
+      }
+
       try {
         ws.send(JSON.stringify(payload));
+        logWS('INFO', 'Message sent successfully');
         cmd.value='';
       } catch(e) {
-        console.error('Failed to send message:', e);
+        logWS('ERROR', 'Failed to send message', e);
+        showConnectionMessage('메시지 전송 실패');
       }
     }
 
@@ -1161,6 +1349,118 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       imageModal.classList.remove('show');
       modalImage.src = '';
     });
+
+    // Auto-scroll to bottom when input is focused (mobile)
+    // dvh unit handles viewport resizing automatically, we just need to scroll
+    cmd.addEventListener('focus', () => {
+      if (window.innerWidth <= 640) {
+        setTimeout(() => {
+          log.scrollTop = log.scrollHeight;
+        }, 300); // Wait for keyboard animation
+      }
+    });
+
+    // Also scroll when visualViewport resizes (keyboard opens)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        if (window.innerWidth <= 640) {
+          setTimeout(() => {
+            log.scrollTop = log.scrollHeight;
+          }, 100);
+        }
+      });
+    }
+
+    // Page lifecycle event logging and reconnection handling
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        logWS('INFO', '>>> Page HIDDEN (tab switched away or minimized)');
+      } else {
+        logWS('INFO', '<<< Page VISIBLE (tab switched back or restored)');
+        logWS('DEBUG', 'WebSocket state on visibility: ' + (ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'null'));
+
+        // When page becomes visible, check if connection is dead and reconnect immediately
+        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+          logWS('WARN', 'Connection lost while page was hidden, reconnecting immediately');
+          // Clear any pending reconnect timer
+          if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+          }
+          // Reset reconnect attempts for immediate retry
+          reconnectAttempts = 0;
+          connectWebSocket();
+        }
+      }
+    });
+
+    window.addEventListener('focus', () => {
+      logWS('INFO', '>>> Window FOCUSED');
+      logWS('DEBUG', 'WebSocket state on focus: ' + (ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'null'));
+
+      // Also check connection on window focus (for mobile lock screen scenarios)
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        logWS('WARN', 'Connection lost while window was unfocused, reconnecting immediately');
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+        connectWebSocket();
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      logWS('INFO', '<<< Window BLURRED');
+    });
+
+    window.addEventListener('beforeunload', () => {
+      logWS('INFO', '========== Page UNLOADING ==========');
+      logWS('INFO', 'Final stats: messages=' + messageCount + ', heartbeats=' + heartbeatCount);
+      if (ws) {
+        ws.close();
+      }
+    });
+
+    window.addEventListener('online', () => {
+      logWS('INFO', '🌐 Network ONLINE');
+
+      // Network came back online - immediately try to reconnect
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        logWS('INFO', 'Network restored, reconnecting immediately');
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        reconnectAttempts = 0;
+        connectWebSocket();
+      }
+    });
+
+    window.addEventListener('offline', () => {
+      logWS('WARN', '🌐 Network OFFLINE');
+    });
+
+    // Expose debug function
+    window.debugWS = () => {
+      console.log('========== DEBUG INFO ==========');
+      console.log('WebSocket:', ws);
+      console.log('ReadyState:', ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'null');
+      console.log('Reconnect attempts:', reconnectAttempts);
+      console.log('Reconnect timer:', reconnectTimer ? 'scheduled' : 'none');
+      console.log('Heartbeat timer:', heartbeatTimer ? 'active' : 'stopped');
+      console.log('Messages received:', messageCount);
+      console.log('Heartbeats sent:', heartbeatCount);
+      console.log('Connection age:', connectionStartTime ? Math.round((Date.now() - connectionStartTime) / 1000) + 's' : 'N/A');
+      console.log('Last message:', lastMessageTime ? Math.round((Date.now() - lastMessageTime) / 1000) + 's ago' : 'N/A');
+      console.log('--- Roster Info ---');
+      console.log('Online users count:', onlineUsers.length);
+      console.log('Online users:', onlineUsers);
+      console.log('Displayed count:', usersCount ? usersCount.textContent : 'N/A');
+      console.log('================================');
+    };
+
+    logWS('INFO', 'All event listeners registered');
 
     // Focus command line on load
     setTimeout(()=>cmd.focus(), 0);
