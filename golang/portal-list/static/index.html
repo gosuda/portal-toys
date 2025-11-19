@@ -7,23 +7,76 @@
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
-    <div class="container">
-      <div class="titlebar">
-        <h1>Portal List</h1>
-        <input id="searchBox" class="input search top-search" placeholder="Search by name or URL" />
-      </div>
-
-      <div class="toolbar">
-        <div class="reg-group">
-          <input id="portalInput" class="input" placeholder="https://your.portal.host or https://service-domain" />
-          <button id="portalAddBtn" class="btn" title="Register this portal">Register Portal</button>
+    <div class="page-shell">
+      <header class="hero" aria-labelledby="portal-list-title">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Go demo - Portal health</p>
+          <h1 id="portal-list-title" class="hero__title">Portal List</h1>
+          <p class="hero__subtitle">
+            Inspect and register portals, monitor health, and jump into services from a single brutalist console.
+          </p>
         </div>
-        <button id="refresh" class="btn" title="Refresh list">Refresh</button>
-      </div>
+        <div class="hero__meta" aria-hidden="true">
+          <div class="hero-pill">
+            <span class="hero-pill__label">Mode</span>
+            <span class="hero-pill__value">Live</span>
+          </div>
+        </div>
+      </header>
 
-      <div id="statusBar" class="status-bar" aria-live="polite"></div>
+      <main class="layout" aria-label="Portal list viewer">
+        <section class="command-deck" aria-label="Portal controls">
+          <div class="command-deck__row command-deck__row--primary">
+            <div class="field field--search">
+              <label class="field__label" for="searchBox">Search portals</label>
+              <div class="field__control">
+                <input
+                  id="searchBox"
+                  class="input input--search"
+                  type="search"
+                  placeholder="Search by name or URL"
+                  autocomplete="off"
+                />
+              </div>
+            </div>
 
-      <div id="list" class="list"></div>
+            <button id="refresh" class="btn btn--ghost" type="button" title="Refresh list">
+              <span class="btn__label">Refresh</span>
+            </button>
+          </div>
+
+          <div class="command-deck__row command-deck__row--secondary">
+            <div class="field field--stretch">
+              <label class="field__label" for="portalInput">Register a portal</label>
+              <div class="field__control field__control--inline">
+                <input
+                  id="portalInput"
+                  class="input"
+                  type="url"
+                  placeholder="https://your.portal.host or https://service-domain"
+                  autocomplete="off"
+                />
+                <button
+                  id="portalAddBtn"
+                  class="btn btn--primary"
+                  type="button"
+                  title="Register this portal"
+                >
+                  <span class="btn__label">Register</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="command-deck__status-row">
+            <div id="statusBar" class="status-bar" aria-live="polite" role="status"></div>
+          </div>
+        </section>
+
+        <section class="portal-section" aria-label="Registered portals">
+          <div id="list" class="portal-grid" role="list"></div>
+        </section>
+      </main>
 
       <script type="module" src="/app.js"></script>
     </div>
