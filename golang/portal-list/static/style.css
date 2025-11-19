@@ -55,4 +55,13 @@ a { color: inherit; }
 .dot.ok { background: var(--ok); box-shadow: 0 0 10px #2b8cff80; }
 .dot.bad { background: var(--bad); box-shadow: 0 0 10px #e74c3c80; }
 .hint { color: var(--warn); font-size: .85rem; }
+.status-bar {
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 4px 0 10px;
+}
+.status-bar.error {
+  color: var(--bad);
+}
 

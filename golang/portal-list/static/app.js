@@ -70,16 +70,29 @@ function tickAgo() {
 
 let currentList = [];
 let refreshing = false;
+const statusBar = document.getElementById('statusBar');
+
+function setStatus(message, level = 'info') {
+  if (!statusBar) return;
+  statusBar.textContent = message || '';
+  statusBar.classList.toggle('error', level === 'error');
+}
+
+function clearStatus() {
+  setStatus('', 'info');
+}
+
 async function refresh() {
   if (refreshing) return;
   refreshing = true;
   try {
+    clearStatus();
     const list = await getHealth();
     currentList = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
     applySearch();
   } catch (e) {
     console.error('Health fetch failed', e);
-    alert('Failed to load the list. ' + (e && e.message ? e.message : ''));
+    setStatus('Connection looks slow or offline. Will keep retrying in the background.', 'error');
   } finally {
     refreshing = false;
   }
