@@ -35,6 +35,7 @@ var (
 	flagOwner       string
 	flagTags        string
 	flagSitesPath   string
+	flagThumbnail   string
 	// computed at runtime: path to sites.json inside data dir
 	sitesJSONPath string
 )
@@ -74,10 +75,12 @@ func (m *portalManager) ConnectRelay(ctx context.Context, relayURL string, name,
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
+
 	ln, err := client.Listen(m.cred, name, []string{"http/1.1"},
 		sdk.WithDescription(description),
 		sdk.WithHide(hide),
 		sdk.WithOwner(owner),
+		sdk.WithThumbnail(flagThumbnail),
 		sdk.WithTags(tags),
 	)
 	if err != nil {
@@ -146,6 +149,7 @@ func init() {
 	flags.StringVar(&flagOwner, "owner", "Portal", "lease owner")
 	flags.StringVar(&flagTags, "tags", "portal,viewer", "comma-separated lease tags")
 	flags.StringVar(&flagSitesPath, "sites-path", filepath.FromSlash("portal-list/sites"), "sites directory; stores sites.json. Initialize from bootstraps if empty")
+	flags.StringVar(&flagThumbnail, "thumbnail", "", "thumbnail URL for this lease")
 }
 
 func main() {

@@ -139,4 +139,4 @@ function applySearch() {
 
 refresh();
 setInterval(tickAgo, 1000);
-setInterval(refresh, 30000);
+setInterval(refresh, 5000);
