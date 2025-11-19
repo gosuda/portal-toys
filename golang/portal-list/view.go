@@ -268,6 +268,11 @@ func normalizeURL(raw string) string {
 	if s == "" {
 		return ""
 	}
+	// Keep only the first whitespace-separated token to avoid trailing notes like
+	// "https://host/ - something" or "https://host/ extra text".
+	if fields := strings.Fields(s); len(fields) > 0 {
+		s = fields[0]
+	}
 	if strings.HasPrefix(s, "//") {
 		return "https:" + s
 	}
@@ -276,6 +281,24 @@ func normalizeURL(raw string) string {
 	}
 	// Otherwise, assume https scheme
 	return "https://" + s
+}
+
+// sanitizeSiteInput trims, extracts a clean base URL and drops any trailing
+// commentary (e.g., after a dash). It returns scheme://host[:port]/ form.
+func sanitizeSiteInput(raw string) string {
+	// Normalize basic scheme and strip trailing notes
+	s := normalizeURL(raw)
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	scheme := "https"
+	if strings.EqualFold(u.Scheme, "http") {
+		scheme = "http"
+	}
+	// Lowercase host, keep port if present
+	host := strings.ToLower(u.Host)
+	return fmt.Sprintf("%s://%s/", scheme, host)
 }
 
 func isHealthy(ctx context.Context, client *http.Client, urlStr string) (bool, error) {
@@ -386,43 +409,68 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 		}
 		// Try to connect/register to each URL before persisting
 		tags := strings.Split(flagTags, ",")
+		var sanitizedToAdd []string
 		for _, s := range toAdd {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue
 			}
-			if _, err := gPortalMgr.ConnectFromSite(r.Context(), s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+			san := sanitizeSiteInput(s)
+			if san == "" {
+				http.Error(w, fmt.Sprintf("failed to parse url: %s", s), http.StatusBadRequest)
+				return
+			}
+			// Attempt to connect using sanitized base
+			if _, err := gPortalMgr.ConnectFromSite(r.Context(), san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
 				http.Error(w, fmt.Sprintf("failed to connect/register: %v", err), http.StatusBadRequest)
 				return
 			}
+			sanitizedToAdd = append(sanitizedToAdd, san)
 		}
-		// Load current
+		// Load current and sanitize/dedupe by host
 		sites, _ := readSites(sitesJSONPath)
-		// Build canonical set
-		canon := func(s string) string { return strings.TrimRight(strings.ToLower(normalizeURL(s)), "/") }
-		seen := make(map[string]struct{}, len(sites))
+		hostKey := func(s string) string {
+			u, err := url.Parse(normalizeURL(s))
+			if err != nil || u.Host == "" {
+				return ""
+			}
+			return strings.ToLower(u.Host) // includes port if present
+		}
+		seen := make(map[string]struct{}, len(sites)+len(sanitizedToAdd))
+		newSites := make([]string, 0, len(sites)+len(sanitizedToAdd))
 		for _, s := range sites {
-			seen[canon(s)] = struct{}{}
-		}
-		// Add new
-		for _, s := range toAdd {
-			s = strings.TrimSpace(s)
-			if s == "" {
+			san := sanitizeSiteInput(s)
+			if san == "" {
 				continue
 			}
-			c := canon(s)
-			if _, ok := seen[c]; ok {
+			k := hostKey(san)
+			if k == "" {
 				continue
 			}
-			sites = append(sites, normalizeURL(s))
-			seen[c] = struct{}{}
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			newSites = append(newSites, san)
 		}
-		if err := writeSites(sitesJSONPath, sites); err != nil {
+		// Add new sanitized entries
+		for _, s := range sanitizedToAdd {
+			k := hostKey(s)
+			if k == "" {
+				continue
+			}
+			if _, ok := seen[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+			newSites = append(newSites, s)
+		}
+		if err := writeSites(sitesJSONPath, newSites); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(sites)
+		_ = json.NewEncoder(w).Encode(newSites)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

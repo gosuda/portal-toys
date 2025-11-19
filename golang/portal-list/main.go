@@ -149,7 +149,7 @@ func init() {
 	flags.StringVar(&flagOwner, "owner", "Portal", "lease owner")
 	flags.StringVar(&flagTags, "tags", "portal,viewer", "comma-separated lease tags")
 	flags.StringVar(&flagSitesPath, "sites-path", filepath.FromSlash("portal-list/sites"), "sites directory; stores sites.json. Initialize from bootstraps if empty")
-	flags.StringVar(&flagThumbnail, "thumbnail", "", "thumbnail URL for this lease")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://w0.peakpx.com/wallpaper/870/326/HD-wallpaper-portal-fun-cool-portal-entertainment-video-game-funny-thumbnail.jpg", "thumbnail URL for this lease")
 }
 
 func main() {

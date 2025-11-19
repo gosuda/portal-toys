@@ -327,7 +327,7 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 					h.userConns[req.UID] = map[*websocket.Conn]struct{}{}
 				}
 				if len(h.userConns[req.UID]) == 0 {
-						announce = true
+					announce = true
 				}
 				h.userConns[req.UID][conn] = struct{}{}
 			}
