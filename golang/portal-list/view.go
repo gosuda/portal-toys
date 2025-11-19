@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -232,9 +233,29 @@ func healthCheckItems(ctx context.Context, items []PortalCard) []PortalCard {
 	out := make([]PortalCard, len(items))
 	copy(out, items)
 	// Concurrency limiter
-	sem := make(chan struct{}, 8)
+	lim := 32
+	if len(out) > 0 && len(out) < lim {
+		lim = len(out)
+	}
+	if lim <= 0 {
+		lim = 1
+	}
+	sem := make(chan struct{}, lim)
 	done := make(chan int)
-	client := &http.Client{Timeout: 5 * time.Second}
+	// Fast HTTP client with aggressive timeouts to reduce page load latency
+	tr := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   1 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   1 * time.Second,
+		ResponseHeaderTimeout: 2 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+	}
+	client := &http.Client{Transport: tr, Timeout: 3 * time.Second}
 	for i := range out {
 		sem <- struct{}{}
 		go func(idx int) {
@@ -246,7 +267,10 @@ func healthCheckItems(ctx context.Context, items []PortalCard) []PortalCard {
 				out[idx].Error = "empty link"
 				return
 			}
-			ok, err := isHealthy(ctx, client, link)
+			// Per-check timeout to avoid slow endpoints delaying the page
+			perCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+			defer cancel()
+			ok, err := isHealthy(perCtx, client, link)
 			out[idx].Healthy = ok
 			out[idx].CheckedAt = time.Now().UTC().Format(time.RFC3339)
 			if err != nil {

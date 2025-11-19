@@ -36,8 +36,7 @@ var (
 	flagTags        string
 	flagSitesPath   string
 	flagThumbnail   string
-	// computed at runtime: path to sites.json inside data dir
-	sitesJSONPath string
+	sitesJSONPath   string
 )
 
 // portalManager keeps active portal client/listeners per relay URL.
@@ -174,25 +173,28 @@ func run(cmd *cobra.Command, args []string) error {
 	// Portal manager and primary registrations
 	cred := sdk.NewCredential()
 	gPortalMgr.Init(mux, cred)
-	tags := strings.Split(flagTags, ",")
-	// Connect to each relay provided in --server-url
-	for _, relayURL := range flagServerURLs {
-		relayURL = strings.TrimSpace(relayURL)
-		if relayURL == "" {
-			continue
+	// Start simple sequential connections in background (non-blocking)
+	go func() {
+		tags := strings.Split(flagTags, ",")
+		for _, relayURL := range flagServerURLs {
+			relayURL = strings.TrimSpace(relayURL)
+			if relayURL == "" {
+				continue
+			}
+			if err := gPortalMgr.ConnectRelay(ctx, relayURL, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+				log.Warn().Err(err).Msgf("[portal-list] failed to register on %s", relayURL)
+			}
+			time.Sleep(300 * time.Millisecond)
 		}
-		if err := gPortalMgr.ConnectRelay(ctx, relayURL, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-			log.Warn().Err(err).Msgf("[portal-list] failed to register on %s", relayURL)
-		}
-	}
-	// Connect to each site from sites.json as relays (derived)
-	if sites, err := readSites(sitesJSONPath); err == nil {
-		for _, s := range sites {
-			if _, err := gPortalMgr.ConnectFromSite(ctx, s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-				log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
+		if sites, err := readSites(sitesJSONPath); err == nil {
+			for _, s := range sites {
+				if _, err := gPortalMgr.ConnectFromSite(ctx, s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+					log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
+				}
+				time.Sleep(300 * time.Millisecond)
 			}
 		}
-	}
+	}()
 
 	// Optional local HTTP
 	var httpSrv *http.Server
