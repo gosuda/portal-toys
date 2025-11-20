@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -43,7 +44,9 @@ type Room struct {
 
 	state GameState
 
-	phaseTimer *time.Timer
+	phaseTimer   *time.Timer
+	phaseTimerFn func(*Room)
+	phaseEndsAt  time.Time
 }
 
 type GameState struct {
@@ -511,6 +514,9 @@ func (r *Room) finishGame() {
 	if r.phaseTimer != nil {
 		r.phaseTimer.Stop()
 	}
+	r.phaseTimer = nil
+	r.phaseTimerFn = nil
+	r.phaseEndsAt = time.Time{}
 	r.broadcastRoles()
 }
 
@@ -638,15 +644,58 @@ func (r *Room) handleAdmin(c *Client, msg ClientMessage) {
 	case "end":
 		r.broadcast(ServerEvent{Type: EventTypeLog, Room: r.name, Body: "방장이 게임을 종료했습니다."})
 		r.finishGame()
+	case "shorten-day":
+		remaining, err := r.adjustDayTimer(-10 * time.Second)
+		if err != nil {
+			c.pushSystem(err.Error())
+			return
+		}
+		r.broadcast(ServerEvent{Type: EventTypeLog, Room: r.name, Body: fmt.Sprintf("낮 시간을 10초 줄였습니다 (남은 %.0f초)", remaining.Seconds())})
+	case "extend-day":
+		remaining, err := r.adjustDayTimer(10 * time.Second)
+		if err != nil {
+			c.pushSystem(err.Error())
+			return
+		}
+		r.broadcast(ServerEvent{Type: EventTypeLog, Room: r.name, Body: fmt.Sprintf("낮 시간을 10초 늘렸습니다 (남은 %.0f초)", remaining.Seconds())})
 	default:
 		c.pushSystem("지원하지 않는 관리자 명령입니다.")
 	}
+}
+
+func (r *Room) adjustDayTimer(delta time.Duration) (time.Duration, error) {
+	if r.state.Phase != PhaseDay {
+		return 0, errors.New("낮 단계에서만 시간을 조절할 수 있습니다.")
+	}
+	if r.phaseTimer == nil || r.phaseTimerFn == nil || r.phaseEndsAt.IsZero() {
+		return 0, errors.New("타이머 상태를 확인할 수 없습니다.")
+	}
+	remaining := time.Until(r.phaseEndsAt)
+	if remaining <= time.Second {
+		return 0, errors.New("이미 곧 단계가 끝납니다.")
+	}
+	newRemaining := remaining + delta
+	const (
+		minRemaining = 5 * time.Second
+		maxRemaining = 2 * time.Minute
+	)
+	if newRemaining < minRemaining {
+		newRemaining = minRemaining
+	}
+	if newRemaining > maxRemaining {
+		newRemaining = maxRemaining
+	}
+	r.phaseTimer.Stop()
+	r.setPhaseTimer(newRemaining, r.phaseTimerFn)
+	return newRemaining, nil
 }
 
 func (r *Room) setPhaseTimer(d time.Duration, fn func(*Room)) {
 	if r.phaseTimer != nil {
 		r.phaseTimer.Stop()
 	}
+	r.phaseTimerFn = fn
+	r.phaseEndsAt = time.Now().Add(d)
 	r.phaseTimer = time.AfterFunc(d, func() {
 		r.enqueue(fn)
 	})

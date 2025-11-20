@@ -63,6 +63,13 @@
         <button data-action="start" data-host-only="true" class="primary">게임 시작</button>
         <button data-action="kick" data-host-only="true" class="danger">선택 플레이어 강퇴</button>
         <small class="hint">플레이어 버튼을 클릭하면 단계에 따라 자동 실행됩니다.</small>
+        <div id="timer-controls" class="timer-controls">
+          <span class="label">낮 시간 조절 (방장 전용)</span>
+          <div class="timer-buttons">
+            <button id="btn-shorten-day" data-action="shorten-day" data-host-only="true" class="secondary">-10s</button>
+            <button id="btn-extend-day" data-action="extend-day" data-host-only="true" class="secondary">+10s</button>
+          </div>
+        </div>
       </div>
     </section>
   </main>

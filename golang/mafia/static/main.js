@@ -11,6 +11,9 @@ const controlButtons = document.querySelectorAll('#controls button');
 const selectedTargetEl = document.getElementById('selected-target');
 const phaseLabelEl = document.getElementById('phase-label');
 const phaseTimerEl = document.getElementById('phase-timer');
+const timerControlsEl = document.getElementById('timer-controls');
+const shortenDayBtn = document.getElementById('btn-shorten-day');
+const extendDayBtn = document.getElementById('btn-extend-day');
 
 const phaseNames = { lobby: '로비', night: '밤', day: '낮', vote: '투표', defense: '최후 변론' };
 const phaseDurations = { night: 25, day: 40, vote: 15, defense: 10 };
@@ -42,11 +45,13 @@ function updatePhaseIndicator(phase, shouldStartTimer = true) {
   }
   if (!shouldStartTimer) {
     stopPhaseTimer();
+    updateTimerControlsVisibility();
     return;
   }
   const duration = phaseDurations[phase];
   if (!duration) {
     stopPhaseTimer();
+    updateTimerControlsVisibility();
     return;
   }
   phaseDeadline = Date.now() + duration * 1000;
@@ -55,6 +60,7 @@ function updatePhaseIndicator(phase, shouldStartTimer = true) {
     clearInterval(phaseTimerHandle);
   }
   phaseTimerHandle = setInterval(renderPhaseTimer, 500);
+  updateTimerControlsVisibility();
 }
 
 function renderPhaseTimer() {
@@ -82,6 +88,12 @@ function stopPhaseTimer() {
   }
 }
 
+function updateTimerControlsVisibility() {
+  if (!timerControlsEl) return;
+  const shouldShow = currentPhase === 'day' && myNickname === currentHost;
+  timerControlsEl.classList.toggle('active', shouldShow);
+}
+
 function connect(evt) {
   evt.preventDefault();
   if (socket && socket.readyState === WebSocket.OPEN) {
@@ -100,6 +112,7 @@ function connect(evt) {
   updateSelectedDisplay();
   updatePhaseIndicator('lobby', false);
   stopPhaseTimer();
+  updateTimerControlsVisibility();
 
   const base = buildWsBase(wsModeEl.value.trim());
   const url = `${base}/ws?room=${encodeURIComponent(room)}&user=${encodeURIComponent(nickname)}`;
@@ -108,11 +121,13 @@ function connect(evt) {
   socket.addEventListener('close', () => {
     setStatus('Disconnected', 'warn');
     stopPhaseTimer();
+    updateTimerControlsVisibility();
   });
   socket.addEventListener('error', err => {
     console.error(err);
     setStatus('Error', 'error');
     stopPhaseTimer();
+    updateTimerControlsVisibility();
   });
   socket.addEventListener('message', evt => handleMessage(evt.data));
 }
@@ -183,6 +198,7 @@ function renderRoster(state) {
     btn.addEventListener('click', () => handlePlayerInteraction(name));
     rosterEl.appendChild(btn);
   });
+  updateTimerControlsVisibility();
 }
 function updateSelectedDisplay() {
   if (selectedTarget) {
@@ -236,6 +252,14 @@ controlButtons.forEach(btn => {
           return;
         }
         send('admin', { action: 'kick', target: selectedTarget });
+        break;
+      case 'shorten-day':
+      case 'extend-day':
+        if (currentPhase !== 'day') {
+          alert('낮 시간에만 시간을 조절할 수 있습니다.');
+          return;
+        }
+        send('admin', { action: btn.dataset.action });
         break;
       default:
         break;
