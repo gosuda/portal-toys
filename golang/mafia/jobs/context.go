@@ -10,6 +10,10 @@ const (
 	TeamNeutral Team = "neutral"
 )
 
+const (
+	EventTypeLog = "log"
+)
+
 // Context carries runtime information for job actions.
 type Context struct {
 	Room   RoomState

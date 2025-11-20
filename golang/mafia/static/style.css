@@ -202,6 +202,31 @@ button.danger:hover {
   flex: 1;
 }
 
+.phase-panel {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.phase-panel strong {
+  font-size: 1.1rem;
+  color: #facc15;
+}
+
+.phase-panel .label {
+  display: block;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.roster-grid button[data-self="true"],
+.roster-grid button.self {
+  border-color: #34d399;
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
 @media (max-width: 1200px) {
   main {
     grid-template-columns: 1fr;

@@ -43,22 +43,19 @@ func (a *jobRoomAdapter) PushSystem(name, msg string) {
 }
 
 func (a *jobRoomAdapter) Broadcast(ev jobs.ServerEvent) {
-	a.r.broadcast(ServerEvent{Type: ev.Type, Room: ev.Room, Body: ev.Body, Phase: ev.Phase, Author: ev.Author})
+	a.r.broadcast(ServerEvent{Type: ServerEventType(ev.Type), Room: ev.Room, Body: ev.Body, Phase: ev.Phase, Author: ev.Author})
 }
 
 func (a *jobRoomAdapter) BroadcastTeam(team jobs.Team, ev jobs.ServerEvent) {
-	a.r.broadcastTeam(team, ServerEvent{Type: ev.Type, Room: ev.Room, Body: ev.Body})
+	a.r.broadcastTeam(team, ServerEvent{Type: ServerEventType(ev.Type), Room: ev.Room, Body: ev.Body})
 }
 
 func (a *jobRoomAdapter) SetNightTarget(key, value string) {
-	switch key {
-	case "mafia":
-		a.r.state.MafiaPick = value
-	case "doctor":
-		a.r.state.DoctorPick = value
-	case "detective":
-		a.r.state.DetectivePick = value
+	if a.r.state.NightTargets == nil {
+		a.r.state.NightTargets = make(map[string]string)
 	}
+
+	a.r.state.NightTargets[key] = value
 }
 
 func (a *jobRoomAdapter) LookupJob(name string) jobs.Job {

@@ -2,6 +2,18 @@ package main
 
 import "encoding/json"
 
+// ServerEventType enumerates event payload categories sent to clients.
+type ServerEventType string
+
+const (
+	EventTypeLog    ServerEventType = "log"
+	EventTypeChat   ServerEventType = "chat"
+	EventTypeRoster ServerEventType = "roster"
+	EventTypeRole   ServerEventType = "role"
+	EventTypePhase  ServerEventType = "phase"
+	EventTypeState  ServerEventType = "state"
+)
+
 // ClientMessage is the envelope received from websocket clients.
 type ClientMessage struct {
 	Type   string          `json:"type"`
@@ -14,7 +26,7 @@ type ClientMessage struct {
 
 // ServerEvent is pushed to clients for any room update.
 type ServerEvent struct {
-	Type   string      `json:"type"`
+	Type   ServerEventType `json:"type"`
 	Body   string      `json:"body,omitempty"`
 	Room   string      `json:"room,omitempty"`
 	Phase  string      `json:"phase,omitempty"`

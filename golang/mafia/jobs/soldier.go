@@ -23,6 +23,6 @@ func (j *soldierJob) OnDeath(ctx *DeathContext) bool {
 	}
 	ctx.Room.SetMeta(key, "used")
 	ctx.Room.PushSystem(ctx.Victim, "마피아의 공격을 버텨냈습니다.")
-	ctx.Room.Broadcast(ServerEvent{Type: "log", Room: ctx.Room.Name(), Body: fmt.Sprintf("[ %s ] 님이 마피아의 공격을 버텨 냈습니다.", ctx.Victim)})
+	ctx.Room.Broadcast(ServerEvent{Type: EventTypeLog, Room: ctx.Room.Name(), Body: fmt.Sprintf("[ %s ] 님이 마피아의 공격을 버텨 냈습니다.", ctx.Victim)})
 	return true
 }

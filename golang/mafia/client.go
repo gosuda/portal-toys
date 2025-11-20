@@ -87,6 +87,9 @@ func (c *Client) writeLoop() {
 }
 
 func (c *Client) push(ev ServerEvent) {
+	if c.closed.Load() {
+		return
+	}
 	select {
 	case c.send <- ev:
 	default:
@@ -100,7 +103,7 @@ func (c *Client) push(ev ServerEvent) {
 }
 
 func (c *Client) pushSystem(body string) {
-	c.push(ServerEvent{Type: "log", Body: body, Room: c.roomName()})
+	c.push(ServerEvent{Type: EventTypeLog, Body: body, Room: c.roomName()})
 }
 
 func (c *Client) roomName() string {

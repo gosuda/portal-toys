@@ -41,3 +41,9 @@ var defaultJobs = map[string]JobSpec{
 		Desc: "능력은 없지만 토론과 투표로 마피아를 색출합니다.",
 	},
 }
+
+var (
+	defaultRolePriority = []string{"마피아", "의사", "경찰", "군인", "정치인"}
+	defaultMafiaRole    = "마피아"
+	defaultCitizenRole  = "시민"
+)

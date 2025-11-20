@@ -9,12 +9,19 @@ const roomEl = document.getElementById('room');
 const wsModeEl = document.getElementById('ws-mode');
 const controlButtons = document.querySelectorAll('#controls button');
 const selectedTargetEl = document.getElementById('selected-target');
+const phaseLabelEl = document.getElementById('phase-label');
+const phaseTimerEl = document.getElementById('phase-timer');
+
+const phaseNames = { lobby: '로비', night: '밤', day: '낮', vote: '투표', defense: '최후 변론' };
+const phaseDurations = { night: 25, day: 40, vote: 15, defense: 10 };
 
 let socket;
 let selectedTarget = '';
 let currentPhase = 'lobby';
 let currentHost = '';
 let myNickname = '';
+let phaseTimerHandle = null;
+let phaseDeadline = 0;
 function log(message, author = 'system') {
   const entry = document.createElement('div');
   entry.className = 'log-entry';
@@ -26,6 +33,53 @@ function log(message, author = 'system') {
 function setStatus(text, level = 'neutral') {
   statusEl.textContent = text;
   statusEl.dataset.level = level;
+}
+
+function updatePhaseIndicator(phase, shouldStartTimer = true) {
+  const label = phaseNames[phase] || phase || '대기';
+  if (phaseLabelEl) {
+    phaseLabelEl.textContent = label;
+  }
+  if (!shouldStartTimer) {
+    stopPhaseTimer();
+    return;
+  }
+  const duration = phaseDurations[phase];
+  if (!duration) {
+    stopPhaseTimer();
+    return;
+  }
+  phaseDeadline = Date.now() + duration * 1000;
+  renderPhaseTimer();
+  if (phaseTimerHandle) {
+    clearInterval(phaseTimerHandle);
+  }
+  phaseTimerHandle = setInterval(renderPhaseTimer, 500);
+}
+
+function renderPhaseTimer() {
+  if (!phaseDeadline || !phaseTimerEl) {
+    if (phaseTimerEl) {
+      phaseTimerEl.textContent = '--';
+    }
+    return;
+  }
+  const remaining = Math.max(0, Math.ceil((phaseDeadline - Date.now()) / 1000));
+  phaseTimerEl.textContent = `${remaining}s`;
+  if (remaining <= 0) {
+    stopPhaseTimer();
+  }
+}
+
+function stopPhaseTimer() {
+  if (phaseTimerHandle) {
+    clearInterval(phaseTimerHandle);
+    phaseTimerHandle = null;
+  }
+  phaseDeadline = 0;
+  if (phaseTimerEl) {
+    phaseTimerEl.textContent = '--';
+  }
 }
 
 function connect(evt) {
@@ -44,15 +98,21 @@ function connect(evt) {
   myNickname = nickname;
   selectedTarget = '';
   updateSelectedDisplay();
+  updatePhaseIndicator('lobby', false);
+  stopPhaseTimer();
 
   const base = buildWsBase(wsModeEl.value.trim());
   const url = `${base}/ws?room=${encodeURIComponent(room)}&user=${encodeURIComponent(nickname)}`;
   socket = new WebSocket(url);
   socket.addEventListener('open', () => setStatus('Connected', 'ok'));
-  socket.addEventListener('close', () => setStatus('Disconnected', 'warn'));
+  socket.addEventListener('close', () => {
+    setStatus('Disconnected', 'warn');
+    stopPhaseTimer();
+  });
   socket.addEventListener('error', err => {
     console.error(err);
     setStatus('Error', 'error');
+    stopPhaseTimer();
   });
   socket.addEventListener('message', evt => handleMessage(evt.data));
 }
@@ -89,9 +149,14 @@ function handleMessage(raw) {
     case 'phase':
       currentPhase = data.phase || currentPhase;
       log(`Phase → ${currentPhase}: ${data.body || ''}`);
+      updatePhaseIndicator(currentPhase, true);
       break;
     case 'state':
       log(`상태 업데이트: ${JSON.stringify(data.state)}`);
+      if (data.state && data.state.phase) {
+        currentPhase = data.state.phase;
+        updatePhaseIndicator(currentPhase, false);
+      }
       break;
     default:
       log(`이벤트 (${data.type}): ${data.body || ''}`);
@@ -109,9 +174,12 @@ function renderRoster(state) {
   players.forEach(name => {
     const btn = document.createElement('button');
     const isHost = name === currentHost;
+    const isSelf = name === myNickname;
     btn.textContent = isHost ? '[HOST] ' + name : name;
     btn.dataset.selected = String(name === selectedTarget);
+    btn.dataset.self = String(isSelf);
     btn.classList.toggle('host', isHost);
+    btn.classList.toggle('self', isSelf);
     btn.addEventListener('click', () => handlePlayerInteraction(name));
     rosterEl.appendChild(btn);
   });
