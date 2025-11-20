@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mafia Room</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <img src="placeholder.svg" alt="Mafia illustration" />
+    <div>
+      <h1>Portal Mafia</h1>
+      <p>Portal Relay 기반 멀티룸 마피아 게임 – Go 백엔드 프리뷰</p>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>연결</h2>
+      <form id="connect-form">
+        <label>닉네임
+          <input id="nickname" required placeholder="Detective Kim" />
+        </label>
+        <label>방 이름
+          <input id="room" required placeholder="lobby-1" />
+          <small class="hint">입력한 이름의 방이 없다면 자동으로 생성됩니다.</small>
+        </label>
+        <label>연결 모드
+          <select id="ws-mode">
+            <option value="local">로컬 (예: 개발용)</option>
+            <option value="online">온라인 (Portal 릴레이)</option>
+          </select>
+        </label>
+        <button type="submit" class="primary">Connect</button>
+      </form>
+      <div id="status" class="status">Disconnected</div>
+      <div id="phase-panel" class="status phase-panel">
+        <div>
+          <span class="label">현재 단계</span>
+          <strong id="phase-label">대기</strong>
+        </div>
+        <div>
+          <span class="label">남은 시간</span>
+          <strong id="phase-timer">--</strong>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2>게임 로그</h2>
+      <div id="log"></div>
+      <div id="chat-input">
+        <input id="chat-text" placeholder="메시지를 입력하세요" />
+        <button id="chat-send" class="primary">Send</button>
+      </div>
+    </section>
+    <section>
+      <h2>참가자</h2>
+      <p class="hint">플레이어 버튼을 눌러 투표/능력 대상을 선택하세요.</p>
+      <div id="roster" class="roster-grid"></div>
+      <div id="selected-target">선택된 플레이어 없음</div>
+      <h3>조작</h3>
+      <div id="controls">
+        <button data-action="start" data-host-only="true" class="primary">게임 시작</button>
+        <button data-action="kick" data-host-only="true" class="danger">선택 플레이어 강퇴</button>
+        <small class="hint">플레이어 버튼을 클릭하면 단계에 따라 자동 실행됩니다.</small>
+        <div id="timer-controls" class="timer-controls">
+          <span class="label">낮 시간 조절 (방장 전용)</span>
+          <div class="timer-buttons">
+            <button id="btn-shorten-day" data-action="shorten-day" data-host-only="true" class="secondary">-10s</button>
+            <button id="btn-extend-day" data-action="extend-day" data-host-only="true" class="secondary">+10s</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script src="main.js" type="module"></script>
+</body>
+</html>

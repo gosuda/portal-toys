@@ -1,0 +1,266 @@
+:root {
+  color-scheme: dark;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(79,70,229,0.25), transparent 60%),
+              radial-gradient(circle at bottom, rgba(14,165,233,0.2), transparent 55%),
+              #0f172a;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 1.5rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid rgba(226,232,240,0.1);
+}
+
+header img {
+  width: 72px;
+  height: 72px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr 320px;
+  gap: 1.25rem;
+  padding: 1.5rem;
+}
+
+section {
+  background: rgba(15,23,42,0.8);
+  border: 1px solid rgba(148,163,184,0.12);
+  border-radius: 16px;
+  padding: 1rem;
+  backdrop-filter: blur(10px);
+}
+
+section h2 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: #a5b4fc;
+}
+
+#connect-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.status {
+  margin-top: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,0.3);
+  text-align: center;
+}
+
+.status[data-level="ok"] {
+  background: rgba(34,197,94,0.15);
+  border-color: rgba(34,197,94,0.4);
+}
+
+.status[data-level="warn"] {
+  background: rgba(249,115,22,0.15);
+  border-color: rgba(249,115,22,0.4);
+}
+
+.status[data-level="error"] {
+  background: rgba(248,113,113,0.15);
+  border-color: rgba(248,113,113,0.45);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #cbd5f5;
+  gap: 0.35rem;
+}
+
+.hint {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+input, select, button, textarea {
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,0.3);
+  padding: 0.65rem 0.75rem;
+  font-size: 1rem;
+  font-family: inherit;
+  color: inherit;
+  background: rgba(15,23,42,0.6);
+}
+
+button.primary {
+  background: linear-gradient(120deg, #6366f1, #8b5cf6);
+  border: none;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button.primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(99,102,241,0.35);
+}
+
+button.secondary {
+  background: rgba(15,23,42,0.6);
+  border: 1px solid rgba(148,163,184,0.4);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+button.secondary:hover {
+  transform: translateY(-2px);
+  border-color: #facc15;
+}
+
+button.danger {
+  background: linear-gradient(120deg, #f97316, #ef4444);
+  border: none;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+button.danger:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(248,113,113,0.35);
+}
+#log {
+  height: 300px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(148,163,184,0.2);
+  padding: 0.75rem;
+  background: rgba(15,23,42,0.6);
+  font-size: 0.95rem;
+}
+
+.log-entry {
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(148,163,184,0.08);
+}
+
+.log-entry:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.roster-grid button {
+  border-radius: 12px;
+  padding: 0.6rem;
+  border: 1px solid rgba(148,163,184,0.2);
+  background: rgba(30,41,59,0.7);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+
+.roster-grid button[data-selected="true"] {
+  border-color: #818cf8;
+  background: rgba(99,102,241,0.25);
+  transform: translateY(-2px);
+}
+
+.roster-grid button.host {
+  border-color: #fcd34d;
+  background: rgba(234,179,8,0.18);
+  font-weight: 600;
+}
+
+#selected-target {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  background: rgba(15,23,42,0.5);
+  border: 1px solid rgba(148,163,184,0.2);
+  margin-bottom: 0.8rem;
+  font-size: 0.9rem;
+}
+
+#controls {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.timer-controls {
+  display: none;
+  padding: 0.6rem;
+  border: 1px solid rgba(148,163,184,0.2);
+  border-radius: 10px;
+  background: rgba(15,23,42,0.6);
+}
+
+.timer-controls.active {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.timer-controls .timer-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#chat-input {
+  display: flex;
+  gap: 0.6rem;
+}
+
+#chat-input input {
+  flex: 1;
+}
+
+.phase-panel {
+  margin-top: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.phase-panel strong {
+  font-size: 1.1rem;
+  color: #facc15;
+}
+
+.phase-panel .label {
+  display: block;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.roster-grid button[data-self="true"],
+.roster-grid button.self {
+  border-color: #34d399;
+  background: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+}
+
+@media (max-width: 1200px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
