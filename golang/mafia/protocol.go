@@ -27,9 +27,9 @@ type ClientMessage struct {
 // ServerEvent is pushed to clients for any room update.
 type ServerEvent struct {
 	Type   ServerEventType `json:"type"`
-	Body   string      `json:"body,omitempty"`
-	Room   string      `json:"room,omitempty"`
-	Phase  string      `json:"phase,omitempty"`
-	State  interface{} `json:"state,omitempty"`
-	Author string      `json:"author,omitempty"`
+	Body   string          `json:"body,omitempty"`
+	Room   string          `json:"room,omitempty"`
+	Phase  string          `json:"phase,omitempty"`
+	State  interface{}     `json:"state,omitempty"`
+	Author string          `json:"author,omitempty"`
 }

@@ -260,7 +260,13 @@ func (r *Room) handleNightAction(c *Client, target string) {
 		c.pushSystem("능력이 없습니다.")
 		return
 	}
-	ctx := &jobs.Context{Room: r.jobAdapter(), Actor: c.name, Target: target, Meta: r.state.Meta}
+	ctx := &jobs.Context{
+		Room:   r.jobAdapter(),
+		Actor:  c.name,
+		Target: target,
+		Meta:   r.state.Meta,
+	}
+
 	if err := job.NightAction(ctx); err != nil {
 		c.pushSystem(err.Error())
 	}
@@ -465,7 +471,11 @@ func (r *Room) eliminate(name, reason, cause string) {
 		}
 	}
 	delete(r.state.Alive, name)
-	r.broadcast(ServerEvent{Type: EventTypeLog, Room: r.name, Body: fmt.Sprintf("%s (%s) %s", name, r.state.Assign[name].Name, reason)})
+	r.broadcast(ServerEvent{
+		Type: EventTypeLog,
+		Room: r.name,
+		Body: fmt.Sprintf("%s %s", name, reason),
+	})
 }
 
 func (r *Room) checkGameOver() {
