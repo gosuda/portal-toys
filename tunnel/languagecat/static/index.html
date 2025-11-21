@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Languagecat</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="mascot-field" data-mascot-field></div>
+    <div class="page">
+        <header class="top">
+            <h1>LANGCAT</h1>
+            <div class="mode-toggle">
+                <button type="button" class="mode-btn active" data-mode="up">Boost Mode</button>
+                <button type="button" class="mode-btn" data-mode="down">Nerf Mode</button>
+                <span class="mode-hint" data-mode-label>Current: Boost Mode</span>
+            </div>
+        </header>
+
+        <main class="layout">
+            <section class="panel click-panel">
+                <h2>Languages</h2>
+                <div class="grid" data-grid></div>
+            </section>
+
+            <section class="panel board">
+                <h2>Live Ranking</h2>
+                <div class="scoreboard" data-scoreboard>
+                    <p class="muted">Loading data...</p>
+                </div>
+                <p class="hero-total">Total clicks <span data-total>0</span></p>
+            </section>
+        </main>
+    </div>
+
+    <script>
+        (function () {
+            const gridEl = document.querySelector('[data-grid]');
+            const boardEl = document.querySelector('[data-scoreboard]');
+            const statusEl = document.querySelector('[data-status]');
+            const totalEl = document.querySelector('[data-total]');
+            const modeButtons = document.querySelectorAll('[data-mode]');
+            const modeLabel = document.querySelector('[data-mode-label]');
+            const mascotField = document.querySelector('[data-mascot-field]');
+
+            const pendingVotes = new Map();
+            const FLUSH_DELAY = 350;
+            let flushTimer = null;
+            let currentLeaderId = null;
+            let currentLeaderIcon = '';
+            let currentMode = 1;
+
+            const state = { languages: [], total: 0 };
+
+            const formatNumber = (value) => (value || 0).toLocaleString('en-US');
+
+            const setStatus = (message, type) => {
+                if (!statusEl) return;
+                statusEl.textContent = message || '';
+                statusEl.className = `status ${type || ''}`;
+            };
+
+            const setMode = (mode) => {
+                currentMode = mode;
+                modeButtons.forEach((btn) => {
+                    const targetMode = btn.dataset.mode === 'down' ? -1 : 1;
+                    btn.classList.toggle('active', targetMode === currentMode);
+                });
+                if (modeLabel) {
+                    modeLabel.textContent = `Current: ${currentMode > 0 ? 'Boost Mode' : 'Nerf Mode'}`;
+                }
+            };
+
+            modeButtons.forEach((btn) => btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode === 'down' ? -1 : 1;
+                setMode(mode);
+            }));
+
+            const resolveIcon = (lang) => {
+                if (!lang) return '';
+                if (lang.id === 'rust') return '/rust.png';
+                return lang.icon || '';
+            };
+
+            const createCard = (lang) => {
+                const iconSrc = resolveIcon(lang);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'cat-button';
+                button.dataset.langId = lang.id;
+                button.innerHTML = `
+                    <span class="cat-icon">
+                        <img src="${iconSrc}" alt="${lang.name} icon" loading="lazy">
+                    </span>
+                    <span class="cat-name">
+                        ${lang.name}
+                    </span>
+                    <span class="cat-score" data-score>${formatNumber(lang.score)}</span>
+                `;
+                button.addEventListener('click', () => handleVote(lang.id, currentMode, button));
+                return button;
+            };
+
+            const renderGrid = (languages) => {
+                if (!gridEl) return;
+                gridEl.innerHTML = '';
+                const frag = document.createDocumentFragment();
+                languages.forEach((lang) => frag.appendChild(createCard(lang)));
+                gridEl.appendChild(frag);
+            };
+
+            const renderLeaderboard = (languages) => {
+                if (!boardEl) return;
+                const sorted = [...languages].sort((a, b) => b.score - a.score);
+                boardEl.innerHTML = '';
+                if (!sorted.length) {
+                    boardEl.innerHTML = '<p class="muted">No data yet.</p>';
+                    currentLeaderId = null;
+                    currentLeaderIcon = '';
+                    return;
+                }
+                const leader = sorted[0];
+                currentLeaderId = leader.id;
+                currentLeaderIcon = resolveIcon(leader);
+                const frag = document.createDocumentFragment();
+                sorted.forEach((lang, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'score-row';
+                    row.dataset.langId = lang.id;
+                    if (index === 0) row.classList.add('leader');
+                    row.innerHTML = `
+                        <span class="score-rank">${index + 1}</span>
+                        <span class="score-name">
+                            <img src="${resolveIcon(lang)}" alt="" class="score-icon" data-lang-id="${lang.id}">
+                            ${lang.name}
+                        </span>
+                        <span class="score-points">${formatNumber(lang.score)}</span>
+                    `;
+                    frag.appendChild(row);
+                });
+                boardEl.appendChild(frag);
+            };
+
+            const highlightLeader = () => {
+                if (!gridEl) return;
+                gridEl.querySelectorAll('.cat-button').forEach((card) => {
+                    card.classList.toggle('leader', card.dataset.langId === currentLeaderId);
+                });
+            };
+
+            const updateUI = () => {
+                renderGrid(state.languages);
+                renderLeaderboard(state.languages);
+                if (totalEl) totalEl.textContent = formatNumber(state.total);
+                highlightLeader();
+                refreshMascots();
+            };
+
+            const fetchState = async () => {
+                try {
+                    setStatus('Loading languages...', 'info');
+                    const res = await fetch('/api/state');
+                    if (!res.ok) throw new Error('http');
+                    const payload = await res.json();
+                    state.languages = payload.languages || [];
+                    state.total = payload.total || 0;
+                    updateUI();
+                    setStatus('', '');
+                } catch (err) {
+                    setStatus('Unable to load leaderboard. Try again soon.', 'error');
+                }
+            };
+
+            const applyOptimistic = (languageId, delta) => {
+                const target = state.languages.find((item) => item.id === languageId);
+                if (target) target.score = (target.score || 0) + delta;
+                state.total = (state.total || 0) + delta;
+                updateUI();
+            };
+
+            const enqueueVote = (languageId, delta, button) => {
+                if (!languageId) return;
+                pendingVotes.set(languageId, (pendingVotes.get(languageId) || 0) + delta);
+                button.classList.add('popping');
+                applyOptimistic(languageId, delta);
+                scheduleFlush();
+                window.setTimeout(() => button.classList.remove('popping'), 150);
+            };
+
+            const scheduleFlush = () => {
+                if (flushTimer) return;
+                flushTimer = window.setTimeout(() => {
+                    flushTimer = null;
+                    flushVotes();
+                }, FLUSH_DELAY);
+            };
+
+            const flushVotes = async () => {
+                if (!pendingVotes.size) return;
+                const batch = [];
+                for (const [languageId, delta] of pendingVotes.entries()) {
+                    if (!delta) continue;
+                    const capped = Math.max(-1000, Math.min(1000, delta));
+                    batch.push({ languageId, delta: capped });
+                }
+                pendingVotes.clear();
+                if (!batch.length) return;
+                try {
+                    const res = await fetch('/api/click', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(batch),
+                    });
+                    if (!res.ok) throw new Error('http');
+                    const payload = await res.json();
+                    const updates = Array.isArray(payload.updates) ? payload.updates : [];
+                    updates.forEach((item) => {
+                        const target = state.languages.find((lang) => lang.id === item.languageId);
+                        if (target) target.score = item.score;
+                    });
+                    if (typeof payload.total === 'number') {
+                        state.total = payload.total;
+                    } else {
+                        state.total = state.languages.reduce((acc, item) => acc + (item.score || 0), 0);
+                    }
+                    updateUI();
+                    setStatus('', '');
+                } catch (err) {
+                    setStatus('Network error. Retrying soon.', 'error');
+                    batch.forEach(({ languageId, delta }) => {
+                        pendingVotes.set(languageId, (pendingVotes.get(languageId) || 0) + delta);
+                    });
+                    scheduleFlush();
+                    fetchState();
+                }
+            };
+
+            const handleVote = (languageId, delta, button) => {
+                enqueueVote(languageId, delta, button);
+            };
+
+            const mascotSprites = [];
+            const SPRITE_COUNT = 26;
+            let mascotIcon = '';
+            let mascotFrame = null;
+            let lastTick = 0;
+
+            const createMascotSprite = () => {
+                const sprite = document.createElement('div');
+                sprite.className = 'mascot-sprite';
+                const size = 48 + Math.random() * 52;
+                sprite.style.width = `${size}px`;
+                sprite.style.height = `${size}px`;
+                sprite.style.opacity = (0.35 + Math.random() * 0.4).toFixed(2);
+                return {
+                    el: sprite,
+                    size,
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    vx: (Math.random() * 120 + 60) * (Math.random() > 0.5 ? 1 : -1),
+                    vy: (Math.random() * 120 + 60) * (Math.random() > 0.5 ? 1 : -1),
+                    rotation: Math.random() * 360,
+                    vr: (Math.random() * 80) - 40,
+                    scale: 0.75 + Math.random() * 0.55,
+                };
+            };
+
+            const startMascotLoop = () => {
+                if (mascotFrame || !mascotSprites.length) return;
+                lastTick = performance.now();
+                mascotFrame = requestAnimationFrame(stepMascots);
+            };
+
+            const stopMascotLoop = () => {
+                if (mascotFrame) {
+                    cancelAnimationFrame(mascotFrame);
+                    mascotFrame = null;
+                }
+            };
+
+            const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+            const stepMascots = (timestamp) => {
+                const dt = (timestamp - lastTick) / 1000;
+                lastTick = timestamp;
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+                mascotSprites.forEach((sprite) => {
+                    sprite.x += sprite.vx * dt;
+                    sprite.y += sprite.vy * dt;
+                    sprite.rotation += sprite.vr * dt;
+                    const maxX = Math.max(0, width - sprite.size);
+                    const maxY = Math.max(0, height - sprite.size);
+                    if (sprite.x <= 0 || sprite.x >= maxX) {
+                        sprite.vx *= -1;
+                        sprite.x = clamp(sprite.x, 0, maxX);
+                    }
+                    if (sprite.y <= 0 || sprite.y >= maxY) {
+                        sprite.vy *= -1;
+                        sprite.y = clamp(sprite.y, 0, maxY);
+                    }
+                    sprite.el.style.transform = `translate(${sprite.x}px, ${sprite.y}px) rotate(${sprite.rotation}deg) scale(${sprite.scale})`;
+                });
+                mascotFrame = requestAnimationFrame(stepMascots);
+            };
+
+            const refreshMascots = () => {
+                if (!mascotField) return;
+                if (!currentLeaderIcon) {
+                    mascotField.classList.add('is-hidden');
+                    stopMascotLoop();
+                    return;
+                }
+                mascotField.classList.remove('is-hidden');
+                if (!mascotSprites.length) {
+                    for (let i = 0; i < SPRITE_COUNT; i += 1) {
+                        const sprite = createMascotSprite();
+                        mascotField.appendChild(sprite.el);
+                        mascotSprites.push(sprite);
+                    }
+                }
+                if (mascotIcon !== currentLeaderIcon) {
+                    mascotIcon = currentLeaderIcon;
+                    mascotSprites.forEach((sprite) => {
+                        sprite.el.style.backgroundImage = mascotIcon ? `url(${mascotIcon})` : 'none';
+                    });
+                }
+                startMascotLoop();
+            };
+
+            fetchState();
+            window.setInterval(fetchState, 8000);
+            setMode(1);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    flushVotes();
+                    stopMascotLoop();
+                } else {
+                    scheduleFlush();
+                    if (mascotIcon) startMascotLoop();
+                }
+            });
+            window.addEventListener('resize', () => {
+                if (!mascotFrame && mascotIcon) startMascotLoop();
+            });
+        })();
+    </script>
+</body>
+</html>

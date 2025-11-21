@@ -34,6 +34,11 @@ Pick one of the paths below.
   - Local access: `http://127.0.0.1:8083`
   - The script can auto-start a tunnel if `portal-tunnel` is installed (configure via `TUNNEL_ENABLED`, `TUNNEL_BIN`).
 
+- Tunnel
+  - go install gosuda.org/portal/cmd/portal-tunnel@latest
+  - python3 tunnel/languagecat/main.py
+  - use flag : `portal-tunnel expose -host localhost -port 8083 -relay portal.gosuda.org -name langcat`
+  - use config : `portal-tunnel expose -config tunnel/languagecat/config.yaml`
 ## Common Flags and Environment
 - `--server-url`: Relay websocket URL(s). Comma‑separated supported. Also respected from `RELAY` or `RELAY_URL`.
 - `--name`: Display name for your backend on the relay.
