@@ -34,56 +34,16 @@ MAX_DELTA = 1_000
 
 # The UI renders languages in the order provided here.
 LANGUAGES: List[Dict[str, str]] = [
-    {
-        "id": "python",
-        "name": "Python",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg",
-    },
-    {
-        "id": "go",
-        "name": "Go",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/go/go-original.svg",
-    },
-    {
-        "id": "javascript",
-        "name": "JavaScript",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg",
-    },
-    {
-        "id": "rust",
-        "name": "Rust",
-        "icon": "/rust.png",
-    },
-    {
-        "id": "java",
-        "name": "Java",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg",
-    },
-    {
-        "id": "csharp",
-        "name": "C#",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/csharp/csharp-original.svg",
-    },
-    {
-        "id": "ruby",
-        "name": "Ruby",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ruby/ruby-original.svg",
-    },
-    {
-        "id": "swift",
-        "name": "Swift",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/swift/swift-original.svg",
-    },
-    {
-        "id": "cpp",
-        "name": "C++",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/cplusplus/cplusplus-original.svg",
-    },
-    {
-        "id": "kotlin",
-        "name": "Kotlin",
-        "icon": "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kotlin/kotlin-original.svg",
-    },
+    {"id": "python", "name": "Python", "icon": "/icons/python.svg"},
+    {"id": "go", "name": "Go", "icon": "/icons/go.svg"},
+    {"id": "javascript", "name": "JavaScript", "icon": "/icons/javascript.svg"},
+    {"id": "rust", "name": "Rust", "icon": "/icons/rust.png"},
+    {"id": "java", "name": "Java", "icon": "/icons/java.svg"},
+    {"id": "csharp", "name": "C#", "icon": "/icons/csharp.svg"},
+    {"id": "ruby", "name": "Ruby", "icon": "/icons/ruby.svg"},
+    {"id": "swift", "name": "Swift", "icon": "/icons/swift.svg"},
+    {"id": "cpp", "name": "C++", "icon": "/icons/cpp.svg"},
+    {"id": "kotlin", "name": "Kotlin", "icon": "/icons/kotlin.svg"},
 ]
 LANGUAGE_META = {item["id"]: item for item in LANGUAGES}
 
@@ -171,8 +131,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_static("index.html", "text/html; charset=utf-8")
         if route == "/style.css":
             return self._serve_static("style.css", "text/css; charset=utf-8")
-        if route == "/rust.png":
-            return self._serve_static("rust.png", "image/png")
+        if route.startswith("/icons/"):
+            return self._serve_icon(route)
         if route == "/api/state":
             return self._handle_state()
         self.send_error(HTTPStatus.NOT_FOUND)
@@ -222,6 +182,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_icon(self, route: str) -> None:
+        rel = route.lstrip("/")
+        if ".." in rel or rel.endswith("/"):
+            self.send_error(HTTPStatus.BAD_REQUEST)
+            return
+        suffix = Path(rel).suffix.lower()
+        ctype = "image/png" if suffix == ".png" else "image/svg+xml"
+        self._serve_static(rel, ctype)
 
     def _write_json(self, status: int, payload: Dict[str, Any]) -> None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")

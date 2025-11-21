@@ -209,10 +209,6 @@ body::before {
   filter: grayscale(1) invert(0.9);
 }
 
-.cat-button[data-lang-id="rust"] .cat-icon img {
-  filter: none;
-}
-
 .cat-button.leader .cat-icon {
   animation: tremble 0.5s linear infinite;
 }
@@ -288,10 +284,6 @@ body::before {
   height: 22px;
   object-fit: contain;
   filter: grayscale(1) invert(0.85);
-}
-
-.score-icon[data-lang-id="rust"] {
-  filter: none;
 }
 
 .score-row.leader .score-icon {
