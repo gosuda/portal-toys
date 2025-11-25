@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"sort"
 	"strconv"
@@ -361,10 +362,13 @@ func serveIndex(w http.ResponseWriter, r *http.Request, name string) {
 // serveChatHTTP starts serving the chat UI and websocket endpoint and returns the server.
 // Callers are responsible for shutting it down via Server.Shutdown.
 // NewHandler builds the chat HTTP router (UI + websocket)
-func NewHandler(name string, h *hub) http.Handler {
+func NewHandler(name string, h *hub, staticFS fs.FS) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) { serveIndex(w, r, name) })
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) { handleWS(w, r, h) })
+	// Serve embedded static files
+	staticHandler := http.FileServer(http.FS(staticFS))
+	r.Handle("/static/*", http.StripPrefix("/static/", staticHandler))
 	return r
 }
 
@@ -468,7 +472,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     .image-upload-btn svg { width: 16px; height: 16px; fill: var(--fg); }
     #image-input { display: none; }
     #prompt { color:var(--accent) }
-    #cmd { flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none; color:var(--fg); font-family: inherit; font-size:14px; caret-color: var(--cursor) }
+    #cmd { flex:1 1 auto; min-width:0; background:transparent; border:none; outline:none; color:var(--fg); font-family: inherit; font-size:14px; caret-color: var(--cursor); resize:none; overflow-y:hidden; line-height:1.4; max-height:120px }
     small{ color:var(--muted); display:block; margin-top:10px }
 
     /* Scrollbar styling for log and users list */
@@ -522,6 +526,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       .resizer { display: none }
     }
   </style>
+  <script src="/static/markdown.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -560,10 +565,10 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
           </svg>
         </button>
         <input type="file" id="image-input" accept="image/*" />
-        <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder="type a message and press Enter" enterkeyhint="send" inputmode="text" />
+        <textarea id="cmd" autocomplete="off" spellcheck="false" placeholder="type a message and press Enter" enterkeyhint="send" inputmode="text" rows="1"></textarea>
       </div>
     </div>
-    <small>Tip: Enter to send • Nickname persists locally</small>
+    <small>Tip: Enter to send • Shift+Enter for new line • Nickname persists locally</small>
   </div>
   <div id="image-modal" class="image-modal">
     <img id="modal-image" src="" alt="Full size image" />
@@ -869,6 +874,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     }
 
     // Convert URLs in text to clickable links and display images
+    // Also renders markdown-like code blocks
     function linkifyText(text) {
       // Check if this is an image message
       if (text.startsWith('[IMAGE]')) {
@@ -882,11 +888,46 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
                '<img id="' + imgId + '" src="' + base64Image + '" alt="Uploaded image" class="chat-image" />';
       }
 
-      // First escape HTML
+      // Check if text contains code blocks - if so, use renderMarkdown
+      const backtick = String.fromCharCode(96);
+      if (text.includes(backtick + backtick + backtick) || text.includes(backtick)) {
+        // renderMarkdown handles escaping internally for code blocks
+        let result = renderMarkdownWithLinks(text);
+        // Schedule syntax highlighting after DOM update
+        setTimeout(highlightAllCodeBlocks, 0);
+        return result;
+      }
+
+      // No code blocks - use simple escape and linkify
       const escaped = escapeHTML(text);
       // URL regex pattern
       const urlPattern = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gim;
-      return escaped.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+      // Convert newlines to <br> for multi-line messages
+      return escaped.replace(/\n/g, '<br>').replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+    }
+
+    // Render markdown code blocks and also linkify URLs in non-code parts
+    function renderMarkdownWithLinks(text) {
+      // Use renderMarkdown from markdown.js if available
+      if (typeof renderMarkdown === 'function') {
+        let result = renderMarkdown(text);
+        // Linkify URLs in non-code parts (outside of code-block-wrapper and inline-code)
+        // Split by code blocks, linkify non-code parts, rejoin
+        const parts = result.split(/(<div class="code-block-wrapper">[\s\S]*?<\/div>|<span class="inline-code">[\s\S]*?<\/span>)/g);
+        const urlPattern = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gim;
+        result = parts.map(part => {
+          if (part.startsWith('<div class="code-block-wrapper">') || part.startsWith('<span class="inline-code">')) {
+            return part;
+          }
+          // Convert newlines to <br> and linkify
+          return part.replace(/\n/g, '<br>').replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+        }).join('');
+        return result;
+      }
+      // Fallback if markdown.js not loaded
+      const escaped = escapeHTML(text);
+      const urlPattern = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gim;
+      return escaped.replace(/\n/g, '<br>').replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
     }
 
     // Sanitize nickname: allow HTML/XSS but remove project class names
@@ -1288,15 +1329,28 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 
     // Handle IME composition properly to avoid duplicated last character
     // on Enter when using Korean/Japanese/Chinese input methods.
+    // Shift+Enter inserts newline, Enter sends message.
     cmd.addEventListener('keydown', e => {
       if (e.isComposing || e.keyCode === 229) { return; }
       if (e.key === 'Enter') {
+        if (e.shiftKey) {
+          // Allow default behavior (newline insertion)
+          return;
+        }
         e.preventDefault();
         e.stopPropagation();
         send();
+        // Reset textarea height after sending
+        cmd.style.height = 'auto';
         // Ensure focus stays on the message input on mobile
         setTimeout(() => cmd.focus(), 0);
       }
+    });
+
+    // Auto-resize textarea as content grows
+    cmd.addEventListener('input', () => {
+      cmd.style.height = 'auto';
+      cmd.style.height = Math.min(cmd.scrollHeight, 120) + 'px';
     });
     // Global click handler for images
     document.addEventListener('click', (e) => {

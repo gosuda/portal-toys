@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"embed"
 	"encoding/base64"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +19,9 @@ import (
 	"gosuda.org/portal/portal/core/cryptoops"
 	"gosuda.org/portal/sdk"
 )
+
+//go:embed static
+var embeddedStatic embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "simple-chat",
@@ -80,8 +85,14 @@ func runChat(cmd *cobra.Command, args []string) error {
 			hub.attachStore(store)
 		}
 	}
+	// Prepare embedded static files
+	staticFS, err := fs.Sub(embeddedStatic, "static")
+	if err != nil {
+		return fmt.Errorf("embed sub FS: %w", err)
+	}
+
 	// Build router
-	handler := NewHandler(flagName, hub)
+	handler := NewHandler(flagName, hub, staticFS)
 
 	// Shared credential across all relay listeners
 	cred := sdk.NewCredential()
