@@ -44,6 +44,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("/api/portals", handlePortals)
 	mux.HandleFunc("/api/sites", handleSites)
 	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/relays", handleRelays)
 
 	// Static UI
 	sub, err := fs.Sub(staticFS, "static")
@@ -386,6 +387,55 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	checked := healthCheckItems(ctx, items)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(checked)
+}
+
+// handleRelays returns a deduplicated list of relay websocket URLs derived from the
+// configured relays and the known portal site list.
+func handleRelays(w http.ResponseWriter, _ *http.Request) {
+	relays := collectRelayURLs()
+	if relays == nil {
+		relays = []string{}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(relays)
+}
+
+func collectRelayURLs() []string {
+	seen := make(map[string]struct{})
+	var out []string
+	add := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		relay := raw
+		if !strings.HasPrefix(relay, "ws://") && !strings.HasPrefix(relay, "wss://") {
+			relay = deriveRelayFromSite(relay)
+		}
+		if relay == "" {
+			return
+		}
+		relay = strings.TrimRight(relay, "/")
+		if _, ok := seen[relay]; ok {
+			return
+		}
+		seen[relay] = struct{}{}
+		out = append(out, relay)
+	}
+	for _, r := range flagServerURLs {
+		add(r)
+	}
+	// Sites file may be empty or missing; attempt to load/initialize if needed.
+	sites, err := readSites(sitesJSONPath)
+	if err != nil || !hasNonEmpty(sites) {
+		if fallback, err2 := loadSitesOrInit(sitesJSONPath, flagServerURLs); err2 == nil || len(fallback) > 0 {
+			sites = fallback
+		}
+	}
+	for _, site := range sites {
+		add(site)
+	}
+	return out
 }
 
 func guessNameFromURL(s string) string {
