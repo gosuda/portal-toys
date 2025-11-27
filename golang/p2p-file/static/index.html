@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal P2P File</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page">
+    <header>
+      <h1>Portal P2P File</h1>
+      <p>Upload your own files, fetch data from other peers, and distribute the libp2p binary with a single click.</p>
+    </header>
+
+    <section class="panel" id="infoSection">
+      <h2>Node Info</h2>
+      <div class="info-grid">
+        <div>
+          <div class="label">Peer ID</div>
+          <div id="peerId" class="mono">-</div>
+        </div>
+        <div>
+          <div class="label">Storage Path</div>
+          <div id="storageDir" class="mono">-</div>
+        </div>
+        <div>
+          <div class="label">Binary Status</div>
+          <div id="binaryStatus">-</div>
+        </div>
+        <div>
+          <div class="label">Portal Relay</div>
+          <div id="portalStatus">-</div>
+        </div>
+      </div>
+      <div>
+        <div class="label">Portal Relay Server URLs</div>
+        <ul id="serverUrlList"></ul>
+      </div>
+      <div>
+        <div class="label">Advertised Multiaddrs</div>
+        <ul id="addressList"></ul>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>libp2p Binary</h2>
+      <p>Pick a platform, launch the embedded agent on this host, and grab the GoReleaser build (Windows is fully supported).</p>
+      <div class="binary-row">
+        <select id="binarySelect">
+          <option value="">Loading build list...</option>
+        </select>
+        <button id="downloadBinaryBtn">Launch &amp; Download</button>
+      </div>
+      <div id="binaryHint" class="status"></div>
+      <span id="launchStatus" class="status"></span>
+    </section>
+
+    <section class="panel">
+      <h2>Upload A Local File</h2>
+      <form id="uploadForm">
+        <input type="file" id="uploadInput" required>
+        <button type="submit">Upload</button>
+      </form>
+      <div id="uploadResult" class="status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Files On This Node</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Size</th>
+            <th>Source</th>
+            <th>Download</th>
+          </tr>
+        </thead>
+        <tbody id="fileTable"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Fetch From A Peer</h2>
+      <form id="fetchForm">
+        <label>Multiaddr</label>
+        <input type="text" id="fetchAddress" placeholder="/ip4/127.0.0.1/tcp/9000/p2p/..." required>
+        <label>Remote File ID</label>
+        <input type="text" id="fetchFileId" placeholder="target file id" required>
+        <button type="submit">Fetch via libp2p</button>
+      </form>
+      <div id="fetchResult" class="status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>List Remote Files</h2>
+      <form id="listRemoteForm">
+        <label>Multiaddr</label>
+        <input type="text" id="listRemoteAddress" placeholder="/ip4/..." required>
+        <button type="submit">List Remote Files</button>
+      </form>
+      <div id="remoteListResult"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
