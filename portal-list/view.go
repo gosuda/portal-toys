@@ -230,6 +230,11 @@ func extractPortalItems(ssr any) []PortalCard {
 
 // healthCheckItems runs a quick HTTP health check for each portal link
 func healthCheckItems(ctx context.Context, items []PortalCard) []PortalCard {
+	return healthCheckItemsWithCallback(ctx, items, nil)
+}
+
+// healthCheckItemsWithCallback runs health checks and invokes cb for each result when ready.
+func healthCheckItemsWithCallback(ctx context.Context, items []PortalCard, cb func(PortalCard)) []PortalCard {
 	// Shallow copy
 	out := make([]PortalCard, len(items))
 	copy(out, items)
@@ -266,6 +271,9 @@ func healthCheckItems(ctx context.Context, items []PortalCard) []PortalCard {
 				out[idx].Healthy = false
 				out[idx].CheckedAt = time.Now().UTC().Format(time.RFC3339)
 				out[idx].Error = "empty link"
+				if cb != nil && ctx.Err() == nil {
+					cb(out[idx])
+				}
 				return
 			}
 			// Per-check timeout to avoid slow endpoints delaying the page
@@ -279,6 +287,9 @@ func healthCheckItems(ctx context.Context, items []PortalCard) []PortalCard {
 			}
 			// Store back normalized link for UI
 			out[idx].Link = link
+			if cb != nil && ctx.Err() == nil {
+				cb(out[idx])
+			}
 		}(i)
 	}
 	// Wait for all
@@ -365,6 +376,10 @@ func isHealthy(ctx context.Context, client *http.Client, urlStr string) (bool, e
 // handleHealth: direct URL reachability from sites.json (no SSR parsing)
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	streamMode := false
+	if v := r.URL.Query().Get("stream"); v == "1" || strings.EqualFold(v, "true") {
+		streamMode = true
+	}
 	sites, err := readSites(sitesJSONPath)
 	if err != nil || !hasNonEmpty(sites) {
 		// Fallback to derived portal base if sites.json is missing/empty
@@ -384,6 +399,29 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 			Connected: false,
 		})
 	}
+	// Stream results as they are ready when requested
+	if streamMode {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming not supported", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Cache-Control", "no-cache")
+		enc := json.NewEncoder(w)
+		healthCheckItemsWithCallback(ctx, items, func(pc PortalCard) {
+			// Stop sending if client went away
+			if ctx.Err() != nil {
+				return
+			}
+			if err := enc.Encode(pc); err != nil {
+				return
+			}
+			flusher.Flush()
+		})
+		return
+	}
+
 	checked := healthCheckItems(ctx, items)
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(checked)

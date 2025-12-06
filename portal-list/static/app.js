@@ -9,6 +9,49 @@ async function getHealth() {
   return r.json();
 }
 
+async function streamHealth(signal) {
+  setStatus('Loading portals...', 'info');
+  const r = await fetch('/api/health?stream=1', { signal });
+  if (!r.ok) {
+    let t = '';
+    try { t = await r.text(); } catch {}
+    const msg = `health fetch failed: ${r.status} ${r.statusText}${t ? ' - ' + t : ''}`;
+    throw new Error(msg);
+  }
+  if (!r.body) {
+    throw new Error('Streaming not supported by this browser');
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  const processBuffer = () => {
+    for (;;) {
+      const idx = buf.indexOf('\n');
+      if (idx === -1) break;
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line) continue;
+      try {
+        const card = JSON.parse(line);
+        upsertPortal(card);
+        applySearch();
+      } catch (err) {
+        console.warn('Failed to parse stream chunk', err, line);
+      }
+    }
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    processBuffer();
+  }
+  buf += decoder.decode();
+  processBuffer();
+  setStatus(`Loaded ${currentList.length} portals`, 'info');
+  return currentList;
+}
+
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c])); }
 
 // meta removed per request
@@ -71,6 +114,7 @@ function tickAgo() {
 let currentList = [];
 let refreshing = false;
 const statusBar = document.getElementById('statusBar');
+let currentStreamController = null;
 
 function setStatus(message, level = 'info') {
   if (!statusBar) return;
@@ -85,15 +129,31 @@ function clearStatus() {
 async function refresh() {
   if (refreshing) return;
   refreshing = true;
+  const controller = new AbortController();
+  currentStreamController = controller;
+  currentList = [];
+  applySearch();
   try {
     clearStatus();
-    const list = await getHealth();
-    currentList = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
-    applySearch();
+    await streamHealth(controller.signal);
   } catch (e) {
-    console.error('Health fetch failed', e);
-    setStatus('Connection looks slow or offline. Will keep retrying in the background.', 'error');
+    if (controller.signal.aborted) {
+      return;
+    }
+    console.error('Streaming health fetch failed, falling back to full fetch', e);
+    try {
+      const list = await getHealth();
+      currentList = Array.isArray(list) ? list : (Array.isArray(list?.data) ? list.data : []);
+      applySearch();
+      setStatus('Loaded portals (fallback mode)', 'info');
+    } catch (err) {
+      console.error('Health fetch failed', err);
+      setStatus('Connection looks slow or offline. Will keep retrying in the background.', 'error');
+    }
   } finally {
+    if (currentStreamController === controller) {
+      currentStreamController = null;
+    }
     refreshing = false;
   }
 }
@@ -135,6 +195,23 @@ document.getElementById('portalInput').addEventListener('keydown', async (e) => 
 // search
 const searchBox = document.getElementById('searchBox');
 searchBox.addEventListener('input', applySearch);
+
+function upsertPortal(card) {
+  const key = portalKey(card);
+  const idx = key ? currentList.findIndex(it => portalKey(it) === key) : -1;
+  if (idx >= 0) {
+    currentList[idx] = { ...currentList[idx], ...card };
+  } else {
+    currentList.push(card);
+  }
+}
+
+function portalKey(item) {
+  const link = String(item.link || item.Link || '').trim().toLowerCase();
+  if (link) return link;
+  const name = String(item.name || item.Name || '').trim().toLowerCase();
+  return name || null;
+}
 
 function applySearch() {
   const q = (searchBox.value || '').toLowerCase();
