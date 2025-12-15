@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"html/template"
 	"io/fs"
@@ -79,19 +81,31 @@ type hub struct {
 	wg         sync.WaitGroup
 	store      *messageStore
 	connMu     map[*websocket.Conn]*sync.Mutex // per-connection write locks
+	blacklist  map[string]bool                  // blocked UIDs
+	admins     map[string]bool                  // admin UIDs
+	joinOrder  []string                         // UIDs in join order (most recent last)
+	uidTokens  map[string]string                // UID -> session token mapping
 }
 
 type message struct {
-	TS    time.Time `json:"ts"`
-	User  string    `json:"user"`
-	Text  string    `json:"text"`
-	Event string    `json:"event,omitempty"` // "joined" | "left" | "roster"
-	UID   string    `json:"uid,omitempty"`
-	Users []string  `json:"users,omitempty"`
+	TS        time.Time  `json:"ts"`
+	User      string     `json:"user"`
+	Text      string     `json:"text"`
+	Event     string     `json:"event,omitempty"` // "joined" | "left" | "roster"
+	UID       string     `json:"uid,omitempty"`
+	Token     string     `json:"token,omitempty"`    // session token for auth
+	Users     []string   `json:"users,omitempty"`    // deprecated: use UserList instead
+	UserList  []userInfo `json:"userList,omitempty"` // roster with UID info
+	IsAdmin   bool       `json:"isAdmin,omitempty"`  // true if recipient is admin (for roster)
+}
+
+type userInfo struct {
+	Name string `json:"name"`
+	UID  string `json:"uid"`
 }
 
 func newHub() *hub {
-	return &hub{
+	h := &hub{
 		conns:      map[*websocket.Conn]struct{}{},
 		connUID:    map[*websocket.Conn]string{},
 		userConns:  map[string]map[*websocket.Conn]struct{}{},
@@ -99,7 +113,129 @@ func newHub() *hub {
 		messages:   make([]message, 0, 64),
 		maxBacklog: 100, // keep last 100 messages in memory
 		connMu:     map[*websocket.Conn]*sync.Mutex{},
+		blacklist:  map[string]bool{},
+		admins:     map[string]bool{},
+		joinOrder:  make([]string, 0),
+		uidTokens:  map[string]string{},
 	}
+	return h
+}
+
+// generateToken creates a random session token
+func generateToken() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+// addAdmin adds a UID to the admin list
+func (h *hub) addAdmin(uid string) {
+	h.mu.Lock()
+	h.admins[uid] = true
+	h.mu.Unlock()
+	log.Info().Str("uid", uid).Msg("[chat] admin added")
+}
+
+// isAdmin checks if a UID is an admin
+func (h *hub) isAdmin(uid string) bool {
+	h.mu.RLock()
+	isAdmin := h.admins[uid]
+	h.mu.RUnlock()
+	log.Info().Str("uid", uid).Msg("[chat] admin ")
+	return isAdmin
+}
+
+// blockUser adds a UID to the blacklist and disconnects all their connections
+func (h *hub) blockUser(uid string) {
+	h.mu.Lock()
+	h.blacklist[uid] = true
+	// Get all connections for this UID
+	conns := make([]*websocket.Conn, 0)
+	if userConns, ok := h.userConns[uid]; ok {
+		for conn := range userConns {
+			conns = append(conns, conn)
+		}
+	}
+	h.mu.Unlock()
+
+	// Send close message to all connections for this user
+	// The goroutines will handle the actual close when they detect the close frame
+	for _, conn := range conns {
+		h.mu.RLock()
+		mu := h.connMu[conn]
+		h.mu.RUnlock()
+		if mu != nil {
+			mu.Lock()
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "blocked"))
+			mu.Unlock()
+			// Don't call conn.Close() here - let the read goroutine detect the close frame and clean up
+		}
+	}
+	log.Info().Str("uid", uid).Msg("[chat] user blocked")
+}
+
+// unblockUser removes a UID from the blacklist
+func (h *hub) unblockUser(uid string) {
+	h.mu.Lock()
+	delete(h.blacklist, uid)
+	h.mu.Unlock()
+	log.Info().Str("uid", uid).Msg("[chat] user unblocked")
+}
+
+// isBlocked checks if a UID is in the blacklist
+func (h *hub) isBlocked(uid string) bool {
+	h.mu.RLock()
+	blocked := h.blacklist[uid]
+	h.mu.RUnlock()
+	return blocked
+}
+
+// kickUser disconnects a user without blocking them (temporary kick)
+func (h *hub) kickUser(uid string) {
+	h.mu.RLock()
+	// Get all connections for this UID
+	conns := make([]*websocket.Conn, 0)
+	if userConns, ok := h.userConns[uid]; ok {
+		for conn := range userConns {
+			conns = append(conns, conn)
+		}
+	}
+	h.mu.RUnlock()
+
+	// Send close message to all connections for this user
+	for _, conn := range conns {
+		h.mu.RLock()
+		mu := h.connMu[conn]
+		h.mu.RUnlock()
+		if mu != nil {
+			mu.Lock()
+			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "kicked by admin"))
+			mu.Unlock()
+		}
+	}
+	log.Info().Str("uid", uid).Msg("[chat] user kicked")
+}
+
+// getLastJoinedUID returns the UID of the most recently joined user (excluding admins)
+func (h *hub) getLastJoinedUID() string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Iterate from end (most recent) to beginning
+	for i := len(h.joinOrder) - 1; i >= 0; i-- {
+		uid := h.joinOrder[i]
+		// Skip if admin
+		if h.admins[uid] {
+			continue
+		}
+		// Check if user is still connected
+		if conns, ok := h.userConns[uid]; ok && len(conns) > 0 {
+			return uid
+		}
+	}
+	return ""
 }
 
 func (h *hub) broadcast(m message) {
@@ -138,10 +274,13 @@ func (h *hub) broadcast(m message) {
 }
 
 // broadcastRoster sends the current list of connected user names to all clients.
+// Admins receive UID info and isAdmin flag; regular users only see names.
 func (h *hub) broadcastRoster() {
-	// Build roster snapshot
+	// Build roster snapshot with UID info
 	h.mu.RLock()
-	users := make([]string, 0, len(h.userName))
+	userListFull := make([]userInfo, 0, len(h.userName))
+	userListNoUID := make([]userInfo, 0, len(h.userName))
+	legacyUsers := make([]string, 0, len(h.userName))
 	for uid, name := range h.userName {
 		if set, ok := h.userConns[uid]; !ok || len(set) == 0 {
 			continue
@@ -149,12 +288,64 @@ func (h *hub) broadcastRoster() {
 		if name == "" {
 			name = "anon"
 		}
-		users = append(users, name)
+		userListFull = append(userListFull, userInfo{Name: name, UID: uid})
+		userListNoUID = append(userListNoUID, userInfo{Name: name, UID: ""})
+		legacyUsers = append(legacyUsers, name)
+	}
+
+	// Get all connections with their UIDs and admin status
+	type connInfo struct {
+		conn    *websocket.Conn
+		mu      *sync.Mutex
+		isAdmin bool
+	}
+	connInfos := make([]connInfo, 0, len(h.conns))
+	for c := range h.conns {
+		uid := h.connUID[c]
+		mu := h.connMu[c]
+		isAdmin := h.admins[uid]
+		connInfos = append(connInfos, connInfo{conn: c, mu: mu, isAdmin: isAdmin})
 	}
 	h.mu.RUnlock()
-	// Sort for stable UI order
-	sort.Strings(users)
-	h.broadcast(message{TS: time.Now().UTC(), Event: "roster", Users: users})
+
+	// Sort by name for stable UI order
+	sort.Slice(userListFull, func(i, j int) bool {
+		return userListFull[i].Name < userListFull[j].Name
+	})
+	sort.Slice(userListNoUID, func(i, j int) bool {
+		return userListNoUID[i].Name < userListNoUID[j].Name
+	})
+	sort.Strings(legacyUsers)
+
+	ts := time.Now().UTC()
+
+	// Send different roster to admins vs regular users
+	for _, ci := range connInfos {
+		var msg message
+		if ci.isAdmin {
+			msg = message{
+				TS:       ts,
+				Event:    "roster",
+				Users:    legacyUsers,
+				UserList: userListFull,
+				IsAdmin:  true,
+			}
+		} else {
+			msg = message{
+				TS:       ts,
+				Event:    "roster",
+				Users:    legacyUsers,
+				UserList: userListNoUID,
+				IsAdmin:  false,
+			}
+		}
+		if ci.mu != nil {
+			ci.mu.Lock()
+			_ = ci.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			_ = writeJSON(ci.conn, msg)
+			ci.mu.Unlock()
+		}
+	}
 }
 
 // attachStore connects a persistent store to the hub.
@@ -297,9 +488,10 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 		}()
 		for {
 			var req struct {
-				User string `json:"user"`
-				Text string `json:"text"`
-				UID  string `json:"uid"`
+				User  string `json:"user"`
+				Text  string `json:"text"`
+				UID   string `json:"uid"`
+				Token string `json:"token"`
 			}
 			// Reset read deadline on each message
 			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
@@ -313,32 +505,203 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 				req.User = "anon"
 			}
 			// Sanitize message text: limit length and remove control characters
-			req.Text = sanitizeString(req.Text, 10000)
+			// Allow larger limit for image messages (base64 encoded images can be ~500KB)
+			textLimit := 10000
+			if strings.HasPrefix(req.Text, "[IMAGE]") {
+				textLimit = 600000 // ~600KB for base64 images
+			}
+			req.Text = sanitizeString(req.Text, textLimit)
 			if req.UID == "" {
 				// Fallback to a per-connection unique id if client didn't provide one
 				req.UID = strconv.FormatInt(time.Now().UnixNano(), 10)
 			}
+
+			// Check if user is blocked
+			if h.isBlocked(req.UID) {
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "blocked"))
+				mu.Unlock()
+				log.Info().Str("uid", req.UID).Str("user", req.User).Msg("[chat] blocked user tried to connect")
+				return
+			}
+
+			// Check for commands
+			if req.Text == "/myuid" {
+				// Send UID back to the user privately
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				_ = writeJSON(conn, message{
+					TS:    time.Now().UTC(),
+					User:  "system",
+					Text:  "Your UID: " + req.UID + " (stored in browser localStorage as 'simple-chat-uid')",
+					Event: "",
+				})
+				mu.Unlock()
+				continue
+			}
+
+			if req.Text == "/help" {
+				// Show available commands
+				helpText := "Available commands:\n" +
+					"/myuid - Show your UID\n" +
+					"/help - Show this help message"
+				if h.isAdmin(req.UID) {
+					helpText += "\n\nAdmin commands:\n" +
+						"/block <uid> - Block a user by UID\n" +
+						"/unblock <uid> - Unblock a user by UID\n" +
+						"/kick - Permanently kick and block the most recently joined user"
+				}
+
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				_ = writeJSON(conn, message{
+					TS:    time.Now().UTC(),
+					User:  "system",
+					Text:  helpText,
+					Event: "",
+				})
+				mu.Unlock()
+				continue
+			}
+
+			// Admin-only commands
+			if h.isAdmin(req.UID) {
+				if strings.HasPrefix(req.Text, "/block ") {
+					targetUID := strings.TrimSpace(strings.TrimPrefix(req.Text, "/block "))
+					h.blockUser(targetUID)
+					// Notify admin
+					mu.Lock()
+					_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					_ = writeJSON(conn, message{
+						TS:    time.Now().UTC(),
+						User:  "system",
+						Text:  "Blocked UID: " + targetUID,
+						Event: "",
+					})
+					mu.Unlock()
+					continue
+				}
+				if strings.HasPrefix(req.Text, "/unblock ") {
+					targetUID := strings.TrimSpace(strings.TrimPrefix(req.Text, "/unblock "))
+					h.unblockUser(targetUID)
+					// Notify admin
+					mu.Lock()
+					_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					_ = writeJSON(conn, message{
+						TS:    time.Now().UTC(),
+						User:  "system",
+						Text:  "Unblocked UID: " + targetUID,
+						Event: "",
+					})
+					mu.Unlock()
+					continue
+				}
+				if req.Text == "/kick" {
+					targetUID := h.getLastJoinedUID()
+					if targetUID == "" {
+						mu.Lock()
+						_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+						_ = writeJSON(conn, message{
+							TS:    time.Now().UTC(),
+							User:  "system",
+							Text:  "No users to kick (all users are admins or no users online)",
+							Event: "",
+						})
+						mu.Unlock()
+						continue
+					}
+					h.mu.RLock()
+					targetName := h.userName[targetUID]
+					h.mu.RUnlock()
+					// Permanently block the user (add to blacklist)
+					h.blockUser(targetUID)
+					// Notify admin
+					mu.Lock()
+					_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					_ = writeJSON(conn, message{
+						TS:    time.Now().UTC(),
+						User:  "system",
+						Text:  "Kicked and blocked user: " + targetName + " (UID: " + targetUID + ")",
+						Event: "",
+					})
+					mu.Unlock()
+					continue
+				}
+			}
+
 			// map connection to uid and maintain per-user state
 			var announce bool
 			var renamed bool
+			var newToken string
+			var tokenInvalid bool
 			h.mu.Lock()
 			if _, ok := h.connUID[conn]; !ok {
-				h.connUID[conn] = req.UID
-				if _, ok := h.userConns[req.UID]; !ok {
-					h.userConns[req.UID] = map[*websocket.Conn]struct{}{}
+				// Token validation
+				existingToken, hasToken := h.uidTokens[req.UID]
+				if hasToken {
+					// UID already has a token - validate
+					if req.Token != existingToken {
+						// Token mismatch - reject connection
+						tokenInvalid = true
+						log.Warn().Str("uid", req.UID).Msg("[chat] token mismatch, rejecting connection")
+					}
+				} else {
+					// First time for this UID - generate token
+					newToken = generateToken()
+					h.uidTokens[req.UID] = newToken
 				}
-				if len(h.userConns[req.UID]) == 0 {
-					announce = true
+
+				if !tokenInvalid {
+					h.connUID[conn] = req.UID
+					if _, ok := h.userConns[req.UID]; !ok {
+						h.userConns[req.UID] = map[*websocket.Conn]struct{}{}
+					}
+					if len(h.userConns[req.UID]) == 0 {
+						announce = true
+						// Add to join order when user first joins
+						h.joinOrder = append(h.joinOrder, req.UID)
+					}
+					h.userConns[req.UID][conn] = struct{}{}
 				}
-				h.userConns[req.UID][conn] = struct{}{}
 			}
-			if cur, ok := h.userName[req.UID]; !ok {
-				h.userName[req.UID] = req.User
-			} else if cur != req.User {
-				h.userName[req.UID] = req.User
-				renamed = true
+			if !tokenInvalid {
+				if cur, ok := h.userName[req.UID]; !ok {
+					h.userName[req.UID] = req.User
+				} else if cur != req.User {
+					h.userName[req.UID] = req.User
+					renamed = true
+				}
 			}
 			h.mu.Unlock()
+
+			// Reject invalid token
+			if tokenInvalid {
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				_ = writeJSON(conn, message{
+					TS:    time.Now().UTC(),
+					User:  "system",
+					Text:  "Connection rejected: invalid session token",
+					Event: "",
+				})
+				_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token"))
+				mu.Unlock()
+				return
+			}
+
+			// Send new token to client if generated
+			if newToken != "" {
+				mu.Lock()
+				_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+				_ = writeJSON(conn, message{
+					TS:    time.Now().UTC(),
+					Event: "token",
+					Token: newToken,
+				})
+				mu.Unlock()
+			}
+
 			if announce {
 				h.broadcast(message{TS: time.Now().UTC(), User: req.User, Event: "joined"})
 				h.broadcastRoster()
@@ -677,8 +1040,9 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       });
     })();
 
-    // Store current online users
+    // Store current online users and admin status
     let onlineUsers = [];
+    let isCurrentUserAdmin = false;
 
     // Smart scroll functions
     function isScrolledToBottom() {
@@ -712,12 +1076,31 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       const num = Math.floor(Math.random()*9000) + 1000; // 4-digit
       return w + '-' + num;
     }
-    // Stable client UID per browser (per origin)
+    // Stable client UID per browser (per origin) - stored in localStorage
     function genUID(){ try{ return (crypto.randomUUID && crypto.randomUUID()) || '' }catch(_){ return '' } }
     function fallbackUID(){ return Math.random().toString(36).slice(2) + Date.now().toString(36) }
+
+    const UID_STORAGE_KEY = 'simple-chat-uid';
+    const TOKEN_STORAGE_KEY = 'simple-chat-token';
     let clientUID = null;
-    try { clientUID = localStorage.getItem('uid'); } catch(_) {}
-    if(!clientUID || clientUID.length < 8){ clientUID = genUID() || fallbackUID(); try { localStorage.setItem('uid', clientUID); } catch(_) {} }
+    let clientToken = null;
+
+    // Try to load existing UID and token from localStorage
+    try {
+      clientUID = localStorage.getItem(UID_STORAGE_KEY);
+      clientToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    } catch(e) {}
+
+    // Generate new UID if not found or invalid
+    if(!clientUID || clientUID.length < 8){
+      clientUID = genUID() || fallbackUID();
+      clientToken = null; // New UID means no token yet
+      // Save to localStorage
+      try {
+        localStorage.setItem(UID_STORAGE_KEY, clientUID);
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+      } catch(e) {}
+    }
 
     // Restore nickname or initialize randomly
     let savedNick = null;
@@ -751,10 +1134,12 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       const idx = hashNick(nick || 'anon') % PALETTE.length;
       return PALETTE[idx];
     }
-    function renderRoster(users){
-      onlineUsers = users || [];
+    function renderRoster(userList, isAdmin){
+      // userList is now array of {name, uid} objects (or legacy string array)
+      onlineUsers = userList || [];
+      isCurrentUserAdmin = !!isAdmin;
       const count = onlineUsers.length;
-      logWS('INFO', 'Roster updated: ' + count + ' users online', users);
+      logWS('INFO', 'Roster updated: ' + count + ' users online, isAdmin: ' + isCurrentUserAdmin, userList);
       if (usersCount) usersCount.textContent = String(count);
     }
 
@@ -765,10 +1150,64 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       if (onlineUsers.length === 0) {
         usersList.innerHTML = '<div class="users-list-item">No users online</div>';
       } else {
-        onlineUsers.forEach((username) => {
+        onlineUsers.forEach((user) => {
           const item = document.createElement('div');
           item.className = 'users-list-item';
-          item.innerHTML = sanitizeNickname(username);
+
+          // Handle both new format {name, uid} and old format (string)
+          if (typeof user === 'object' && user.name) {
+            // New format with UID
+            const nameSpan = document.createElement('div');
+            nameSpan.style.fontWeight = 'bold';
+            // Admin sees red circle indicator
+            if (isCurrentUserAdmin) {
+              nameSpan.innerHTML = '<span style="color:#ef4444;margin-right:6px;">●</span>' + sanitizeNickname(user.name);
+            } else {
+              nameSpan.innerHTML = sanitizeNickname(user.name);
+            }
+
+            item.appendChild(nameSpan);
+
+            // Only show UID if admin and uid is available
+            if (isCurrentUserAdmin && user.uid) {
+              const uidSpan = document.createElement('div');
+              uidSpan.style.fontSize = '11px';
+              uidSpan.style.color = 'var(--muted)';
+              uidSpan.style.marginTop = '4px';
+              uidSpan.style.fontFamily = 'monospace';
+              uidSpan.style.cursor = 'pointer';
+              uidSpan.style.userSelect = 'all';
+              uidSpan.textContent = 'UID: ' + user.uid;
+              uidSpan.title = 'Click to copy UID';
+
+              // Click to copy UID
+              uidSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(user.uid).then(() => {
+                    const originalText = uidSpan.textContent;
+                    uidSpan.textContent = 'UID copied!';
+                    uidSpan.style.color = 'var(--accent)';
+                    setTimeout(() => {
+                      uidSpan.textContent = originalText;
+                      uidSpan.style.color = 'var(--muted)';
+                    }, 1500);
+                  }).catch(() => {
+                    alert('Failed to copy UID: ' + user.uid);
+                  });
+                } else {
+                  // Fallback for older browsers
+                  alert('UID: ' + user.uid);
+                }
+              });
+
+              item.appendChild(uidSpan);
+            }
+          } else {
+            // Legacy format (just username string)
+            item.innerHTML = sanitizeNickname(user);
+          }
+
           usersList.appendChild(item);
         });
       }
@@ -796,9 +1235,20 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     let appendTimer = null;
 
     function append(msg){
+      // Handle token event from server
+      if (msg.event === 'token' && msg.token) {
+        clientToken = msg.token;
+        try {
+          localStorage.setItem(TOKEN_STORAGE_KEY, clientToken);
+        } catch(e) {}
+        return;
+      }
+
       if (msg.event === 'roster') {
-        logWS('DEBUG', 'Roster event received with ' + (msg.users ? msg.users.length : 0) + ' users', msg.users);
-        renderRoster(msg.users || []);
+        // Prefer new userList format with UIDs, fallback to legacy users array
+        const userList = msg.userList || msg.users || [];
+        logWS('DEBUG', 'Roster event received with ' + userList.length + ' users, isAdmin: ' + msg.isAdmin, userList);
+        renderRoster(userList, msg.isAdmin);
         return;
       }
 
@@ -990,15 +1440,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     const heartbeatInterval = 20000; // 20 seconds - send heartbeat to keep connection alive (prevents proxy timeouts)
 
     function logWS(level, message, data) {
-      const timestamp = new Date().toISOString();
-      const wsState = ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'NULL';
-      const prefix = '[' + timestamp + '] [' + level + '] [WS:' + wsState + ']';
-
-      if (data) {
-        console.log(prefix, message, data);
-      } else {
-        console.log(prefix, message);
-      }
+      // Logging disabled for production
     }
 
     function getReconnectDelay() {
@@ -1044,7 +1486,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
           logWS('DEBUG', 'Sending heartbeat #' + heartbeatCount);
           try {
             // Send empty message as heartbeat (text is empty, so server won't broadcast)
-            ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
+            ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken }));
             logWS('DEBUG', 'Heartbeat sent successfully');
           } catch(e) {
             logWS('ERROR', 'Heartbeat failed', e);
@@ -1093,7 +1535,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
 
         logWS('DEBUG', 'Sending initial user info message');
         try{
-          ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID }));
+          ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken }));
           logWS('DEBUG', 'Initial message sent successfully');
         }catch(e){
           logWS('ERROR', 'Failed to send initial message', e);
@@ -1171,7 +1613,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     connectWebSocket();
 
     function send(){
-      const payload = { user: (user.value || 'anon'), text: cmd.value.trim(), uid: clientUID };
+      const payload = { user: (user.value || 'anon'), text: cmd.value.trim(), uid: clientUID, token: clientToken };
       if(!payload.text) {
         logWS('DEBUG', 'send() called with empty text, ignoring');
         return;
@@ -1289,7 +1731,8 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
           const payload = {
             user: (user.value || 'anon'),
             text: '[IMAGE]' + resizedBase64,
-            uid: clientUID
+            uid: clientUID,
+            token: clientToken
           };
           ws.send(JSON.stringify(payload));
 
@@ -1315,7 +1758,7 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
       if (ws && ws.readyState === WebSocket.OPEN) {
         if (nickTimer) clearTimeout(nickTimer);
         nickTimer = setTimeout(() => {
-          try{ ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID })); }catch(_){ }
+          try{ ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken })); }catch(_){ }
         }, 300);
       }
     });
@@ -1426,16 +1869,30 @@ var indexTmpl = template.Must(template.New("chat").Parse(`<!DOCTYPE html>
     }
 
     // Page lifecycle event logging and reconnection handling
+    // On mobile, disconnect when screen off, reconnect when screen on
+    let disconnectedByVisibility = false;
+
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        logWS('INFO', '>>> Page HIDDEN (tab switched away or minimized)');
+        logWS('INFO', '>>> Page HIDDEN (screen off or tab switched)');
+        // Disconnect WebSocket to save battery and resources on mobile
+        if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+          disconnectedByVisibility = true;
+          stopHeartbeat();
+          ws.close(1000, 'page hidden');
+          logWS('INFO', 'WebSocket closed due to page hidden');
+        }
+        // Clear any pending reconnect timer
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
       } else {
-        logWS('INFO', '<<< Page VISIBLE (tab switched back or restored)');
-        logWS('DEBUG', 'WebSocket state on visibility: ' + (ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][ws.readyState] : 'null'));
-
-        // When page becomes visible, check if connection is dead and reconnect immediately
-        if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
-          logWS('WARN', 'Connection lost while page was hidden, reconnecting immediately');
+        logWS('INFO', '<<< Page VISIBLE (screen on or tab switched back)');
+        // Reconnect WebSocket when page becomes visible again
+        if (disconnectedByVisibility || !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+          logWS('INFO', 'Reconnecting WebSocket after page visible');
+          disconnectedByVisibility = false;
           // Clear any pending reconnect timer
           if (reconnectTimer) {
             clearTimeout(reconnectTimer);

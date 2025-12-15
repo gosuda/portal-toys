@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
@@ -39,19 +40,61 @@ var (
 	flagDescription string
 	flagTags        string
 	flagOwner       string
+	flagAdminUIDs   []string
 )
 
+// getEnv returns the environment variable value or the default value if not set
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvBool returns the environment variable as a boolean or the default value if not set
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return value == "true" || value == "1" || value == "yes"
+	}
+	return defaultValue
+}
+
+// getEnvSlice returns a comma-separated environment variable as a string slice, filtering empty strings
+func getEnvSlice(key string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		return nil
+	}
+	// Remove surrounding quotes if present
+	value = strings.Trim(value, "'\"")
+	parts := strings.Split(value, ",")
+	// Filter out empty strings and trim quotes/whitespace
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		trimmed = strings.Trim(trimmed, "'\"")
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
 func init() {
+	// Load .env file FIRST, before any getEnv/getEnvSlice calls
+	_ = godotenv.Load()
+
 	flags := rootCmd.PersistentFlags()
-	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relayserver base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.StringSliceVar(&flagServerURLs, "server-url", getEnvSlice("RELAY"), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "simple-chat", "backend display name")
-	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
-	flags.StringVar(&flagDescription, "description", "Portal demo chat", "lease description")
-	flags.StringVar(&flagOwner, "owner", "Simple Chat", "lease owner")
-	flags.StringVar(&flagTags, "tags", "chat,simple", "comma-separated lease tags")
-	flags.StringVar(&flagDataPath, "data-path", "", "optional directory to persist chat history via PebbleDB")
-	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
+	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat"), "backend display name (from env CHAT_NAME if set)")
+	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
+	flags.StringVar(&flagDescription, "description", getEnv("CHAT_DESCRIPTION", "Portal demo chat"), "lease description (from env CHAT_DESCRIPTION if set)")
+	flags.StringVar(&flagOwner, "owner", getEnv("CHAT_OWNER", "Simple Chat"), "lease owner (from env CHAT_OWNER if set)")
+	flags.StringVar(&flagTags, "tags", getEnv("CHAT_TAGS", "chat,simple"), "comma-separated lease tags (from env CHAT_TAGS if set)")
+	flags.StringVar(&flagDataPath, "data-path", getEnv("CHAT_DATA_PATH", ""), "optional directory to persist chat history via PebbleDB (from env CHAT_DATA_PATH if set)")
+	flags.StringVar(&flagCredKey, "cred-key", getEnv("CHAT_CRED_KEY", ""), "optional credential key to use for the listener (base64 encoded) (from env CHAT_CRED_KEY if set)")
+	flags.StringSliceVar(&flagAdminUIDs, "admin-uid", getEnvSlice("CHAT_ADMIN_UIDS"), "comma-separated list of admin UIDs (from env CHAT_ADMIN_UIDS if set)")
 }
 
 func main() {
@@ -66,6 +109,20 @@ func runChat(cmd *cobra.Command, args []string) error {
 	defer stop()
 
 	hub := newHub()
+
+	// Add admin UIDs from flag/env
+	log.Info().Strs("admin_uids", flagAdminUIDs).Msg("[chat] configured admin UIDs")
+	adminCount := 0
+	for _, uid := range flagAdminUIDs {
+		uid = strings.TrimSpace(uid)
+		if uid != "" && uid != "," {
+			hub.addAdmin(uid)
+			adminCount++
+		}
+	}
+	if adminCount == 0 {
+		log.Warn().Msg("[chat] no admin UIDs configured - use CHAT_ADMIN_UIDS env var or --admin-uid flag")
+	}
 
 	// Optional: open persistent store and preload history
 	var store *messageStore
