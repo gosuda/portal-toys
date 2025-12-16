@@ -6,7 +6,7 @@
  */
 
 // Load highlight.js dynamically
-(function() {
+(function () {
   // Add highlight.js CSS
   const link = document.createElement('link');
   link.rel = 'stylesheet';
@@ -16,14 +16,14 @@
   // Add highlight.js script
   const script = document.createElement('script');
   script.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
-  script.onload = function() {
+  script.onload = function () {
     console.log('[markdown.js] highlight.js loaded');
   };
   document.head.appendChild(script);
 })();
 
 // Custom styles for code blocks
-(function() {
+(function () {
   const style = document.createElement('style');
   style.textContent = `
     /* Multi-line code block */
@@ -112,7 +112,7 @@ function renderMarkdown(text) {
   // Match code blocks with optional language specifier
   const codeBlockRegex = /```(\w*)\n?([\s\S]*?)```/g;
 
-  result = result.replace(codeBlockRegex, function(match, lang, code, offset, fullString) {
+  result = result.replace(codeBlockRegex, function (match, lang, code, offset, fullString) {
     const language = lang || 'plaintext';
     const escapedCode = escapeHtmlForCode(code.trim());
     const uniqueId = 'code-' + Math.random().toString(36).substr(2, 9);
@@ -136,11 +136,11 @@ function renderMarkdown(text) {
 
     html += '<div class="code-block-wrapper">' +
       '<div class="code-block-header">' +
-        '<span class="code-block-lang">' + language + '</span>' +
-        '<button class="code-block-copy" data-code-id="' + uniqueId + '" onclick="copyCodeBlock(this, \'' + uniqueId + '\')">Copy</button>' +
+      '<span class="code-block-lang">' + language + '</span>' +
+      '<button class="code-block-copy" data-code-id="' + uniqueId + '" onclick="copyCodeBlock(this, \'' + uniqueId + '\')">Copy</button>' +
       '</div>' +
       '<pre class="code-block-content"><code id="' + uniqueId + '" class="language-' + language + '">' + escapedCode + '</code></pre>' +
-    '</div>';
+      '</div>';
 
     // Add line break after if there's text immediately after
     if (hasTextAfter) {
@@ -153,7 +153,7 @@ function renderMarkdown(text) {
   // Process inline code: `code` (but not inside code blocks)
   // Only match single backticks that don't span multiple lines
   const inlineCodeRegex = /`([^`\n]+)`/g;
-  result = result.replace(inlineCodeRegex, function(match, code) {
+  result = result.replace(inlineCodeRegex, function (match, code) {
     const escapedCode = escapeHtmlForCode(code);
     return '<span class="inline-code">' + escapedCode + '</span>';
   });
@@ -181,14 +181,14 @@ function copyCodeBlock(button, codeId) {
   if (!codeElement) return;
 
   const text = codeElement.textContent;
-  navigator.clipboard.writeText(text).then(function() {
+  navigator.clipboard.writeText(text).then(function () {
     button.textContent = 'Copied!';
     button.classList.add('copied');
-    setTimeout(function() {
+    setTimeout(function () {
       button.textContent = 'Copy';
       button.classList.remove('copied');
     }, 2000);
-  }).catch(function(err) {
+  }).catch(function (err) {
     console.error('Failed to copy:', err);
   });
 }
@@ -204,7 +204,7 @@ function highlightAllCodeBlocks() {
     return;
   }
 
-  document.querySelectorAll('.code-block-content code:not(.hljs)').forEach(function(block) {
+  document.querySelectorAll('.code-block-content code:not(.hljs)').forEach(function (block) {
     hljs.highlightElement(block);
   });
 }
