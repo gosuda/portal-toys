@@ -33,6 +33,21 @@
   }
 }
 
+@keyframes flash {
+  0% {
+    background-color: var(--accent);
+    color: var(--bg);
+  }
+  100% {
+    background-color: transparent;
+    color: var(--fg);
+  }
+}
+
+.userspill.flash {
+  animation: flash 0.5s ease-out;
+}
+
 body {
   margin: 0;
   padding: 24px;

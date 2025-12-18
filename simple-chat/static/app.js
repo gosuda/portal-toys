@@ -1,27 +1,36 @@
-const log = document.getElementById('log');
-const resizer = document.getElementById('resizer');
-const user = document.getElementById('user');
-const cmd = document.getElementById('cmd');
-const roll = document.getElementById('roll');
-const promptEl = document.getElementById('prompt');
-const usersCount = document.getElementById('users-count');
-const newMessageBubble = document.getElementById('new-message-bubble');
-const imageUploadBtn = document.getElementById('image-upload-btn');
-const imageInput = document.getElementById('image-input');
-const imageModal = document.getElementById('image-modal');
-const modalImage = document.getElementById('modal-image');
-const usersModal = document.getElementById('users-modal');
-const usersModalOverlay = document.getElementById('users-modal-overlay');
-const usersModalClose = document.getElementById('users-modal-close');
-const usersList = document.getElementById('users-list');
+/// <reference path="app.d.ts" />
+// @ts-check
+const log = /** @type {HTMLDivElement} */ (document.getElementById('log'));
+const resizer = /** @type {HTMLDivElement} */ (document.getElementById('resizer'));
+const user = /** @type {HTMLInputElement} */ (document.getElementById('user'));
+const cmd = /** @type {HTMLTextAreaElement} */ (document.getElementById('cmd'));
+const roll = /** @type {HTMLButtonElement} */ (document.getElementById('roll'));
+const promptEl = /** @type {HTMLSpanElement} */ (document.getElementById('prompt'));
+const usersCount = /** @type {HTMLSpanElement} */ (document.getElementById('users-count'));
+const newMessageBubble = /** @type {HTMLDivElement} */ (document.getElementById('new-message-bubble'));
+const imageUploadBtn = /** @type {HTMLButtonElement} */ (document.getElementById('image-upload-btn'));
+const imageInput = /** @type {HTMLInputElement} */ (document.getElementById('image-input'));
+const imageModal = /** @type {HTMLDivElement} */ (document.getElementById('image-modal'));
+const modalImage = /** @type {HTMLImageElement} */ (document.getElementById('modal-image'));
+const usersModal = /** @type {HTMLDivElement} */ (document.getElementById('users-modal'));
+const usersModalOverlay = /** @type {HTMLDivElement} */ (document.getElementById('users-modal-overlay'));
+const usersModalClose = /** @type {HTMLButtonElement} */ (document.getElementById('users-modal-close'));
+const usersList = /** @type {HTMLDivElement} */ (document.getElementById('users-list'));
 
 // Persisted chat height
 const CHAT_HEIGHT_KEY = 'chatHeightPx';
+/**
+ * @param {number} px
+ * @returns {number}
+ */
 function clampChatHeight(px) {
   const minH = 200; // minimum px
   const maxH = Math.min(window.innerHeight - 140, 1200); // leave space for prompt/termbar
   return Math.max(minH, Math.min(maxH, Math.floor(px)));
 }
+/**
+ * @param {number} px
+ */
 function applyChatHeight(px) {
   const clamped = clampChatHeight(px);
   log.style.height = clamped + 'px';
@@ -45,6 +54,7 @@ try {
   let startH = 0;
   let dragging = false;
 
+  /** @param {any} e */
   function onPointerDown(e) {
     dragging = true;
     startY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
@@ -53,6 +63,7 @@ try {
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp, { once: true });
   }
+  /** @param {any} e */
   function onPointerMove(e) {
     if (!dragging) return;
     const currentY = e.clientY || (e.touches && e.touches[0] && e.touches[0].clientY) || 0;
@@ -94,6 +105,7 @@ try {
 })();
 
 // Store current online users and admin status
+/** @type {Array<{name: string, uid?: string}|string>} */
 let onlineUsers = [];
 let isCurrentUserAdmin = false;
 
@@ -108,6 +120,10 @@ function scrollToBottom() {
   newMessageBubble.classList.remove('show');
 }
 
+/**
+ * @param {string} username
+ * @param {string} text
+ */
 function showNewMessageBubble(username, text) {
   const maxLen = 30;
   const preview = text.length > maxLen ? text.substring(0, maxLen) + '...' : text;
@@ -135,7 +151,9 @@ function fallbackUID() { return Math.random().toString(36).slice(2) + Date.now()
 
 const UID_STORAGE_KEY = 'simple-chat-uid';
 const TOKEN_STORAGE_KEY = 'simple-chat-token';
+/** @type {string|null} */
 let clientUID = null;
+/** @type {string|null} */
 let clientToken = null;
 
 // Try to load existing UID and token from localStorage
@@ -178,22 +196,40 @@ const PALETTE = [
   '#34d399', '#fb7185', '#c084fc', '#f97316', '#84cc16', '#10b981', '#38bdf8', '#f43f5e', '#e879f9', '#fde047',
   '#93c5fd', '#4ade80', '#fca5a5', '#a3e635', '#67e8f9', '#f0abfc', '#fbbf24', '#86efac'
 ];
+/** @param {string} s */
 function hashNick(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
   return (h >>> 0);
 }
+/** @param {string} nick */
 function colorFor(nick) {
   const idx = hashNick(nick || 'anon') % PALETTE.length;
   return PALETTE[idx];
 }
+let lastUserCount = 0;
+/**
+ * @param {Array<OnlineUser|string>} userList
+ * @param {boolean} [isAdmin]
+ */
 function renderRoster(userList, isAdmin) {
   // userList is now array of {name, uid} objects (or legacy string array)
   onlineUsers = userList || [];
   isCurrentUserAdmin = !!isAdmin;
   const count = onlineUsers.length;
   logWS('INFO', 'Roster updated: ' + count + ' users online, isAdmin: ' + isCurrentUserAdmin, userList);
-  if (usersCount) usersCount.textContent = String(count);
+  if (usersCount) {
+    usersCount.textContent = String(count);
+    // Flash effect when user count changes
+    if (count !== lastUserCount) {
+      const pill = document.querySelector('.userspill');
+      if (pill) {
+        pill.classList.add('flash');
+        setTimeout(() => pill.classList.remove('flash'), 500);
+      }
+      lastUserCount = count;
+    }
+  }
 }
 
 // Show users modal
@@ -203,26 +239,26 @@ function showUsersModal() {
   if (onlineUsers.length === 0) {
     usersList.innerHTML = '<div class="users-list-item">No users online</div>';
   } else {
-    onlineUsers.forEach((user) => {
+    onlineUsers.forEach((onlineUser) => {
       const item = document.createElement('div');
       item.className = 'users-list-item';
 
       // Handle both new format {name, uid} and old format (string)
-      if (typeof user === 'object' && user.name) {
+      if (typeof onlineUser === 'object' && onlineUser.name) {
         // New format with UID
         const nameSpan = document.createElement('div');
         nameSpan.style.fontWeight = 'bold';
         // Admin sees red circle indicator
         if (isCurrentUserAdmin) {
-          nameSpan.innerHTML = '<span style="color:#ef4444;margin-right:6px;">●</span>' + sanitizeNickname(user.name);
+          nameSpan.innerHTML = '<span style="color:#ef4444;margin-right:6px;">●</span>' + sanitizeNickname(onlineUser.name);
         } else {
-          nameSpan.innerHTML = sanitizeNickname(user.name);
+          nameSpan.innerHTML = sanitizeNickname(onlineUser.name);
         }
 
         item.appendChild(nameSpan);
 
         // Only show UID if admin and uid is available
-        if (isCurrentUserAdmin && user.uid) {
+        if (isCurrentUserAdmin && onlineUser.uid) {
           const uidSpan = document.createElement('div');
           uidSpan.style.fontSize = '11px';
           uidSpan.style.color = 'var(--muted)';
@@ -230,14 +266,14 @@ function showUsersModal() {
           uidSpan.style.fontFamily = 'monospace';
           uidSpan.style.cursor = 'pointer';
           uidSpan.style.userSelect = 'all';
-          uidSpan.textContent = 'UID: ' + user.uid;
+          uidSpan.textContent = 'UID: ' + onlineUser.uid;
           uidSpan.title = 'Click to copy UID';
 
           // Click to copy UID
           uidSpan.addEventListener('click', (e) => {
             e.stopPropagation();
             if (navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(user.uid).then(() => {
+              navigator.clipboard.writeText(onlineUser.uid || '').then(() => {
                 const originalText = uidSpan.textContent;
                 uidSpan.textContent = 'UID copied!';
                 uidSpan.style.color = 'var(--accent)';
@@ -246,11 +282,11 @@ function showUsersModal() {
                   uidSpan.style.color = 'var(--muted)';
                 }, 1500);
               }).catch(() => {
-                alert('Failed to copy UID: ' + user.uid);
+                alert('Failed to copy UID: ' + onlineUser.uid);
               });
             } else {
               // Fallback for older browsers
-              alert('UID: ' + user.uid);
+              alert('UID: ' + onlineUser.uid);
             }
           });
 
@@ -258,7 +294,7 @@ function showUsersModal() {
         }
       } else {
         // Legacy format (just username string)
-        item.innerHTML = sanitizeNickname(user);
+        item.innerHTML = sanitizeNickname(/** @type {string} */(onlineUser));
       }
 
       usersList.appendChild(item);
@@ -275,7 +311,7 @@ function hideUsersModal() {
 }
 
 // Click on online count to show modal
-document.querySelector('.userspill').addEventListener('click', showUsersModal);
+document.querySelector('.userspill')?.addEventListener('click', showUsersModal);
 
 // Close modal on close button
 usersModalClose.addEventListener('click', hideUsersModal);
@@ -283,16 +319,34 @@ usersModalClose.addEventListener('click', hideUsersModal);
 // Close modal on overlay click
 usersModalOverlay.addEventListener('click', hideUsersModal);
 // Batch DOM updates for better performance
+/** @type {HTMLDivElement[]} */
 let pendingAppends = [];
+/** @type {PendingMessage[]} */
 let pendingMessages = [];
+/** @type {ReturnType<typeof setTimeout>|null} */
 let appendTimer = null;
 
+// Track seen messages to avoid duplicates on reconnect
+const seenMessages = new Set();
+/** @type {string[]} */
+const seenMessageKeys = []; // Keep track of order for cleanup
+const maxSeenMessages = 300;
+
+/**
+ * @param {{ts: string, user?: string, text?: string}} msg
+ * @returns {string}
+ */
+function getMsgKey(msg) {
+  return msg.ts + '|' + (msg.user || '') + '|' + (msg.text || '');
+}
+
+/** @param {ChatMessage} msg */
 function append(msg) {
   // Handle token event from server
   if (msg.event === 'token' && msg.token) {
     clientToken = msg.token;
     try {
-      localStorage.setItem(TOKEN_STORAGE_KEY, clientToken);
+      localStorage.setItem(TOKEN_STORAGE_KEY, /** @type {string} */(clientToken));
     } catch (e) { }
     return;
   }
@@ -305,6 +359,25 @@ function append(msg) {
     return;
   }
 
+  if (msg.event === 'rename' || msg.event === 'joined' || msg.event === 'left') {
+    // Don't show rename/join/left events
+    return;
+  }
+
+  // Skip duplicate messages (same timestamp + user + text)
+  const msgKey = getMsgKey(msg);
+  if (seenMessages.has(msgKey)) {
+    return;
+  }
+  seenMessages.add(msgKey);
+  seenMessageKeys.push(msgKey);
+
+  // Cleanup old entries from Set to prevent memory leak
+  while (seenMessageKeys.length > maxSeenMessages) {
+    const oldKey = seenMessageKeys.shift();
+    seenMessages.delete(oldKey);
+  }
+
   const div = document.createElement('div');
   div.className = 'line';
   const ts = new Date(msg.ts).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -313,16 +386,7 @@ function append(msg) {
 
   let isActualMessage = false;
 
-  if (msg.event === 'rename') {
-    logWS('DEBUG', 'Rename event (not displayed): ' + nick);
-    // Don't show rename events
-    return;
-  } else if (msg.event === 'joined' || msg.event === 'left') {
-    const verb = msg.event === 'joined' ? 'joined' : 'left';
-    logWS('INFO', 'User ' + verb + ': ' + nick);
-    div.className = 'line event';
-    div.innerHTML = '<span class="ts">[' + ts + ']</span> system: ' + sanitizeNickname(nick) + ' ' + verb;
-  } else {
+  {
     div.innerHTML = '<span class="ts">[' + ts + ']</span> <span class="usr" style="color:' + color + '">' +
       sanitizeNickname(nick) + '</span>: ' + linkifyText(msg.text || '');
     isActualMessage = true;
@@ -370,14 +434,18 @@ function append(msg) {
     pendingMessages = [];
   }, 0);
 }
+/** @param {string} s */
 function escapeHTML(s) {
   // Block alert() function
   s = s.replace(/alert\(/gi, '');
-  return s.replace(/[&<>\"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;' }[c]));
+  /** @type {{[key: string]: string}} */
+  const entities = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+  return s.replace(/[&<>"]/g, c => entities[c] || c);
 }
 
 // Convert URLs in text to clickable links and display images
 // Also renders markdown-like code blocks
+/** @param {string} text */
 function linkifyText(text) {
   // Check if this is an image message
   if (text.startsWith('[IMAGE]')) {
@@ -410,6 +478,7 @@ function linkifyText(text) {
 }
 
 // Render markdown code blocks and also linkify URLs in non-code parts
+/** @param {string} text */
 function renderMarkdownWithLinks(text) {
   // Use renderMarkdown from markdown.js if available
   if (typeof renderMarkdown === 'function') {
@@ -434,6 +503,7 @@ function renderMarkdownWithLinks(text) {
 }
 
 // Sanitize nickname: allow HTML/XSS but remove project class names
+/** @param {string} html */
 function sanitizeNickname(html) {
   try {
     const temp = document.createElement('div');
@@ -448,17 +518,19 @@ function sanitizeNickname(html) {
     ];
 
     // Recursively remove blocked class names
+    /** @param {Node} node */
     function cleanClasses(node) {
       if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = /** @type {Element} */ (node);
         // Check if element has class attribute
-        if (node.hasAttribute('class')) {
-          const classes = node.getAttribute('class').split(/\s+/);
-          const filteredClasses = classes.filter(cls => !blockedClasses.includes(cls));
+        if (el.hasAttribute('class')) {
+          const classes = (el.getAttribute('class') || '').split(/\s+/);
+          const filteredClasses = classes.filter(/** @param {string} cls */ cls => !blockedClasses.includes(cls));
 
           if (filteredClasses.length > 0) {
-            node.setAttribute('class', filteredClasses.join(' '));
+            el.setAttribute('class', filteredClasses.join(' '));
           } else {
-            node.removeAttribute('class');
+            el.removeAttribute('class');
           }
         }
 
@@ -480,9 +552,12 @@ const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
 const basePath = location.pathname.endsWith('/') ? location.pathname : (location.pathname + '/');
 const wsURL = wsProto + '://' + location.host + basePath + 'ws';
 
+/** @type {WebSocket|null} */
 let ws = null;
+/** @type {ReturnType<typeof setTimeout>|null} */
 let reconnectTimer = null;
 let reconnectAttempts = 0;
+/** @type {ReturnType<typeof setInterval>|null} */
 let heartbeatTimer = null;
 let connectionStartTime = 0;
 let lastMessageTime = 0;
@@ -492,6 +567,11 @@ const maxReconnectDelay = 30000; // 30 seconds max
 const initialReconnectDelay = 1000; // 1 second initial
 const heartbeatInterval = 20000; // 20 seconds - send heartbeat to keep connection alive (prevents proxy timeouts)
 
+/**
+ * @param {string} level
+ * @param {string} message
+ * @param {any} [data]
+ */
 function logWS(level, message, data) {
   // Logging disabled for production
 }
@@ -503,12 +583,16 @@ function getReconnectDelay() {
   return delay;
 }
 
+/**
+ * @param {boolean} connected
+ * @param {boolean} [reconnecting]
+ */
 function updateConnectionStatus(connected, reconnecting = false) {
   logWS('INFO', 'Connection status update: connected=' + connected + ', reconnecting=' + reconnecting);
 
-  const greenDot = document.querySelector('.dot.green');
-  const yellowDot = document.querySelector('.dot.yellow');
-  const redDot = document.querySelector('.dot.red');
+  const greenDot = /** @type {HTMLElement|null} */ (document.querySelector('.dot.green'));
+  const yellowDot = /** @type {HTMLElement|null} */ (document.querySelector('.dot.yellow'));
+  const redDot = /** @type {HTMLElement|null} */ (document.querySelector('.dot.red'));
 
   if (greenDot) {
     greenDot.style.opacity = connected ? '1' : '0.3';
@@ -523,6 +607,21 @@ function updateConnectionStatus(connected, reconnecting = false) {
   } else if (yellowDot) {
     yellowDot.style.animation = '';
     yellowDot.style.opacity = '1';
+  }
+}
+
+/**
+ * @param {string} message
+ */
+function showConnectionMessage(message) {
+  // Show a temporary connection status message in the chat
+  const div = document.createElement('div');
+  div.className = 'line event';
+  div.style.color = 'var(--muted)';
+  div.textContent = '⚠ ' + message;
+  log.appendChild(div);
+  if (isScrolledToBottom()) {
+    log.scrollTop = log.scrollHeight;
   }
 }
 
@@ -588,7 +687,7 @@ function connectWebSocket() {
 
     logWS('DEBUG', 'Sending initial user info message');
     try {
-      ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken }));
+      if (ws) ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken }));
       logWS('DEBUG', 'Initial message sent successfully');
     } catch (e) {
       logWS('ERROR', 'Failed to send initial message', e);
@@ -608,7 +707,8 @@ function connectWebSocket() {
       logWS('ERROR', 'Failed to parse message', err);
 
       // Try to find the problematic position
-      const errorMatch = err.message.match(/position (\d+)/);
+      const parseErr = /** @type {Error} */ (err);
+      const errorMatch = parseErr.message?.match(/position (\d+)/);
       if (errorMatch) {
         const pos = parseInt(errorMatch[1]);
         const start = Math.max(0, pos - 50);
@@ -697,6 +797,13 @@ imageUploadBtn.addEventListener('click', () => {
 });
 
 // Resize image before uploading
+/**
+ * @param {File} file
+ * @param {number} maxWidth
+ * @param {number} maxHeight
+ * @param {number} quality
+ * @param {(base64: string) => void} callback
+ */
 function resizeImage(file, maxWidth, maxHeight, quality, callback) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -722,7 +829,7 @@ function resizeImage(file, maxWidth, maxHeight, quality, callback) {
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
+      if (ctx) ctx.drawImage(img, 0, 0, width, height);
 
       // Convert to base64 with quality compression
       const resizedBase64 = canvas.toDataURL('image/jpeg', quality);
@@ -731,7 +838,7 @@ function resizeImage(file, maxWidth, maxHeight, quality, callback) {
     img.onerror = () => {
       alert('Failed to load image');
     };
-    img.src = e.target.result;
+    img.src = /** @type {string} */ (e.target?.result);
   };
   reader.onerror = () => {
     alert('Failed to read file');
@@ -740,7 +847,8 @@ function resizeImage(file, maxWidth, maxHeight, quality, callback) {
 }
 
 imageInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
+  const target = /** @type {HTMLInputElement} */ (e.target);
+  const file = target.files?.[0];
   if (!file) return;
 
   // Check if file is an image
@@ -787,7 +895,7 @@ imageInput.addEventListener('change', (e) => {
         uid: clientUID,
         token: clientToken
       };
-      ws.send(JSON.stringify(payload));
+      if (ws) ws.send(JSON.stringify(payload));
 
       // Reset input
       imageInput.value = '';
@@ -795,7 +903,8 @@ imageInput.addEventListener('change', (e) => {
       cmd.disabled = false;
     } catch (e) {
       console.error('Failed to send image:', e);
-      alert('Failed to send image: ' + e.message);
+      const sendErr = /** @type {Error} */ (e);
+      alert('Failed to send image: ' + sendErr.message);
       cmd.placeholder = 'type a message and press Enter';
       cmd.disabled = false;
       imageInput.value = '';
@@ -804,6 +913,7 @@ imageInput.addEventListener('change', (e) => {
 });
 
 // Debounced notify of nickname changes to server so roster updates without sending a chat
+/** @type {ReturnType<typeof setTimeout>|null} */
 let nickTimer = null;
 user.addEventListener('input', () => {
   try { localStorage.setItem('nick', user.value); } catch (_) { }
@@ -811,7 +921,7 @@ user.addEventListener('input', () => {
   if (ws && ws.readyState === WebSocket.OPEN) {
     if (nickTimer) clearTimeout(nickTimer);
     nickTimer = setTimeout(() => {
-      try { ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken })); } catch (_) { }
+      try { if (ws) ws.send(JSON.stringify({ user: (user.value || 'anon'), text: '', uid: clientUID, token: clientToken })); } catch (_) { }
     }, 300);
   }
 });
@@ -850,13 +960,14 @@ cmd.addEventListener('input', () => {
 });
 // Global click handler for images
 document.addEventListener('click', (e) => {
-  const target = e.target;
+  const target = /** @type {HTMLElement|null} */ (e.target);
+  if (!target) return;
 
   // If clicked on image placeholder - show image and controls
-  if (target.classList && target.classList.contains('image-placeholder')) {
+  if (target.classList?.contains('image-placeholder')) {
     const imgId = target.getAttribute('data-img-id');
-    const img = document.getElementById(imgId);
-    const controls = document.querySelector('.image-controls[data-img-id="' + imgId + '"]');
+    const img = /** @type {HTMLElement|null} */ (document.getElementById(imgId || ''));
+    const controls = /** @type {HTMLElement|null} */ (document.querySelector('.image-controls[data-img-id="' + imgId + '"]'));
     if (img && controls) {
       img.style.display = 'block';
       controls.style.display = 'flex';
@@ -867,11 +978,11 @@ document.addEventListener('click', (e) => {
   }
 
   // If clicked on toggle button - hide image and show placeholder
-  if (target.classList && target.classList.contains('toggle-img')) {
+  if (target.classList?.contains('toggle-img')) {
     const imgId = target.getAttribute('data-img-id');
-    const img = document.getElementById(imgId);
-    const controls = document.querySelector('.image-controls[data-img-id="' + imgId + '"]');
-    const placeholder = document.querySelector('.image-placeholder[data-img-id="' + imgId + '"]');
+    const img = /** @type {HTMLElement|null} */ (document.getElementById(imgId || ''));
+    const controls = /** @type {HTMLElement|null} */ (document.querySelector('.image-controls[data-img-id="' + imgId + '"]'));
+    const placeholder = /** @type {HTMLElement|null} */ (document.querySelector('.image-placeholder[data-img-id="' + imgId + '"]'));
     if (img && controls && placeholder) {
       img.style.display = 'none';
       controls.style.display = 'none';
@@ -882,9 +993,9 @@ document.addEventListener('click', (e) => {
   }
 
   // If clicked on fullscreen button - show modal
-  if (target.classList && target.classList.contains('fullscreen-img')) {
+  if (target.classList?.contains('fullscreen-img')) {
     const imgId = target.getAttribute('data-img-id');
-    const img = document.getElementById(imgId);
+    const img = /** @type {HTMLImageElement|null} */ (document.getElementById(imgId || ''));
     if (img) {
       modalImage.src = img.src;
       imageModal.classList.add('show');
