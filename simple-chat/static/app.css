@@ -557,6 +557,31 @@ small {
   background: #4b5563
 }
 
+/* Drag and drop overlay */
+.screen.drag-over {
+  position: relative;
+  outline: 3px dashed var(--accent);
+  outline-offset: -3px;
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.screen.drag-over::after {
+  content: 'Drop image here';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg2);
+  color: var(--accent);
+  padding: 16px 32px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 10;
+  border: 2px solid var(--accent);
+}
+
 .userspill {
   display: inline-block;
   border: 1px solid var(--border);

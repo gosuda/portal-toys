@@ -846,6 +846,59 @@ function resizeImage(file, maxWidth, maxHeight, quality, callback) {
   reader.readAsDataURL(file);
 }
 
+/**
+ * Upload an image file to the chat
+ * @param {File} file - The image file to upload
+ * @param {() => void} [onComplete] - Optional callback after upload completes
+ */
+function uploadImage(file, onComplete) {
+  // Check WebSocket connection
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    alert('Not connected to server');
+    if (onComplete) onComplete();
+    return;
+  }
+
+  // Show uploading status
+  cmd.placeholder = '[Uploading image...]';
+  cmd.disabled = true;
+
+  // Resize image (max 800x800, quality 0.7)
+  resizeImage(file, 800, 800, 0.7, (resizedBase64) => {
+    try {
+      // Check final size (base64 encoded)
+      if (resizedBase64.length > 500000) { // ~500KB limit
+        alert('Image is too large even after compression. Please use a smaller image.');
+        cmd.placeholder = 'type a message and press Enter';
+        cmd.disabled = false;
+        if (onComplete) onComplete();
+        return;
+      }
+
+      // Send image as text with special prefix
+      const payload = {
+        user: (user.value || 'anon'),
+        text: '[IMAGE]' + resizedBase64,
+        uid: clientUID,
+        token: clientToken
+      };
+      if (ws) ws.send(JSON.stringify(payload));
+
+      // Reset input
+      cmd.placeholder = 'type a message and press Enter';
+      cmd.disabled = false;
+      if (onComplete) onComplete();
+    } catch (e) {
+      console.error('Failed to send image:', e);
+      const sendErr = /** @type {Error} */ (e);
+      alert('Failed to send image: ' + sendErr.message);
+      cmd.placeholder = 'type a message and press Enter';
+      cmd.disabled = false;
+      if (onComplete) onComplete();
+    }
+  });
+}
+
 imageInput.addEventListener('change', (e) => {
   const target = /** @type {HTMLInputElement} */ (e.target);
   const file = target.files?.[0];
@@ -865,50 +918,8 @@ imageInput.addEventListener('change', (e) => {
     return;
   }
 
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    alert('Not connected to server');
+  uploadImage(file, () => {
     imageInput.value = '';
-    return;
-  }
-
-  // Show uploading status
-  const uploadingMsg = '[Uploading image...]';
-  cmd.placeholder = uploadingMsg;
-  cmd.disabled = true;
-
-  // Resize image (max 800x800, quality 0.7)
-  resizeImage(file, 800, 800, 0.7, (resizedBase64) => {
-    try {
-      // Check final size (base64 encoded)
-      if (resizedBase64.length > 500000) { // ~500KB limit
-        alert('Image is too large even after compression. Please use a smaller image.');
-        cmd.placeholder = 'type a message and press Enter';
-        cmd.disabled = false;
-        imageInput.value = '';
-        return;
-      }
-
-      // Send image as text with special prefix
-      const payload = {
-        user: (user.value || 'anon'),
-        text: '[IMAGE]' + resizedBase64,
-        uid: clientUID,
-        token: clientToken
-      };
-      if (ws) ws.send(JSON.stringify(payload));
-
-      // Reset input
-      imageInput.value = '';
-      cmd.placeholder = 'type a message and press Enter';
-      cmd.disabled = false;
-    } catch (e) {
-      console.error('Failed to send image:', e);
-      const sendErr = /** @type {Error} */ (e);
-      alert('Failed to send image: ' + sendErr.message);
-      cmd.placeholder = 'type a message and press Enter';
-      cmd.disabled = false;
-      imageInput.value = '';
-    }
   });
 });
 
@@ -957,6 +968,80 @@ cmd.addEventListener('keydown', e => {
 cmd.addEventListener('input', () => {
   cmd.style.height = 'auto';
   cmd.style.height = Math.min(cmd.scrollHeight, 120) + 'px';
+});
+
+// Handle paste event for images from clipboard
+cmd.addEventListener('paste', (e) => {
+  const clipboardData = e.clipboardData;
+  if (!clipboardData) return;
+
+  // Check if clipboard contains image
+  const items = clipboardData.items;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (item.type.startsWith('image/')) {
+      e.preventDefault(); // Prevent default paste behavior
+
+      const file = item.getAsFile();
+      if (!file) return;
+
+      uploadImage(file);
+      return; // Only handle first image
+    }
+  }
+});
+
+// Handle drag and drop for images
+const dropZone = log; // Use chat log as drop zone
+let dragCounter = 0;
+
+dropZone.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  dragCounter++;
+  if (e.dataTransfer?.types.includes('Files')) {
+    dropZone.classList.add('drag-over');
+  }
+});
+
+dropZone.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  dragCounter--;
+  if (dragCounter === 0) {
+    dropZone.classList.remove('drag-over');
+  }
+});
+
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  dragCounter = 0;
+  dropZone.classList.remove('drag-over');
+
+  const files = e.dataTransfer?.files;
+  if (!files || files.length === 0) return;
+
+  // Find first image file
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (file.type.startsWith('image/')) {
+      // Check file size (max 10MB before resize)
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Image size must be less than 10MB');
+        return;
+      }
+      uploadImage(file);
+      return; // Only handle first image
+    }
+  }
+
+  alert('Please drop an image file');
 });
 // Global click handler for images
 document.addEventListener('click', (e) => {
