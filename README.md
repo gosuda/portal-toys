@@ -33,6 +33,7 @@ Golang examples
 - [doom](doom)
 - [gosuda-blog](gosuda-blog)
 - [http-backend](http-backend)
+- [iframe-player](iframe-player)
 - [paint](paint)
 - [rolling-paper](rolling-paper)
 - [simple-chat](simple-chat)
