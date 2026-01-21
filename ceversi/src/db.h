@@ -7,7 +7,9 @@
 extern cwist_db *db_conn;
 
 void init_db();
+void cleanup_stale_rooms();
 void get_game_state(int room_id, int board[SIZE][SIZE], int *turn, char *status, int *players, char *mode, const char *requested_mode);
 void update_game_state(int room_id, int board[SIZE][SIZE], int turn, const char *status, int players, const char *mode);
+int db_join_game(int room_id, const char *requested_mode, int *player_id, char *mode);
 
 #endif

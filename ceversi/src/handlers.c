@@ -82,26 +82,15 @@ void handle_request(cwist_http_request *req, cwist_http_response *res) {
     } 
     // API: /join?room=X&mode=othello|reversi (POST)
     else if (strcmp(req->path->data, "/join") == 0 && req->method == CWIST_HTTP_POST) {
-        int board[SIZE][SIZE];
-        int turn, players;
-        char status[32];
+        int pid;
         char mode[16];
-        
         const char *requested_mode = cwist_query_map_get(req->query_params, "mode");
 
-        get_game_state(room_id, board, &turn, status, &players, mode, requested_mode);
-
-        if (players >= 2) {
+        if (db_join_game(room_id, requested_mode, &pid, mode) < 0) {
              res->status_code = CWIST_HTTP_FORBIDDEN;
              cwist_sstring_assign(res->body, "{\"error\": \"Room full\"}");
              return;
         }
-        
-        players++;
-        int pid = players;
-        if (players == 2) strcpy(status, "active");
-        
-        update_game_state(room_id, board, turn, status, players, mode);
 
         cJSON *json = cJSON_CreateObject();
         cJSON_AddNumberToObject(json, "player_id", pid);

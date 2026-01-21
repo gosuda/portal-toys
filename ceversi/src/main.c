@@ -16,9 +16,19 @@
 #include "db.h"
 #include "handlers.h"
 #include "utils.h"
+#include <pthread.h>
 
 #define PORT 31744
 #define MAX_REQUEST_SIZE (1024 * 1024) // 1MB limit
+
+void *cleanup_thread(void *arg) {
+    (void)arg;
+    while(1) {
+        sleep(60);
+        cleanup_stale_rooms();
+    }
+    return NULL;
+}
 
 void handle_client_https(cwist_https_connection *conn, void *ctx) {
     (void)ctx;
@@ -108,11 +118,23 @@ void handle_client_http(int client_fd, void *ctx) {
     }
 
     cwist_http_request *req = cwist_http_parse_request(request_raw);
-    free(request_raw);
     if (!req) {
+        free(request_raw);
         close(client_fd);
         return;
     }
+    
+    // Manually populate body if library didn't
+    if (!req->body->data || strlen(req->body->data) == 0) {
+        char *body_start = strstr(request_raw, "\r\n\r\n");
+        if (body_start) {
+            body_start += 4;
+            if (strlen(body_start) > 0) {
+                cwist_sstring_assign(req->body, body_start);
+            }
+        }
+    }
+    free(request_raw);
 
     cwist_http_response *res = cwist_http_response_create();
     handle_request(req, res);
@@ -143,6 +165,10 @@ int main(int argc, char **argv) {
     signal(SIGPIPE, SIG_IGN);
 
     init_db();
+
+    pthread_t tid;
+    pthread_create(&tid, NULL, cleanup_thread, NULL);
+    pthread_detach(tid);
 
     struct sockaddr_in addr;
     int server_fd = cwist_make_socket_ipv4(&addr, "0.0.0.0", port, 10);

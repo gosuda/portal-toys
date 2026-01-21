@@ -417,6 +417,9 @@ async function startMultiplayerGame(mode) {
         myPlayerId = data.player_id;
         currentMode = data.mode; // Sync mode from server
         isMultiplayer = true;
+
+        // Initialize board for multiplayer
+        board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
         
         // Setup UI
         lobbyPanel.classList.add('hidden');
@@ -461,6 +464,9 @@ async function pollState(roomId) {
 }
 
 function updateBoardFromState(flatBoard) {
+    if (!board || board.length === 0) {
+        board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+    }
     let idx = 0;
     for (let r = 0; r < SIZE; r++) {
         for (let c = 0; c < SIZE; c++) {
