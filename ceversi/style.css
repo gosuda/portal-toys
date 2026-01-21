@@ -1,0 +1,214 @@
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    color: #ecf0f1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.main-container {
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+    text-align: center;
+}
+
+header h1 {
+    font-size: 3rem;
+    margin: 0;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+header p {
+    font-size: 1.2rem;
+    opacity: 0.8;
+    margin-top: 5px;
+}
+
+.panel {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    padding: 20px;
+    margin-top: 30px;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    transition: all 0.3s ease;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Lobby */
+.mode-group {
+    margin-bottom: 20px;
+}
+
+.mode-group h3 {
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+    padding-bottom: 5px;
+    margin-bottom: 15px;
+}
+
+button {
+    background: #e67e22;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    font-size: 1rem;
+    border-radius: 25px;
+    cursor: pointer;
+    margin: 5px;
+    transition: transform 0.2s, background 0.2s;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+button:hover {
+    background: #d35400;
+    transform: translateY(-2px);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    background: #7f8c8d;
+    margin-top: 20px;
+}
+.btn-secondary:hover {
+    background: #95a5a6;
+}
+
+.input-group {
+    margin-bottom: 10px;
+}
+.input-group label {
+    margin-right: 10px;
+}
+.input-group select {
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+    background: #ecf0f1;
+    color: #2c3e50;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.input-group input {
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+    width: 60px;
+    text-align: center;
+}
+
+/* Game Area */
+.score-board {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0,0,0,0.2);
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.player-score {
+    text-align: center;
+}
+
+.score-value {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.vs {
+    font-size: 1.5rem;
+    font-weight: bold;
+    opacity: 0.5;
+}
+
+.turn-indicator {
+    font-size: 1.2rem;
+    margin-bottom: 15px;
+    font-weight: bold;
+    color: #f1c40f;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+#game-board-container {
+    display: flex;
+    justify-content: center;
+}
+
+#game-board {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
+    gap: 4px;
+    background-color: #34495e; /* Border color */
+    padding: 4px;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 400px; /* Max size on desktop */
+    aspect-ratio: 1 / 1;
+}
+
+.cell {
+    background-color: #27ae60;
+    position: relative;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+.cell:hover {
+    background-color: #2ecc71;
+}
+
+.disc {
+    width: 80%;
+    height: 80%;
+    border-radius: 50%;
+    position: absolute;
+    top: 10%;
+    left: 10%;
+    box-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.disc.black {
+    background: radial-gradient(circle at 30% 30%, #444, #000);
+}
+
+.disc.white {
+    background: radial-gradient(circle at 30% 30%, #fff, #ddd);
+}
+
+/* Hints */
+.valid-move {
+    width: 30%;
+    height: 30%;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    position: absolute;
+    top: 35%;
+    left: 35%;
+}
+
+.valid-move.hint-good { background-color: rgba(46, 204, 113, 0.8); box-shadow: 0 0 10px #2ecc71; }
+.valid-move.hint-bad { background-color: rgba(231, 76, 60, 0.8); }
+.valid-move.hint-great { background-color: rgba(241, 196, 15, 0.9); box-shadow: 0 0 15px #f1c40f; }
+
+@media (max-width: 500px) {
+    header h1 { font-size: 2.5rem; }
+    #game-board { max-width: 90vw; }
+}

@@ -1,0 +1,6 @@
+server.key
+server.crt
+othello.db
+libs/
+*.o
+server

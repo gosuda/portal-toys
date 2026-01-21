@@ -1,0 +1,133 @@
+body {
+    font-family: sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    background-color: #2c3e50;
+    color: white;
+    margin: 0;
+}
+
+.container {
+    text-align: center;
+}
+
+h1 {
+    margin-bottom: 10px;
+}
+
+.score-board {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 10px;
+    font-size: 1.2rem;
+}
+
+.turn-indicator {
+    margin-bottom: 15px;
+    font-weight: bold;
+    color: #f1c40f;
+}
+
+#game-board {
+    display: grid;
+    grid-template-columns: repeat(8, 50px);
+    grid-template-rows: repeat(8, 50px);
+    gap: 2px;
+    background-color: #34495e;
+    border: 5px solid #34495e;
+    margin: 0 auto;
+    width: fit-content;
+}
+
+.cell {
+    width: 50px;
+    height: 50px;
+    background-color: #27ae60;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+}
+
+.cell:hover {
+    background-color: #2ecc71;
+}
+
+.disc {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+}
+
+.disc.black {
+    background-color: black;
+}
+
+.disc.white {
+    background-color: white;
+}
+
+.valid-move {
+    width: 15px;
+    height: 15px;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    transition: background-color 0.3s;
+}
+
+/* Strategic Hints - Subtle */
+.valid-move.hint-good {
+    background-color: rgba(46, 204, 113, 0.6); /* Greenish - Good */
+    box-shadow: 0 0 5px rgba(46, 204, 113, 0.4);
+}
+
+.valid-move.hint-bad {
+    background-color: rgba(231, 76, 60, 0.6); /* Reddish - Bad */
+    box-shadow: 0 0 5px rgba(231, 76, 60, 0.4);
+}
+
+.valid-move.hint-great {
+    background-color: rgba(241, 196, 15, 0.6); /* Gold - Great (Corners) */
+    box-shadow: 0 0 8px rgba(241, 196, 15, 0.6);
+}
+
+#lobby {
+    margin-bottom: 20px;
+    background: #34495e;
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.mode-select button {
+    margin: 0 5px;
+}
+
+.status-msg {
+    margin-top: 10px;
+    color: #bdc3c7;
+    font-style: italic;
+}
+
+button:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+}
+
+button {
+    margin-top: 20px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    background-color: #e67e22;
+    border: none;
+    color: white;
+    border-radius: 5px;
+}
+
+button:hover {
+    background-color: #d35400;
+}
