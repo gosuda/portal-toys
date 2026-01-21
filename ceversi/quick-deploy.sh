@@ -26,7 +26,7 @@ fi
 # Ensure database file exists (touch it) so Docker mounts it as a file not dir
 touch othello.db
 
-docker-compose up -d --build
+docker compose up -d --build
 
 echo "[4/4] Deployment Complete!"
 echo "Server is running at: https://localhost:31744"
