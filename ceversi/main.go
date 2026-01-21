@@ -85,7 +85,7 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 
 	// Portal SDK
 	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
+    client, err := sdk.NewClient(sdk.WithBootstrapServers(flagServerURLs))
 	if err != nil {
 		return fmt.Errorf("new client: %w", err)
 	}
