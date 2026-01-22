@@ -6,6 +6,7 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 COPY src/ src/
+COPY libs/lib/libcwist.a /usr/lib/libcwist.a
 COPY libs/ libs/
 COPY Makefile .
 
