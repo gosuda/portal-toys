@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <unistd.h>
 #include <cwist/app.h>
 #include <cwist/http.h>
 #include <cwist/sql.h>

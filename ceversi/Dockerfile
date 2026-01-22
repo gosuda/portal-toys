@@ -1,7 +1,7 @@
 # --- C build stage ---
 FROM alpine:latest AS c_builder
 RUN apk add --no-cache \
-      gcc musl-dev make sqlite-dev openssl-dev cjson-dev uriparser-dev \
+      gcc musl-dev make sqlite-dev openssl-dev cjson-dev uriparser-dev libc-utils \
       --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community
 
 WORKDIR /app
