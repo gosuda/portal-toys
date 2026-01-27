@@ -59,8 +59,6 @@ COPY --from=c_builder /app/server ./ceversi-backend
 # Copy the compiled Go relay binary
 COPY --from=go_builder /app/ceversi_relay ./ceversi-relay
 
-# [FIX] Copy the 'public' directory to preserve directory structure.
-# This ensures that the server can serve CSS and JS files located in /public.
 COPY public/ ./public/
 
 # Copy root-level templates and fallback assets
