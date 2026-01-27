@@ -13,7 +13,10 @@
 !go.mod
 !go.sum
 
-!index.html
 !style.css
 !script.js
 !othello.db
+
+!index.html.tmpl
+!public/**
+

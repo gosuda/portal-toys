@@ -143,7 +143,7 @@
     <div id="auth-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Login</h3>
+                <h3 id="auth-title">Login</h3>
                 <button class="close-btn" onclick="hideAuthModal()">&times;</button>
             </div>
             <div class="form-group">
@@ -154,10 +154,10 @@
                 <label>Password</label>
                 <input type="password" id="auth-password" placeholder="Password">
             </div>
-            <div id="auth-error" class="hidden" style="color:#ef4444; font-size:0.9rem;"></div>
-            <button class="btn btn-primary" onclick="handleAuthSubmit()">Submit</button>
-            <div style="text-align:center; font-size:0.9rem;">
-                <a href="#" onclick="toggleAuthMode()" style="color:var(--accent-primary); text-decoration:none;">Switch to Register</a>
+            <div id="auth-error" class="hidden" style="color:#ef4444; font-size:0.9rem; margin-bottom: 1rem;"></div>
+            <button id="auth-submit" class="btn btn-primary" onclick="handleAuthSubmit()">Login</button>
+            <div class="auth-switch" style="text-align:center; font-size:0.9rem; margin-top: 1rem;">
+                Don't have an account? <a href="#" onclick="toggleAuthMode()" style="color:var(--accent-primary); text-decoration:none;">Register</a>
             </div>
         </div>
     </div>

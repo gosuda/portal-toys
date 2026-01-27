@@ -235,8 +235,13 @@ int db_login_user(cwist_db *db, const char *username, const char *password_hash)
     cJSON *res = NULL;
     cwist_db_query(db, sql, &res);
     int id = -1;
-    if (cJSON_GetArraySize(res) > 0) {
-        id = cJSON_GetArrayItem(res, 0)->child->valueint;
+    if (res && cJSON_GetArraySize(res) > 0) {
+        cJSON *row = cJSON_GetArrayItem(res, 0);
+        cJSON *id_item = cJSON_GetObjectItem(row, "id");
+        if (id_item) {
+            if (cJSON_IsNumber(id_item)) id = id_item->valueint;
+            else if (id_item->valuestring) id = atoi(id_item->valuestring);
+        }
     }
     cJSON_Delete(res);
     pthread_mutex_unlock(&db_mutex);
@@ -248,6 +253,7 @@ cJSON *db_get_rankings(cwist_db *db) {
     cJSON *res = NULL;
     cwist_db_query(db, "SELECT username, wins, losses, ties FROM users ORDER BY wins DESC LIMIT 10;", &res);
     pthread_mutex_unlock(&db_mutex);
+    if (!res) return cJSON_CreateArray();
     return res;
 }
 
@@ -258,11 +264,11 @@ cJSON *db_get_user_info(cwist_db *db, int user_id) {
     cJSON *res = NULL;
     cwist_db_query(db, sql, &res);
     pthread_mutex_unlock(&db_mutex);
-    if (cJSON_GetArraySize(res) > 0) {
+    if (res && cJSON_GetArraySize(res) > 0) {
         cJSON *row = cJSON_DetachItemFromArray(res, 0);
         cJSON_Delete(res);
         return row;
     }
-    cJSON_Delete(res);
+    if (res) cJSON_Delete(res);
     return NULL;
 }

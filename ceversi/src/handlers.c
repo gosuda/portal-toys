@@ -230,12 +230,24 @@ void move_handler(cwist_http_request *req, cwist_http_response *res) {
 void login_handler(cwist_http_request *req, cwist_http_response *res) {
     cJSON *json = cJSON_Parse(req->body->data);
     if (!json) { res->status_code = 400; return; }
-    const char *user = cJSON_GetObjectItem(json, "username")->valuestring;
-    const char *pass = cJSON_GetObjectItem(json, "password")->valuestring;
+    
+    cJSON *user_item = cJSON_GetObjectItem(json, "username");
+    cJSON *pass_item = cJSON_GetObjectItem(json, "password");
+    
+    if (!user_item || !pass_item || !user_item->valuestring || !pass_item->valuestring) {
+        res->status_code = 400;
+        cJSON_Delete(json);
+        return;
+    }
+    
+    const char *user = user_item->valuestring;
+    const char *pass = pass_item->valuestring;
     
     char hash[65];
     hash_password(pass, hash);
     int uid = db_login_user(req->db, user, hash);
+    
+    printf("Login attempt: user=%s, hash=%s, uid=%d\n", user, hash, uid);
     
     cJSON *reply = cJSON_CreateObject();
     if (uid > 0) {
@@ -256,14 +268,49 @@ void login_handler(cwist_http_request *req, cwist_http_response *res) {
 void register_handler(cwist_http_request *req, cwist_http_response *res) {
     cJSON *json = cJSON_Parse(req->body->data);
     if (!json) { res->status_code = 400; return; }
-    const char *user = cJSON_GetObjectItem(json, "username")->valuestring;
-    const char *pass = cJSON_GetObjectItem(json, "password")->valuestring;
     
+    cJSON *user_item = cJSON_GetObjectItem(json, "username");
+    cJSON *pass_item = cJSON_GetObjectItem(json, "password");
+    
+    if (!user_item || !pass_item || !user_item->valuestring || !pass_item->valuestring ||
+        strlen(user_item->valuestring) == 0 || strlen(pass_item->valuestring) == 0) {
+        cJSON *reply = cJSON_CreateObject();
+        cJSON_AddStringToObject(reply, "error", "Username and password are required");
+        char *str = cJSON_PrintUnformatted(reply);
+        cwist_sstring_assign(res->body, str);
+        free(str);
+        cJSON_Delete(reply);
+        res->status_code = 400;
+        cJSON_Delete(json);
+        cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+        return;
+    }
+    
+    const char *user = user_item->valuestring;
+    const char *pass = pass_item->valuestring;
+    
+    // Basic length validation
+    if (strlen(user) < 3 || strlen(pass) < 4) {
+        cJSON *reply = cJSON_CreateObject();
+        cJSON_AddStringToObject(reply, "error", "Username (min 3) or password (min 4) too short");
+        char *str = cJSON_PrintUnformatted(reply);
+        cwist_sstring_assign(res->body, str);
+        free(str);
+        cJSON_Delete(reply);
+        res->status_code = 400;
+        cJSON_Delete(json);
+        cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+        return;
+    }
+
     char hash[65];
     hash_password(pass, hash);
     
+    int reg_res = db_register_user(req->db, user, hash);
+    printf("Register attempt: user=%s, hash=%s, result=%d\n", user, hash, reg_res);
+    
     cJSON *reply = cJSON_CreateObject();
-    if (db_register_user(req->db, user, hash) == 0) {
+    if (reg_res == 0) {
         cJSON_AddStringToObject(reply, "status", "ok");
     } else {
         cJSON_AddStringToObject(reply, "error", "Username already exists");
