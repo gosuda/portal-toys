@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ceversi</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <nav class="navbar">
+            <div class="nav-brand">
+                <div class="logo-icon">C</div>
+                <h1>Ceversi</h1>
+            </div>
+            
+            <div class="nav-links">
+                <a href="#" class="active" onclick="showView('lobby')">Play</a>
+                <a href="#" onclick="showRankings()">Rank</a>
+                
+                <div id="auth-controls">
+                    <button class="btn btn-primary btn-sm" onclick="showAuthModal()">Login</button>
+                </div>
+                
+                <div id="user-display" class="hidden">
+                    <span id="display-username" style="font-size:0.8rem; font-weight:700; margin-right:5px;"></span>
+                    <button class="btn btn-outline btn-sm" onclick="logout()">Out</button>
+                </div>
+                
+                <button id="theme-toggle" class="theme-btn" aria-label="Toggle Theme">
+                    <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                    <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </button>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div id="lobby" class="view-container {% if room_id %}hidden{% endif %}">
+                <div class="hero-section">
+                    <h2>Ceversi</h2>
+                    <p>Classic Strategy, Modern Speed.</p>
+                </div>
+
+                <div class="game-cards">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="icon-wrapper single-player">S</div>
+                            <h3>Single Player</h3>
+                        </div>
+                        <div class="form-group">
+                            <label>Difficulty</label>
+                            <div class="select-wrapper">
+                                <select id="difficulty-select">
+                                    <option value="easy">Easy</option>
+                                    <option value="medium" selected>Medium</option>
+                                    <option value="hard">Hard</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="startLocalGame('othello')">Othello</button>
+                            <button class="btn btn-outline" onclick="startLocalGame('reversi')">Reversi</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="icon-wrapper multiplayer">M</div>
+                            <h3>Multiplayer</h3>
+                        </div>
+                        <div class="form-group">
+                            <label>Room ID</label>
+                            <input type="number" id="room-input" value="1" min="1" placeholder="Room #">
+                        </div>
+                        <div class="button-group">
+                            <button class="btn btn-primary" onclick="startMultiplayerGame('othello')">Join Othello</button>
+                            <button class="btn btn-outline" onclick="startMultiplayerGame('reversi')">Join Reversi</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="connection-status" style="text-align:center; margin-top:1rem; color:var(--text-secondary);"></div>
+            </div>
+
+            <div id="rankings" class="view-container hidden">
+                <div class="hero-section">
+                    <h2>Rankings</h2>
+                </div>
+                <div class="card">
+                    <table style="width:100%; text-align:left; border-collapse:collapse;">
+                        <thead>
+                            <tr style="border-bottom:1px solid var(--border-color);">
+                                <th style="padding:10px;">Rank</th>
+                                <th style="padding:10px;">User</th>
+                                <th style="padding:10px;">Wins</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rankings-body"></tbody>
+                    </table>
+                </div>
+                <div style="margin-top: 1rem; text-align: center;">
+                    <button class="btn btn-outline" onclick="showView('lobby')">Back</button>
+                </div>
+            </div>
+
+            <div id="game-area" class="view-container {% if not room_id %}hidden{% endif %}">
+                <div class="game-layout">
+                    <div class="game-sidebar">
+                        <div class="score-card" id="score-card-black">
+                            <div class="player-avatar black"></div>
+                            <div>
+                                <div style="font-weight:700;">Black</div>
+                                <div id="status-black" style="font-size:0.8rem; color:var(--text-secondary);">Turn</div>
+                            </div>
+                            <div class="score-value" id="score-black">{{ score_black }}</div>
+                        </div>
+                        
+                        <div class="vs-divider" style="text-align:center; font-weight:900; opacity:0.3;">VS</div>
+
+                        <div class="score-card" id="score-card-white">
+                            <div class="player-avatar white"></div>
+                            <div>
+                                <div style="font-weight:700;">White</div>
+                                <div id="status-white" style="font-size:0.8rem; color:var(--text-secondary);">Waiting</div>
+                            </div>
+                            <div class="score-value" id="score-white">{{ score_white }}</div>
+                        </div>
+
+                        <div class="game-controls">
+                            <div style="background:var(--accent-primary); color:white; padding:0.8rem; border-radius:0.8rem; text-align:center; font-weight:800;" id="turn-indicator">{{ turn_text }}</div>
+                            <button class="btn btn-outline" onclick="exitGame()">Leave</button>
+                        </div>
+                    </div>
+
+                    <div class="board-container">
+                        <div id="game-board">{{ board_html }}</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="auth-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Login</h3>
+                <button class="close-btn" onclick="hideAuthModal()">&times;</button>
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="auth-username" placeholder="Username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="auth-password" placeholder="Password">
+            </div>
+            <div id="auth-error" class="hidden" style="color:#ef4444; font-size:0.9rem;"></div>
+            <button class="btn btn-primary" onclick="handleAuthSubmit()">Submit</button>
+            <div style="text-align:center; font-size:0.9rem;">
+                <a href="#" onclick="toggleAuthMode()" style="color:var(--accent-primary); text-decoration:none;">Switch to Register</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+    <script>
+        {% if room_id %}
+        window.initialState = {
+            roomId: {{ room_id }},
+            mode: "{{ mode }}",
+            turn: {{ turn_val }},
+            status: "{{ status }}",
+            board: {{ board_json }}
+        };
+        {% endif %}
+    </script>
+</body>
+</html>

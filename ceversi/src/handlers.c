@@ -2,11 +2,13 @@
 #include "common.h"
 #include "db.h"
 #include "utils.h"
-#include <cwist/app.h>
-#include <cwist/http.h>
-#include <cwist/sstring.h>
-#include <cwist/query.h>
-#include <cwist/json_builder.h>
+#include <cwist/sys/app/app.h>
+#include <cwist/net/http/http.h>
+#include <cwist/core/sstring/sstring.h>
+#include <cwist/net/http/query.h>
+#include <cwist/core/utils/json_builder.h>
+#include <cwist/core/template/template.h>
+#include <cwist/core/html/builder.h>
 #include <cjson/cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,8 +64,10 @@ void join_handler(cwist_http_request *req, cwist_http_response *res) {
     int pid;
     char mode[16];
     const char *requested_mode = cwist_query_map_get(req->query_params, "mode");
+    const char *user_id_str = cwist_query_map_get(req->query_params, "user_id");
+    int user_id = user_id_str ? atoi(user_id_str) : 0;
 
-    if (db_join_game(req->db, room_id, requested_mode, &pid, mode) < 0) {
+    if (db_join_game(req->db, room_id, requested_mode, &pid, mode, user_id) < 0) {
          res->status_code = CWIST_HTTP_FORBIDDEN;
          cwist_sstring_assign(res->body, "{\"error\": \"Room full\"}");
          return;
@@ -135,6 +139,8 @@ void state_handler(cwist_http_request *req, cwist_http_response *res) {
     cwist_http_header_add(&res->headers, "Content-Type", "application/json");
 }
 
+/* Processes a player move. Validates the move, updates the board, 
+   checks for game over, and records results for authenticated users. */
 void move_handler(cwist_http_request *req, cwist_http_response *res) {
     int room_id = get_room_id(req);
     cJSON *json = cJSON_Parse(req->body->data);
@@ -158,6 +164,7 @@ void move_handler(cwist_http_request *req, cwist_http_response *res) {
         int is_reversi_setup = (strcmp(mode, "reversi") == 0 && pieces < 4);
         
         if (is_reversi_setup) {
+            // Reversi setup: must place in center 4 squares
             if (r < 3 || r > 4 || c < 3 || c > 4 || board[r][c] != 0) {
                 res->status_code = CWIST_HTTP_BAD_REQUEST;
                 cJSON_Delete(json);
@@ -169,7 +176,7 @@ void move_handler(cwist_http_request *req, cwist_http_response *res) {
             return;
         }
 
-        // Apply Move
+        // Apply Move and Flip Discs
         board[r][c] = p;
         int opponent = (p == BLACK) ? WHITE : BLACK;
         
@@ -191,14 +198,24 @@ void move_handler(cwist_http_request *req, cwist_http_response *res) {
             }
         }
         
-        // Determine next turn
+        // Determine next turn and check if game ended
         if (is_reversi_setup && count_pieces(board) < 4) {
             turn = opponent;
         } else {
             if (has_valid_moves(board, opponent)) {
                 turn = opponent;
             } else if (!has_valid_moves(board, p)) {
+                // Game Over
                 strcpy(status, "finished");
+                
+                int b_cnt = 0, w_cnt = 0;
+                for(int rr=0; rr<SIZE; rr++) for(int cc=0; cc<SIZE; cc++) {
+                    if(board[rr][cc] == BLACK) b_cnt++;
+                    else if(board[rr][cc] == WHITE) w_cnt++;
+                }
+                int winner = (b_cnt > w_cnt) ? 1 : (w_cnt > b_cnt ? 2 : 0);
+                // Record result for user rankings
+                db_record_result(req->db, room_id, winner);
             }
         }
 
@@ -208,4 +225,170 @@ void move_handler(cwist_http_request *req, cwist_http_response *res) {
          res->status_code = CWIST_HTTP_FORBIDDEN;
     }
     cJSON_Delete(json);
+}
+
+void login_handler(cwist_http_request *req, cwist_http_response *res) {
+    cJSON *json = cJSON_Parse(req->body->data);
+    if (!json) { res->status_code = 400; return; }
+    const char *user = cJSON_GetObjectItem(json, "username")->valuestring;
+    const char *pass = cJSON_GetObjectItem(json, "password")->valuestring;
+    
+    char hash[65];
+    hash_password(pass, hash);
+    int uid = db_login_user(req->db, user, hash);
+    
+    cJSON *reply = cJSON_CreateObject();
+    if (uid > 0) {
+        cJSON_AddNumberToObject(reply, "user_id", uid);
+        cJSON_AddStringToObject(reply, "username", user);
+    } else {
+        cJSON_AddStringToObject(reply, "error", "Invalid credentials");
+        res->status_code = 401;
+    }
+    char *str = cJSON_PrintUnformatted(reply);
+    cwist_sstring_assign(res->body, str);
+    free(str);
+    cJSON_Delete(reply);
+    cJSON_Delete(json);
+    cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+}
+
+void register_handler(cwist_http_request *req, cwist_http_response *res) {
+    cJSON *json = cJSON_Parse(req->body->data);
+    if (!json) { res->status_code = 400; return; }
+    const char *user = cJSON_GetObjectItem(json, "username")->valuestring;
+    const char *pass = cJSON_GetObjectItem(json, "password")->valuestring;
+    
+    char hash[65];
+    hash_password(pass, hash);
+    
+    cJSON *reply = cJSON_CreateObject();
+    if (db_register_user(req->db, user, hash) == 0) {
+        cJSON_AddStringToObject(reply, "status", "ok");
+    } else {
+        cJSON_AddStringToObject(reply, "error", "Username already exists");
+        res->status_code = 409;
+    }
+    char *str = cJSON_PrintUnformatted(reply);
+    cwist_sstring_assign(res->body, str);
+    free(str);
+    cJSON_Delete(reply);
+    cJSON_Delete(json);
+    cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+}
+
+void rankings_handler(cwist_http_request *req, cwist_http_response *res) {
+    cJSON *ranks = db_get_rankings(req->db);
+    char *str = cJSON_PrintUnformatted(ranks);
+    cwist_sstring_assign(res->body, str);
+    free(str);
+    cJSON_Delete(ranks);
+    cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+}
+
+void user_info_handler(cwist_http_request *req, cwist_http_response *res) {
+    const char *uid_str = cwist_query_map_get(req->query_params, "user_id");
+    if (!uid_str) { res->status_code = 400; return; }
+    cJSON *info = db_get_user_info(req->db, atoi(uid_str));
+    if (info) {
+        char *str = cJSON_PrintUnformatted(info);
+        cwist_sstring_assign(res->body, str);
+        free(str);
+        cJSON_Delete(info);
+    } else {
+        res->status_code = 404;
+    }
+    cwist_http_header_add(&res->headers, "Content-Type", "application/json");
+}
+
+void root_handler(cwist_http_request *req, cwist_http_response *res) {
+    const char *room_str = cwist_query_map_get(req->query_params, "room");
+    cJSON *context = cJSON_CreateObject();
+    
+    // Default context for Lobby
+    cJSON_AddNumberToObject(context, "room_id", 0);
+    cJSON_AddStringToObject(context, "mode", "othello");
+    cJSON_AddStringToObject(context, "status", "waiting");
+    cJSON_AddNumberToObject(context, "turn_val", 1);
+    cJSON_AddStringToObject(context, "turn_text", "Black's Turn");
+    cJSON_AddNumberToObject(context, "score_black", 0);
+    cJSON_AddNumberToObject(context, "score_white", 0);
+    cJSON_AddStringToObject(context, "board_html", "");
+    cJSON_AddStringToObject(context, "board_json", "[]");
+
+    if (room_str) {
+        int room_id = atoi(room_str);
+        int board[SIZE][SIZE];
+        int turn, players;
+        char status[32];
+        char mode[16];
+        
+        get_game_state(req->db, room_id, board, &turn, status, &players, mode, NULL);
+        
+        cJSON_ReplaceItemInObject(context, "room_id", cJSON_CreateNumber(room_id));
+        cJSON_ReplaceItemInObject(context, "mode", cJSON_CreateString(mode));
+        cJSON_ReplaceItemInObject(context, "status", cJSON_CreateString(status));
+        cJSON_ReplaceItemInObject(context, "turn_val", cJSON_CreateNumber(turn));
+        cJSON_ReplaceItemInObject(context, "turn_text", cJSON_CreateString(turn == 1 ? "Black's Turn" : "White's Turn"));
+        
+        int black_score = 0;
+        int white_score = 0;
+        for(int r=0; r<SIZE; r++)
+            for(int c=0; c<SIZE; c++) {
+                if(board[r][c] == 1) black_score++;
+                else if(board[r][c] == 2) white_score++;
+            }
+        cJSON_ReplaceItemInObject(context, "score_black", cJSON_CreateNumber(black_score));
+        cJSON_ReplaceItemInObject(context, "score_white", cJSON_CreateNumber(white_score));
+
+        // Add board array for JS state
+        cJSON *board_arr = cJSON_CreateArray();
+        for(int r=0; r<SIZE; r++) {
+            for(int c=0; c<SIZE; c++) {
+                cJSON_AddItemToArray(board_arr, cJSON_CreateNumber(board[r][c]));
+            }
+        }
+        
+        char *board_json_str = cJSON_PrintUnformatted(board_arr);
+        cJSON_ReplaceItemInObject(context, "board_json", cJSON_CreateString(board_json_str));
+        free(board_json_str);
+        cJSON_Delete(board_arr); // board_arr was only used for string print
+
+        cwist_sstring *cells_html = cwist_sstring_create();
+        cwist_sstring_assign(cells_html, "");
+        
+        for(int r=0; r<SIZE; r++) {
+            for(int c=0; c<SIZE; c++) {
+                cwist_html_element_t *cell = cwist_html_element_create("div");
+                cwist_html_element_add_class(cell, "cell");
+                
+                if (board[r][c] != 0) {
+                    cwist_html_element_t *disc = cwist_html_element_create("div");
+                    cwist_html_element_add_class(disc, "disc");
+                    cwist_html_element_add_class(disc, board[r][c] == 1 ? "black" : "white");
+                    cwist_html_element_add_child(cell, disc);
+                }
+                
+                cwist_sstring *cell_str = cwist_html_render(cell);
+                cwist_sstring_append_sstring(cells_html, cell_str);
+                cwist_sstring_destroy(cell_str);
+                cwist_html_element_destroy(cell);
+            }
+        }
+        
+        cJSON_ReplaceItemInObject(context, "board_html", cJSON_CreateString(cells_html->data));
+        cwist_sstring_destroy(cells_html);
+    }
+    
+    cwist_sstring *rendered = cwist_template_render_file("index.html.tmpl", context);
+    if (rendered) {
+        cwist_sstring_assign(res->body, rendered->data);
+        cwist_sstring_destroy(rendered);
+    } else {
+        res->status_code = 500;
+        cwist_sstring_assign(res->body, "Template Error");
+    }
+    
+    cJSON_Delete(context);
+    cwist_http_header_add(&res->headers, "Content-Type", "text/html");
 }

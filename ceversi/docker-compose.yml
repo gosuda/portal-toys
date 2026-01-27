@@ -1,12 +1,14 @@
+version: '3.8'
 services:
   ceversi:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: ceversi:latest
-    container_name: ceversi
+    build: .
     ports:
       - "31744:31744"
-    environment:
-      - RELAY=wss://portal.gosuda.org/relay,wss://portal.thumbgo.kr/relay
+    volumes:
+      - ./server.crt:/app/server.crt
+      - ./server.key:/app/server.key
+      - ./index.html:/app/index.html
+      - ./style.css:/app/style.css
+      - ./script.js:/app/script.js
+      - ./othello.db:/app/othello.db
     restart: always
