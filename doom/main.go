@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -11,10 +12,11 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 //go:embed doom/public/*
@@ -54,23 +56,9 @@ func main() {
 }
 
 func runDoom(cmd *cobra.Command, args []string) error {
-	// 1) Create single SDK client and connect to relay(s)
-	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// 4) Build HTTP handler to serve embedded Doom assets
 	staticFS, err := fs.Sub(doomAssets, "doom/public")
 	if err != nil {
 		return fmt.Errorf("static assets: %w", err)
@@ -79,27 +67,25 @@ func runDoom(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.Handle("/", withStaticHeaders(http.FileServer(http.FS(staticFS))))
 
-	// 5) Serve HTTP directly over the relay listener
-	log.Info().Msgf("[doom] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
-	srvErr := make(chan error, 1)
-	go func() {
-		srvErr <- http.Serve(ln, mux)
-	}()
-
-	// 6) Wait for termination or HTTP error
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-sig:
-		log.Info().Msg("[doom] shutting down...")
-	case err := <-srvErr:
-		if err != nil {
-			log.Error().Err(err).Msg("[doom] http serve error")
-		}
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
-
-	_ = ln.Close()
-	_ = client.Close()
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
+	}
+	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+		return err
+	}
 	log.Info().Msg("[doom] shutdown complete")
 	return nil
 }

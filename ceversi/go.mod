@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/rs/zerolog v1.34.0
 	github.com/spf13/cobra v1.10.2
-	gosuda.org/portal v1.4.13
+	github.com/gosuda/portal/v2 v1.4.13
 )
 
 require (

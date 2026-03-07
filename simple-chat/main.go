@@ -3,22 +3,19 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/base64"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/portal/core/cryptoops"
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 //go:embed static
@@ -151,73 +148,35 @@ func runChat(cmd *cobra.Command, args []string) error {
 	// Build router
 	handler := NewHandler(flagName, hub, staticFS)
 
-	// Shared credential across all relay listeners
-	cred := sdk.NewCredential()
 	if flagCredKey != "" {
-		key, err := base64.StdEncoding.DecodeString(flagCredKey)
-		if err != nil {
-			return fmt.Errorf("decode cred key: %w", err)
-		}
-		cred2, err := cryptoops.NewCredentialFromPrivateKey(key)
-		if err != nil {
-			return fmt.Errorf("new credential from private key: %w", err)
-		}
-		cred = cred2
+		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	// Single client and listener over all bootstrap servers
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	go func() {
-		if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[chat] relay http error")
-		}
-	}()
-
-	// Optional local server on --port
-	var httpSrv *http.Server
-	if flagPort >= 0 {
-		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: handler, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-		log.Info().Msgf("[chat] serving locally at http://127.0.0.1:%d", flagPort)
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Warn().Err(err).Msg("[chat] local http stopped")
-			}
-		}()
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
 	}
-
-	// Unified shutdown watcher
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-				log.Error().Err(err).Msg("[chat] http server shutdown error")
-			}
-		}
-	}()
-
-	// Wait for cancel, then clean up hub/store
-	<-ctx.Done()
+	err = portalapp.RunHTTP(ctx, lease, handler, portalapp.LocalAddrFromPort(flagPort))
 	hub.closeAll()
 	hub.wait()
 	if store != nil {
 		if err := store.Close(); err != nil {
 			log.Warn().Err(err).Msg("[chat] store close error")
 		}
+	}
+	if err != nil {
+		return err
 	}
 	log.Info().Msg("[chat] shutdown complete")
 	return nil

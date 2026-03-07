@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,10 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"gosuda.org/portal/portal/core/cryptoops"
-	"gosuda.org/portal/sdk"
+
+	"github.com/gosuda/portal/v2/types"
 )
 
 var rootCmd = &cobra.Command{
@@ -42,63 +42,62 @@ var (
 // portalManager keeps active portal client/listeners per relay URL.
 type portalManager struct {
 	handler http.Handler
-	cred    *cryptoops.Credential
 	leases  map[string]*portalLease
 }
 
 type portalLease struct {
-	relay  string
-	client *sdk.RDClient
-	ln     net.Listener
+	relay string
+	lease *portalapp.Lease
 }
 
 var gPortalMgr portalManager
 
-func (m *portalManager) Init(handler http.Handler, cred *cryptoops.Credential) {
+func (m *portalManager) Init(handler http.Handler) {
 	m.handler = handler
-	m.cred = cred
 	if m.leases == nil {
 		m.leases = make(map[string]*portalLease)
 	}
 }
 
 func (m *portalManager) ConnectRelay(ctx context.Context, relayURL string, name, description string, hide bool, owner string, tags []string) error {
-	if m.handler == nil || m.cred == nil {
+	if m.handler == nil {
 		return fmt.Errorf("portal manager not initialized")
 	}
-	key := canonicalRelay(relayURL)
+	normalizedRelay, err := portalapp.NormalizeRelayURL(relayURL)
+	if err != nil {
+		return fmt.Errorf("normalize relay: %w", err)
+	}
+	key := canonicalRelay(normalizedRelay)
 	if _, ok := m.leases[key]; ok {
 		return nil
 	}
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = []string{relayURL} })
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: []string{normalizedRelay},
+		Name:       name,
+		Metadata: types.LeaseMetadata{
+			Description: description,
+			Owner:       owner,
+			Thumbnail:   flagThumbnail,
+			Tags:        tags,
+			Hide:        hide,
+		},
+	})
 	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-
-	ln, err := client.Listen(m.cred, name, []string{"http/1.1"},
-		sdk.WithDescription(description),
-		sdk.WithHide(hide),
-		sdk.WithOwner(owner),
-		sdk.WithThumbnail(flagThumbnail),
-		sdk.WithTags(tags),
-	)
-	if err != nil {
-		_ = client.Close()
 		return fmt.Errorf("listen: %w", err)
 	}
 	go func() {
-		if err := http.Serve(ln, m.handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msgf("[portal-list] relay http serve error (%s)", relayURL)
+		if err := http.Serve(lease.Listener(), m.handler); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
+			log.Error().Err(err).Msgf("[portal-list] relay http serve error (%s)", normalizedRelay)
 		}
 	}()
-	m.leases[key] = &portalLease{relay: relayURL, client: client, ln: ln}
-	log.Info().Msgf("[portal-list] registered on %s", relayURL)
+	m.leases[key] = &portalLease{relay: normalizedRelay, lease: lease}
+	log.Info().Msgf("[portal-list] registered on %s", normalizedRelay)
 	return nil
 }
 
 func (m *portalManager) ConnectFromSite(ctx context.Context, siteURL string, name, description string, hide bool, owner string, tags []string) (string, error) {
-	relay := deriveRelayFromSite(siteURL)
-	if relay == "" {
+	relay, err := portalapp.NormalizeRelayURL(siteURL)
+	if err != nil {
 		return "", fmt.Errorf("invalid site URL: %s", siteURL)
 	}
 	if err := m.ConnectRelay(ctx, relay, name, description, hide, owner, tags); err != nil {
@@ -109,8 +108,7 @@ func (m *portalManager) ConnectFromSite(ctx context.Context, siteURL string, nam
 
 func (m *portalManager) Shutdown() {
 	for k, l := range m.leases {
-		_ = l.ln.Close()
-		_ = l.client.Close()
+		_ = l.lease.Close()
 		delete(m.leases, k)
 	}
 }
@@ -137,9 +135,9 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	relay := firstNonEmpty(os.Getenv("RELAY"), os.Getenv("RELAY_URL"), os.Getenv("SERVER_URL"))
 	if relay == "" {
-		relay = "wss://portal.gosuda.org/relay"
+		relay = "https://portal.gosuda.org/"
 	}
-	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(relay, ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL/SERVER_URL)")
+	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(relay, ","), "relay site URL(s); repeat or comma-separated (legacy ws/wss relay URLs also supported)")
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
@@ -170,9 +168,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	mux := NewHandler()
 
-	// Portal manager and primary registrations
-	cred := sdk.NewCredential()
-	gPortalMgr.Init(mux, cred)
+	gPortalMgr.Init(mux)
 	// Start simple sequential connections in background (non-blocking)
 	go func() {
 		tags := strings.Split(flagTags, ",")
@@ -227,24 +223,18 @@ func run(cmd *cobra.Command, args []string) error {
 }
 
 func derivePortalBase(relay string) string {
-	// Accept comma-separated; derive from the first non-empty
 	first := strings.TrimSpace(strings.Split(firstNonEmpty(relay, ""), ",")[0])
 	if first == "" {
 		return "https://portal.gosuda.org/"
 	}
-	u, err := url.Parse(first)
+	normalized, err := portalapp.NormalizeRelayURL(first)
 	if err != nil {
 		return "https://portal.gosuda.org/"
 	}
-	scheme := "https"
-	if u.Scheme == "ws" {
-		scheme = "http"
+	if !strings.HasSuffix(normalized, "/") {
+		return normalized + "/"
 	}
-	host := u.Host
-	if host == "" {
-		host = u.Path // fallback
-	}
-	return fmt.Sprintf("%s://%s/", scheme, host)
+	return normalized
 }
 
 func firstNonEmpty(vals ...string) string {

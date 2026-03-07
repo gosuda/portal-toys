@@ -11,10 +11,11 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 var rootCmd = &cobra.Command{
@@ -81,30 +82,25 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 		req.Header.Set("X-Forwarded-Proto", "http")
 	}
 
-	// Create credentials and a single relay client, then serve proxy over relay
-	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
 	if err != nil {
-		return fmt.Errorf("new relay client failed: %w", err)
+		return fmt.Errorf("listen: %w", err)
 	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
-	if err != nil {
-		return fmt.Errorf("relay listen failed: %w", err)
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
 	}
-	go func() {
-		if err := http.Serve(ln, proxy); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[vscode-relay] http serve error")
-		}
-	}()
-
-	<-ctx.Done()
-	_ = ln.Close()
-	_ = client.Close()
+	if err := portalapp.RunHTTP(ctx, lease, proxy, ""); err != nil {
+		return err
+	}
 	log.Info().Msg("[vscode-relay] shutdown complete")
 	return nil
 }

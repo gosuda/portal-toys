@@ -16,10 +16,11 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 //go:embed static
@@ -255,27 +256,9 @@ func decodeDataURL(dataURL string) (mimeType string, raw []byte, err error) {
 }
 
 func runPaint(cmd *cobra.Command, args []string) error {
-	// Cancellation context for graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Create single SDK client and connect to relay(s)
-	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
-	if err != nil {
-		return fmt.Errorf("listen: %w", err)
-	}
-
-	// Setup HTTP handler
 	canvas := newCanvas()
 	images = newImageStore()
 	mux := http.NewServeMux()
@@ -340,49 +323,28 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/ws", canvas.handleWS)
 
-	// 5) Serve HTTP over relay listener
-	log.Info().Msgf("[paint] serving HTTP over relay; lease=%s id=%s", flagName, cred.ID())
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[paint] http serve error")
-		}
-	}()
-
-	// Single watcher for shutdown
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
-	}()
-
-	// Optional: also serve locally on --port like http-backend
-	var httpSrv *http.Server
-	if flagPort >= 0 {
-		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
-		log.Info().Msgf("[paint] serving locally at http://127.0.0.1:%d", flagPort)
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Warn().Err(err).Msg("[paint] local http stopped")
-			}
-		}()
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
 	}
-
-	// One watcher that shuts down local server if started
-	go func() {
-		<-ctx.Done()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-				log.Warn().Err(err).Msg("[paint] local http shutdown error")
-			}
-		}
-	}()
-
-	// Block until canceled, then cleanup canvas
-	<-ctx.Done()
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
+	}
+	err = portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort))
 	canvas.closeAll()
 	canvas.wait()
+	if err != nil {
+		return err
+	}
 
 	log.Info().Msg("[paint] shutdown complete")
 	return nil

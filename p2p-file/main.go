@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,11 +19,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-	"gosuda.org/portal/portal/core/cryptoops"
-	"gosuda.org/portal/sdk"
 
+	"github.com/gosuda/portal/v2/types"
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -165,7 +164,7 @@ func runService(ctx context.Context) error {
 	}
 
 	errCh := make(chan error, 2)
-	portalClose, err := startPortalBridge(handler, errCh)
+	portalClose, err := startPortalBridge(ctx, handler, errCh)
 	if err != nil {
 		return err
 	}
@@ -616,19 +615,7 @@ func serveEmbedded(fsys fs.FS, name, contentType string) http.HandlerFunc {
 }
 
 func cleanServerURLs(in []string) []string {
-	out := make([]string, 0, len(in))
-	for _, raw := range in {
-		if raw == "" {
-			continue
-		}
-		for _, part := range strings.Split(raw, ",") {
-			p := strings.TrimSpace(part)
-			if p != "" {
-				out = append(out, p)
-			}
-		}
-	}
-	return out
+	return portalapp.CleanServerURLs(in)
 }
 
 func portalTags() []string {
@@ -642,51 +629,38 @@ func portalTags() []string {
 	return out
 }
 
-func startPortalBridge(handler http.Handler, errCh chan<- error) (func(), error) {
+func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- error) (func(), error) {
 	serverURLs := cleanServerURLs(flagServerURLs)
 	if len(serverURLs) == 0 {
 		return nil, nil
 	}
-	cred := sdk.NewCredential()
 	if flagCredKey != "" {
-		key, err := base64.StdEncoding.DecodeString(flagCredKey)
-		if err != nil {
-			return nil, fmt.Errorf("decode cred key: %w", err)
-		}
-		cred2, err := cryptoops.NewCredentialFromPrivateKey(key)
-		if err != nil {
-			return nil, fmt.Errorf("credential from key: %w", err)
-		}
-		cred = cred2
+		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) {
-		c.BootstrapServers = serverURLs
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: serverURLs,
+		Name:       flagPortalName,
+		Metadata: types.LeaseMetadata{
+			Description: flagPortalDesc,
+			Owner:       flagPortalOwner,
+			Tags:        portalTags(),
+			Hide:        flagPortalHide,
+		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("portal client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagPortalName, []string{"http/1.1"},
-		sdk.WithDescription(flagPortalDesc),
-		sdk.WithHide(flagPortalHide),
-		sdk.WithOwner(flagPortalOwner),
-		sdk.WithTags(portalTags()),
-	)
-	if err != nil {
-		_ = client.Close()
 		return nil, fmt.Errorf("portal listen: %w", err)
 	}
 	log.Info().
 		Str("name", flagPortalName).
-		Strs("servers", serverURLs).
+		Strs("servers", lease.RelayURLs()).
 		Msg("serving Portal relay")
 	go func() {
-		if err := http.Serve(ln, handler); err != nil && err != http.ErrServerClosed {
+		if err := http.Serve(lease.Listener(), handler); err != nil && err != http.ErrServerClosed {
 			errCh <- fmt.Errorf("portal http serve: %w", err)
 		}
 	}()
 	return func() {
-		_ = ln.Close()
-		_ = client.Close()
+		_ = lease.Close()
 	}, nil
 }
 

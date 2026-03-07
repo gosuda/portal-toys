@@ -13,10 +13,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 var (
@@ -64,13 +65,13 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	cCmd := exec.CommandContext(ctx, flagCServerPath, "--no-certs")
 	// We need to tell the C server which port to use.
 	// Current C server has port 31744 hardcoded. I will change it in src/main.c later.
-	// For now let's assume it uses flagBackendPort if we can pass it, 
+	// For now let's assume it uses flagBackendPort if we can pass it,
 	// but the C server code I saw doesn't take a port arg yet.
 	// I'll modify src/main.c to take a port or use an env var.
 	cCmd.Env = append(os.Environ(), fmt.Sprintf("PORT=%d", flagBackendPort))
 	cCmd.Stdout = os.Stdout
 	cCmd.Stderr = os.Stderr
-	
+
 	if err := cCmd.Start(); err != nil {
 		return fmt.Errorf("start C server: %w", err)
 	}
@@ -83,52 +84,25 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", proxy)
 
-	// Portal SDK
-	cred := sdk.NewCredential()
-    client, err := sdk.NewClient(sdk.WithBootstrapServers(flagServerURLs))
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[ceversi] relay http error")
-		}
-	}()
-
-	// Local HTTP
-	var httpSrv *http.Server
-	if flagPort >= 0 {
-		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
-		log.Info().Msgf("[ceversi] serving relay locally at http://127.0.0.1:%d", flagPort)
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Warn().Err(err).Msg("[ceversi] local http stopped")
-			}
-		}()
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
 	}
-
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = httpSrv.Shutdown(sctx)
-		}
-	}()
-
-	<-ctx.Done()
+	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+		return err
+	}
 	log.Info().Msg("[ceversi] shutdown complete")
 	return nil
 }

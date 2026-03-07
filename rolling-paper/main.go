@@ -22,10 +22,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/pebble/v2"
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 //go:embed static
@@ -115,55 +116,25 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	}
 	staticHandler = http.FileServer(http.FS(sub))
 
-	// Relay clients and listeners (multi-relay)
-	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	// Serve over each relay listener
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Str("listener", ln.Addr().String()).Msg("[rolling-paper] relay http serve error")
-		}
-	}()
-
-	// Optional local serve
-	var httpSrv *http.Server
-	if flagPort >= 0 {
-		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux}
-		log.Info().Msgf("[rolling-paper] serving locally at http://127.0.0.1:%d", flagPort)
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Warn().Err(err).Msg("[rolling-paper] local http stopped")
-			}
-		}()
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
 	}
-
-	// Unified shutdown watcher
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			defer cancel()
-			if err := httpSrv.Shutdown(sctx); err != nil && err != context.Canceled {
-				log.Warn().Err(err).Msg("[rolling-paper] local http shutdown error")
-			}
-		}
-	}()
-
-	<-ctx.Done()
+	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+		return err
+	}
 	log.Info().Msg("[rolling-paper] shutdown complete")
 	return nil
 }

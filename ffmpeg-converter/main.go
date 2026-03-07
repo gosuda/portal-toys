@@ -17,10 +17,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
-	"gosuda.org/portal/sdk"
+	"github.com/gosuda/portal/v2/types"
 )
 
 //go:embed static
@@ -84,52 +85,25 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/convert", handleConvert)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	// Relay (single client using all bootstrap servers)
-	cred := sdk.NewCredential()
-	client, err := sdk.NewClient(func(c *sdk.RDClientConfig) { c.BootstrapServers = flagServerURLs })
-	if err != nil {
-		return fmt.Errorf("new client: %w", err)
-	}
-	ln, err := client.Listen(cred, flagName, []string{"http/1.1"},
-		sdk.WithDescription(flagDescription),
-		sdk.WithHide(flagHide),
-		sdk.WithOwner(flagOwner),
-		sdk.WithTags(strings.Split(flagTags, ",")),
-	)
+	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
+		ServerURLs: flagServerURLs,
+		Name:       flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        portalapp.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
+	})
 	if err != nil {
 		return fmt.Errorf("listen: %w", err)
 	}
-	go func() {
-		if err := http.Serve(ln, mux); err != nil && err != http.ErrServerClosed && ctx.Err() == nil {
-			log.Error().Err(err).Msg("[ffmpeg] relay http serve error")
-		}
-	}()
-	log.Info().Msgf("[ffmpeg] serving over relay; id=%s", cred.ID())
-
-	// Optional local
-	var httpSrv *http.Server
-	if flagPort >= 0 {
-		httpSrv = &http.Server{Addr: fmt.Sprintf(":%d", flagPort), Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-		go func() {
-			if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Warn().Err(err).Msg("[ffmpeg] local http stopped")
-			}
-		}()
-		log.Info().Msgf("[ffmpeg] local http on http://127.0.0.1:%d", flagPort)
+	if lease != nil {
+		defer func() { _ = lease.Close() }()
 	}
-
-	go func() {
-		<-ctx.Done()
-		_ = ln.Close()
-		_ = client.Close()
-		if httpSrv != nil {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = httpSrv.Shutdown(sctx)
-		}
-	}()
-
-	<-ctx.Done()
+	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+		return err
+	}
 	log.Info().Msg("[ffmpeg] shutdown complete")
 	return nil
 }
