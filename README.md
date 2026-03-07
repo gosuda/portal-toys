@@ -1,60 +1,53 @@
 # portal-toys
 
-portal-toys is a collection of tiny demos that show how to build, publish, and interact with Portal relay network. All examples are intentionally simple and LLM‑friendly — you can generate or modify them with an LLM to prototype quickly.
+portal-toys is a collection of small Portal demos. The repository is focused on Go examples that register directly with Portal relays using the Go SDK.
 
-If you’re new here, start with one example, run it locally, and (optionally) expose it via a Portal relay so others can access it.
+## Why This Repo
+- Small, self-contained apps that are easy to read and modify.
+- Consistent CLI flags across demos such as `--server-url`, `--name`, and `--port`.
+- Works both locally and over relays.
 
-## Why this repo (LLM‑based)
-- Small, self‑contained apps that are easy for LLMs to read and change.
-- Consistent CLI flags across demos: `--server-url`, `--name`, `--port`.
-- Works both locally and over relays. Go demos use the Portal SDK directly; JS demos use a lightweight tunnel helper.
+For non-Go apps, use `portal-tunnel` instead of maintaining separate language-specific examples in this repo.
 
 ## Prerequisites
-- A Portal relay URL (defaults provided). Learn more: https://github.com/gosuda/portal
+- A Portal relay URL. Learn more: https://github.com/gosuda/portal
 
 ## Quick Start
-
-Pick one of the paths below.
-
-- Go
-  - Start: `go run ./rolling-paper --server-url portal.gosuda.org,portal.thumbgo.kr,portal.iwanhae.kr --name my-rolling --port 8081`
-  - Local access: open `http://127.0.0.1:8081`
-  - Relay access: via your relay UI using the registered name (`--name`)
-
-- Tunnel
-  - python3 languagecat/main.py
-  - curl -fsSL http://portal.gosuda.org/tunnel | PORT=3000 NAME=languagecat sh
+- Start: `go run ./rolling-paper --server-url https://portal.gosuda.org/ --name my-rolling --port 8081`
+- Local access: open `http://127.0.0.1:8081`
+- Relay access: open the registered name from your relay UI
 
 ## Repo Layout
-
-Golang examples
 - [chatter-bbs](chatter-bbs)
-- [openboard](openboard)
+- [ceversi](ceversi)
 - [doom](doom)
+- [emulator-js](emulator-js)
+- [ffmpeg-converter](ffmpeg-converter)
 - [gosuda-blog](gosuda-blog)
 - [http-backend](http-backend)
 - [iframe-player](iframe-player)
+- [mafia](mafia)
+- [openboard](openboard)
+- [p2p-file](p2p-file)
 - [paint](paint)
+- [portal-list](portal-list)
 - [rolling-paper](rolling-paper)
 - [simple-chat](simple-chat)
 - [simple-community](simple-community)
 - [tetris](tetris)
-- [youtube-chat](youtube-chat)
+- [tools](tools)
 - [vscode-chat](vscode-chat)
-
-Tunnel examples
-- [js-simple-example](js-simple-example)
-- [languagecat-paper](languagecat)
+- [youtube-chat](youtube-chat)
 
 ## Tips
-- Be considerate with traffic. Avoid excessive requests to shared relays.
+- Be considerate with traffic on shared relays.
 - After successful connection, your service appears in the relay UI under the chosen `--name`.
 
 ## Troubleshooting
-- Relay unreachable: check `--server-url` and network/firewall. Try `wss://portal.gosuda.org/relay`.
+- Relay unreachable: check `--server-url` and network/firewall.
 - Local port busy: change `--port` or close the conflicting process.
-- JS tunnel not found: run `make tunnel-install` or set `TUNNEL_BIN`.
-- Go build issues: ensure Go 1.25+; run from repo root using the per‑example path (`go run ./golang/<demo>`).
+- Tunnel not found: run `make tunnel-install`.
+- Go build issues: ensure a recent Go toolchain and run commands from the repo root.
 
 ## License
-MIT — see `LICENSE`.
+MIT. See `LICENSE`.
