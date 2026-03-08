@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -42,6 +43,8 @@ var (
 // portalManager keeps active portal client/listeners per relay URL.
 type portalManager struct {
 	handler http.Handler
+	ctx     context.Context
+	mu      sync.Mutex
 	leases  map[string]*portalLease
 }
 
@@ -52,23 +55,37 @@ type portalLease struct {
 
 var gPortalMgr portalManager
 
-func (m *portalManager) Init(handler http.Handler) {
+func (m *portalManager) Init(ctx context.Context, handler http.Handler) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	m.ctx = ctx
 	m.handler = handler
 	if m.leases == nil {
 		m.leases = make(map[string]*portalLease)
 	}
 }
 
-func (m *portalManager) ConnectRelay(ctx context.Context, relayURL string, name, description string, hide bool, owner string, tags []string) error {
+func (m *portalManager) context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
+}
+
+func (m *portalManager) ConnectRelay(relayURL string, name, description string, hide bool, owner string, tags []string) error {
 	if m.handler == nil {
 		return fmt.Errorf("portal manager not initialized")
 	}
+	ctx := m.context()
 	normalizedRelay, err := sdk.NormalizeRelayURL(relayURL)
 	if err != nil {
 		return fmt.Errorf("normalize relay: %w", err)
 	}
 	key := canonicalRelay(normalizedRelay)
+	m.mu.Lock()
 	if _, ok := m.leases[key]; ok {
+		m.mu.Unlock()
 		return nil
 	}
 	exposure, err := sdk.Expose(ctx, []string{normalizedRelay}, name, types.LeaseMetadata{
@@ -79,6 +96,7 @@ func (m *portalManager) ConnectRelay(ctx context.Context, relayURL string, name,
 		Hide:        hide,
 	})
 	if err != nil {
+		m.mu.Unlock()
 		return fmt.Errorf("expose: %w", err)
 	}
 	go func() {
@@ -87,25 +105,33 @@ func (m *portalManager) ConnectRelay(ctx context.Context, relayURL string, name,
 		}
 	}()
 	m.leases[key] = &portalLease{relay: normalizedRelay, exposure: exposure}
+	m.mu.Unlock()
 	log.Info().Msgf("[portal-list] registered on %s", normalizedRelay)
 	return nil
 }
 
-func (m *portalManager) ConnectFromSite(ctx context.Context, siteURL string, name, description string, hide bool, owner string, tags []string) (string, error) {
+func (m *portalManager) ConnectFromSite(siteURL string, name, description string, hide bool, owner string, tags []string) (string, error) {
 	relay, err := sdk.NormalizeRelayURL(siteURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid site URL: %s", siteURL)
 	}
-	if err := m.ConnectRelay(ctx, relay, name, description, hide, owner, tags); err != nil {
+	if err := m.ConnectRelay(relay, name, description, hide, owner, tags); err != nil {
 		return "", err
 	}
 	return relay, nil
 }
 
 func (m *portalManager) Shutdown() {
+	m.mu.Lock()
+	leases := make([]*portalLease, 0, len(m.leases))
 	for k, l := range m.leases {
-		_ = l.exposure.Close()
+		leases = append(leases, l)
 		delete(m.leases, k)
+	}
+	m.mu.Unlock()
+
+	for _, l := range leases {
+		_ = l.exposure.Close()
 	}
 }
 
@@ -136,7 +162,7 @@ func init() {
 	flags.StringVar(&flagServerURLs, "server-url", relay, "relay base URL(s); repeat or comma-separated")
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
-	flags.StringVar(&flagName, "name", "portal-list2", "backend display name")
+	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagDescription, "description", "Portal list viewer (online status)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Portal", "lease owner")
@@ -164,7 +190,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	mux := NewHandler()
 
-	gPortalMgr.Init(mux)
+	gPortalMgr.Init(ctx, mux)
 	// Start simple sequential connections in background (non-blocking)
 	go func() {
 		tags := sdk.SplitCSV(flagTags)
@@ -173,14 +199,14 @@ func run(cmd *cobra.Command, args []string) error {
 			if relayURL == "" {
 				continue
 			}
-			if err := gPortalMgr.ConnectRelay(ctx, relayURL, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+			if err := gPortalMgr.ConnectRelay(relayURL, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
 				log.Warn().Err(err).Msgf("[portal-list] failed to register on %s", relayURL)
 			}
 			time.Sleep(300 * time.Millisecond)
 		}
 		if sites, err := readSites(sitesJSONPath); err == nil {
 			for _, s := range sites {
-				if _, err := gPortalMgr.ConnectFromSite(ctx, s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+				if _, err := gPortalMgr.ConnectFromSite(s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
 					log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
 				}
 				time.Sleep(300 * time.Millisecond)

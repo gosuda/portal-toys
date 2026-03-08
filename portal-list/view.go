@@ -532,7 +532,7 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			// Attempt to connect using sanitized base
-			if _, err := gPortalMgr.ConnectFromSite(r.Context(), san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+			if _, err := gPortalMgr.ConnectFromSite(san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
 				http.Error(w, fmt.Sprintf("failed to connect/register: %v", err), http.StatusBadRequest)
 				return
 			}
