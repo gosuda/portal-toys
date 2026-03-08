@@ -11,8 +11,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -32,12 +30,10 @@ func NewHandler() http.Handler {
 	// info (for UI)
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		sites, _ := readSites(sitesJSONPath)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"server_urls": sdk.SplitCSV(flagServerURLs),
 			"portal_base": flagPortalBase,
-			"data_path":   flagSitesPath,
-			"sites":       sites,
+			"sites":       gSites.List(),
 			"name":        flagName,
 		})
 	})
@@ -64,11 +60,7 @@ func NewHandler() http.Handler {
 func handlePortals(w http.ResponseWriter, r *http.Request) {
 	// Aggregate from all sites if requested
 	if r.URL.Query().Get("all") == "1" {
-		sites, err := readSites(sitesJSONPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+		sites := gSites.List()
 		type agg struct {
 			Base string      `json:"base"`
 			Data interface{} `json:"data"`
@@ -375,18 +367,14 @@ func isHealthy(ctx context.Context, client *http.Client, urlStr string) (bool, e
 	return false, fmt.Errorf("%s", resp2.Status)
 }
 
-// handleHealth: direct URL reachability from sites.json (no SSR parsing)
+// handleHealth: direct URL reachability from the in-memory site list.
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	streamMode := false
 	if v := r.URL.Query().Get("stream"); v == "1" || strings.EqualFold(v, "true") {
 		streamMode = true
 	}
-	sites, err := readSites(sitesJSONPath)
-	if err != nil || !hasNonEmpty(sites) {
-		// Fallback to derived portal base if sites.json is missing/empty
-		sites, _ = loadSitesOrInit(sitesJSONPath, sdk.SplitCSV(flagServerURLs))
-	}
+	sites := gSites.List()
 	items := make([]PortalCard, 0, len(sites))
 	for _, s := range sites {
 		s = strings.TrimSpace(s)
@@ -462,14 +450,7 @@ func collectRelayURLs() []string {
 	for _, r := range sdk.SplitCSV(flagServerURLs) {
 		add(r)
 	}
-	// Sites file may be empty or missing; attempt to load/initialize if needed.
-	sites, err := readSites(sitesJSONPath)
-	if err != nil || !hasNonEmpty(sites) {
-		if fallback, err2 := loadSitesOrInit(sitesJSONPath, sdk.SplitCSV(flagServerURLs)); err2 == nil || len(fallback) > 0 {
-			sites = fallback
-		}
-	}
-	for _, site := range sites {
+	for _, site := range gSites.List() {
 		add(site)
 	}
 	return out
@@ -490,13 +471,8 @@ func guessNameFromURL(s string) string {
 func handleSites(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		sites, err := readSites(sitesJSONPath)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(sites)
+		_ = json.NewEncoder(w).Encode(gSites.List())
 	case http.MethodPost:
 		var body struct {
 			URL  string   `json:"url"`
@@ -518,7 +494,7 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "missing url", http.StatusBadRequest)
 			return
 		}
-		// Try to connect/register to each URL before persisting
+		// Try to connect/register to each URL before adding it to the runtime list.
 		tags := sdk.SplitCSV(flagTags)
 		var sanitizedToAdd []string
 		for _, s := range toAdd {
@@ -538,120 +514,82 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 			}
 			sanitizedToAdd = append(sanitizedToAdd, san)
 		}
-		// Load current and sanitize/dedupe by host
-		sites, _ := readSites(sitesJSONPath)
-		hostKey := func(s string) string {
-			u, err := url.Parse(normalizeURL(s))
-			if err != nil || u.Host == "" {
-				return ""
-			}
-			return strings.ToLower(u.Host) // includes port if present
-		}
-		seen := make(map[string]struct{}, len(sites)+len(sanitizedToAdd))
-		newSites := make([]string, 0, len(sites)+len(sanitizedToAdd))
-		for _, s := range sites {
-			san := sanitizeSiteInput(s)
-			if san == "" {
-				continue
-			}
-			k := hostKey(san)
-			if k == "" {
-				continue
-			}
-			if _, ok := seen[k]; ok {
-				continue
-			}
-			seen[k] = struct{}{}
-			newSites = append(newSites, san)
-		}
-		// Add new sanitized entries
-		for _, s := range sanitizedToAdd {
-			k := hostKey(s)
-			if k == "" {
-				continue
-			}
-			if _, ok := seen[k]; ok {
-				continue
-			}
-			seen[k] = struct{}{}
-			newSites = append(newSites, s)
-		}
-		if err := writeSites(sitesJSONPath, newSites); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(newSites)
+		_ = json.NewEncoder(w).Encode(gSites.Merge(sanitizedToAdd))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
-// Sites list persistence
-func loadSitesOrInit(path string, bootstraps []string) ([]string, error) {
-	// If file has non-empty list, return it. Else generate from bootstraps and save.
-	sites, err := readSites(path)
-	if err == nil && hasNonEmpty(sites) {
-		return sites, nil
+func siteHostKey(s string) string {
+	u, err := url.Parse(normalizeURL(s))
+	if err != nil || u.Host == "" {
+		return ""
 	}
-	// derive from bootstraps
-	uniq := make(map[string]struct{})
-	for _, b := range bootstraps {
-		for _, s := range sdk.SplitCSV(b) {
-			s = strings.TrimSpace(s)
-			if s == "" {
-				continue
-			}
-			base := derivePortalBase(s)
-			uniq[base] = struct{}{}
+	return strings.ToLower(u.Host)
+}
+
+func mergeSiteLists(current []string, additions []string) []string {
+	seen := make(map[string]struct{}, len(current)+len(additions))
+	out := make([]string, 0, len(current)+len(additions))
+	appendSite := func(raw string) {
+		san := sanitizeSiteInput(raw)
+		if san == "" {
+			return
+		}
+		key := siteHostKey(san)
+		if key == "" {
+			return
+		}
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		out = append(out, san)
+	}
+	for _, site := range current {
+		appendSite(site)
+	}
+	for _, site := range additions {
+		appendSite(site)
+	}
+	return out
+}
+
+func removeSiteList(current []string, doomed []string) ([]string, []string) {
+	removeKeys := make(map[string]struct{}, len(doomed))
+	for _, site := range doomed {
+		if key := siteHostKey(site); key != "" {
+			removeKeys[key] = struct{}{}
 		}
 	}
-	// Fallback default if still empty
-	if len(uniq) == 0 {
-		uniq["https://portal.gosuda.org/"] = struct{}{}
+	if len(removeKeys) == 0 {
+		out := make([]string, len(current))
+		copy(out, current)
+		return out, nil
 	}
-	out := make([]string, 0, len(uniq))
-	for k := range uniq {
-		out = append(out, k)
-	}
-	if err := writeSites(path, out); err != nil {
-		return out, err
-	}
-	return out, nil
-}
 
-func readSites(path string) ([]string, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	// empty file
-	if len(strings.TrimSpace(string(b))) == 0 {
-		return nil, errors.New("empty sites file")
-	}
-	var v []string
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func writeSites(path string, sites []string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(sites, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, b, 0o644)
-}
-
-func hasNonEmpty(ss []string) bool {
-	for _, s := range ss {
-		if strings.TrimSpace(s) != "" {
-			return true
+	seen := make(map[string]struct{}, len(current))
+	next := make([]string, 0, len(current))
+	removed := make([]string, 0, len(removeKeys))
+	for _, site := range current {
+		san := sanitizeSiteInput(site)
+		if san == "" {
+			continue
 		}
+		key := siteHostKey(san)
+		if key == "" {
+			continue
+		}
+		if _, ok := removeKeys[key]; ok {
+			removed = append(removed, san)
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		next = append(next, san)
 	}
-	return false
+	return next, removed
 }

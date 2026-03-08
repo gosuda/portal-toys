@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -35,9 +34,12 @@ var (
 	flagDescription string
 	flagOwner       string
 	flagTags        string
-	flagSitesPath   string
 	flagThumbnail   string
-	sitesJSONPath   string
+)
+
+const (
+	siteHealthSweepInterval = 15 * time.Second
+	siteHealthPruneAfter    = 2 * time.Minute
 )
 
 // portalManager keeps active portal client/listeners per relay URL.
@@ -53,7 +55,19 @@ type portalLease struct {
 	exposure *sdk.Exposure
 }
 
+type siteFailureTracker struct {
+	mu          sync.Mutex
+	failedSince map[string]time.Time
+}
+
+type siteRegistry struct {
+	mu    sync.RWMutex
+	sites []string
+}
+
 var gPortalMgr portalManager
+var gSiteFailures siteFailureTracker
+var gSites siteRegistry
 
 func (m *portalManager) Init(ctx context.Context, handler http.Handler) {
 	if ctx == nil {
@@ -121,6 +135,38 @@ func (m *portalManager) ConnectFromSite(siteURL string, name, description string
 	return relay, nil
 }
 
+func (m *portalManager) DisconnectRelay(relayURL string) bool {
+	normalizedRelay := relayURL
+	if relay, err := sdk.NormalizeRelayURL(relayURL); err == nil {
+		normalizedRelay = relay
+	}
+	key := canonicalRelay(normalizedRelay)
+
+	m.mu.Lock()
+	lease := m.leases[key]
+	if lease != nil {
+		delete(m.leases, key)
+	}
+	m.mu.Unlock()
+
+	if lease == nil {
+		return false
+	}
+	if err := lease.exposure.Close(); err != nil {
+		log.Warn().Err(err).Msgf("[portal-list] close exposure failed (%s)", lease.relay)
+	}
+	log.Info().Msgf("[portal-list] unregistered from %s", lease.relay)
+	return true
+}
+
+func (m *portalManager) DisconnectSite(siteURL string) bool {
+	relay := deriveRelayFromSite(siteURL)
+	if relay == "" {
+		relay = siteURL
+	}
+	return m.DisconnectRelay(relay)
+}
+
 func (m *portalManager) Shutdown() {
 	m.mu.Lock()
 	leases := make([]*portalLease, 0, len(m.leases))
@@ -135,10 +181,51 @@ func (m *portalManager) Shutdown() {
 	}
 }
 
+func (r *siteRegistry) Init(initial []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sites = mergeSiteLists(nil, initial)
+}
+
+func (r *siteRegistry) List() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, len(r.sites))
+	copy(out, r.sites)
+	return out
+}
+
+func (r *siteRegistry) Merge(additions []string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sites = mergeSiteLists(r.sites, additions)
+	out := make([]string, len(r.sites))
+	copy(out, r.sites)
+	return out
+}
+
+func (r *siteRegistry) Remove(doomed []string) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	next, removed := removeSiteList(r.sites, doomed)
+	r.sites = next
+	out := make([]string, len(removed))
+	copy(out, removed)
+	return out
+}
+
 func canonicalRelay(relay string) string {
 	s := strings.ToLower(strings.TrimSpace(relay))
 	s = strings.TrimRight(s, "/")
 	return s
+}
+
+func canonicalSite(site string) string {
+	s := sanitizeSiteInput(site)
+	if s == "" {
+		s = normalizeURL(site)
+	}
+	return canonicalRelay(s)
 }
 
 func deriveRelayFromSite(site string) string {
@@ -151,6 +238,144 @@ func deriveRelayFromSite(site string) string {
 		scheme = "http"
 	}
 	return fmt.Sprintf("%s://%s", scheme, u.Host)
+}
+
+func deriveBootstrapSites(relays []string) []string {
+	sites := make([]string, 0, len(relays))
+	for _, relay := range relays {
+		relay = strings.TrimSpace(relay)
+		if relay == "" {
+			continue
+		}
+		sites = append(sites, derivePortalBase(relay))
+	}
+	if len(sites) == 0 {
+		sites = append(sites, "https://portal.gosuda.org/")
+	}
+	return mergeSiteLists(nil, sites)
+}
+
+func (t *siteFailureTracker) mark(site string, healthy bool, now time.Time) bool {
+	key := canonicalSite(site)
+	if key == "" {
+		return false
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.failedSince == nil {
+		t.failedSince = make(map[string]time.Time)
+	}
+	if healthy {
+		delete(t.failedSince, key)
+		return false
+	}
+	since, ok := t.failedSince[key]
+	if !ok {
+		t.failedSince[key] = now
+		return false
+	}
+	return now.Sub(since) >= siteHealthPruneAfter
+}
+
+func (t *siteFailureTracker) forget(site string) {
+	key := canonicalSite(site)
+	if key == "" {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.failedSince, key)
+}
+
+func (t *siteFailureTracker) syncSites(sites []string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(sites) == 0 {
+		clear(t.failedSince)
+		return
+	}
+	keep := make(map[string]struct{}, len(sites))
+	for _, site := range sites {
+		if key := canonicalSite(site); key != "" {
+			keep[key] = struct{}{}
+		}
+	}
+	for key := range t.failedSince {
+		if _, ok := keep[key]; !ok {
+			delete(t.failedSince, key)
+		}
+	}
+}
+
+func monitorSiteHealth(ctx context.Context) {
+	ticker := time.NewTicker(siteHealthSweepInterval)
+	defer ticker.Stop()
+
+	for {
+		pruneFailedSitesOnce(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func pruneFailedSitesOnce(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+
+	sites := gSites.List()
+	gSiteFailures.syncSites(sites)
+	if len(sites) == 0 {
+		return
+	}
+
+	items := make([]PortalCard, 0, len(sites))
+	for _, site := range sites {
+		san := sanitizeSiteInput(site)
+		if san == "" {
+			continue
+		}
+		items = append(items, PortalCard{
+			Name: guessNameFromURL(san),
+			Link: san,
+		})
+	}
+	if len(items) == 0 {
+		return
+	}
+
+	rounds := (len(items) + 31) / 32
+	if rounds < 1 {
+		rounds = 1
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(rounds*3+1)*time.Second)
+	defer cancel()
+
+	checked := healthCheckItems(checkCtx, items)
+	now := time.Now().UTC()
+	doomed := make([]string, 0, len(checked))
+	for _, item := range checked {
+		site := sanitizeSiteInput(item.Link)
+		if site == "" {
+			continue
+		}
+		if gSiteFailures.mark(site, item.Healthy, now) {
+			doomed = append(doomed, site)
+		}
+	}
+	if len(doomed) == 0 {
+		return
+	}
+
+	removed := gSites.Remove(doomed)
+	for _, site := range removed {
+		gSiteFailures.forget(site)
+		gPortalMgr.DisconnectSite(site)
+		log.Warn().Msgf("[portal-list] removed unhealthy site after %s: %s", siteHealthPruneAfter, site)
+	}
 }
 
 func init() {
@@ -167,7 +392,6 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal list viewer (online status)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Portal", "lease owner")
 	flags.StringVar(&flagTags, "tags", "portal,viewer", "comma-separated lease tags")
-	flags.StringVar(&flagSitesPath, "sites-path", filepath.FromSlash("portal-list/sites"), "sites directory; stores sites.json. Initialize from bootstraps if empty")
 	flags.StringVar(&flagThumbnail, "thumbnail", "https://w0.peakpx.com/wallpaper/870/326/HD-wallpaper-portal-fun-cool-portal-entertainment-video-game-funny-thumbnail.jpg", "thumbnail URL for this lease")
 }
 
@@ -181,15 +405,9 @@ func run(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// compute sites JSON path from data path
-	sitesJSONPath = filepath.Join(flagSitesPath, "sites.json")
-	// Ensure sites list exists; initialize from bootstraps if empty
-	if _, err := loadSitesOrInit(sitesJSONPath, sdk.SplitCSV(flagServerURLs)); err != nil {
-		log.Warn().Err(err).Msg("[portal-list] initialize sites from bootstraps failed")
-	}
-
 	mux := NewHandler()
 
+	gSites.Init(deriveBootstrapSites(sdk.SplitCSV(flagServerURLs)))
 	gPortalMgr.Init(ctx, mux)
 	// Start simple sequential connections in background (non-blocking)
 	go func() {
@@ -204,15 +422,14 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 			time.Sleep(300 * time.Millisecond)
 		}
-		if sites, err := readSites(sitesJSONPath); err == nil {
-			for _, s := range sites {
-				if _, err := gPortalMgr.ConnectFromSite(s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-					log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
-				}
-				time.Sleep(300 * time.Millisecond)
+		for _, s := range gSites.List() {
+			if _, err := gPortalMgr.ConnectFromSite(s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+				log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
 			}
+			time.Sleep(300 * time.Millisecond)
 		}
 	}()
+	go monitorSiteHealth(ctx)
 
 	// Optional local HTTP
 	var httpSrv *http.Server
@@ -272,7 +489,7 @@ func firstNonEmpty(vals ...string) string {
 	return ""
 }
 
-// handleHealth: direct URL reachability from sites.json (no SSR parsing)
+// handleHealth: direct URL reachability from the in-memory site list (no SSR parsing)
 // (moved to view.go) func handleHealth
 
 // (moved to view.go) func guessNameFromURL
@@ -293,11 +510,5 @@ func firstNonEmpty(vals ...string) string {
 
 // (moved to view.go) func isHealthy
 
-// Sites list persistence
-// (moved to view.go) func loadSitesOrInit
-
-// (moved to view.go) func readSites
-
-// (moved to view.go) func writeSites
-
-// (moved to view.go) func hasNonEmpty
+// Site list helpers
+// (moved to view.go) func mergeSiteLists
