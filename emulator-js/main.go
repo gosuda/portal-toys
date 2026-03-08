@@ -9,13 +9,12 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
 )
 
@@ -29,7 +28,7 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  []string
+	flagServerURLs  string
 	flagPort        int
 	flagName        string
 	flagHide        bool
@@ -40,7 +39,7 @@ var (
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relayserver base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relayserver base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "emulator-js", "backend display name")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -74,23 +73,23 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	mux.Handle("/data/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 	mux.Handle("/docs/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 
-	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
-		ServerURLs: flagServerURLs,
-		Name:       flagName,
-		Metadata: types.LeaseMetadata{
-			Description: flagDescription,
-			Tags:        portalapp.SplitCSV(flagTags),
-			Owner:       flagOwner,
-			Hide:        flagHide,
-		},
+	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+		Description: flagDescription,
+		Tags:        sdk.SplitCSV(flagTags),
+		Owner:       flagOwner,
+		Hide:        flagHide,
 	})
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("expose: %w", err)
 	}
-	if lease != nil {
-		defer func() { _ = lease.Close() }()
+	if exposure != nil {
+		defer func() { _ = exposure.Close() }()
 	}
-	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+	localAddr := ""
+	if flagPort >= 0 {
+		localAddr = fmt.Sprintf(":%d", flagPort)
+	}
+	if err := exposure.RunHTTP(ctx, mux, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[emulatorjs] shutdown complete")

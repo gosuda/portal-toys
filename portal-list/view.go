@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gosuda/portal/v2/sdk"
 )
 
 //go:embed static
@@ -32,7 +34,7 @@ func NewHandler() http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		sites, _ := readSites(sitesJSONPath)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"server_urls": flagServerURLs,
+			"server_urls": sdk.SplitCSV(flagServerURLs),
 			"portal_base": flagPortalBase,
 			"data_path":   flagSitesPath,
 			"sites":       sites,
@@ -383,7 +385,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	sites, err := readSites(sitesJSONPath)
 	if err != nil || !hasNonEmpty(sites) {
 		// Fallback to derived portal base if sites.json is missing/empty
-		sites, _ = loadSitesOrInit(sitesJSONPath, flagServerURLs)
+		sites, _ = loadSitesOrInit(sitesJSONPath, sdk.SplitCSV(flagServerURLs))
 	}
 	items := make([]PortalCard, 0, len(sites))
 	for _, s := range sites {
@@ -427,7 +429,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(checked)
 }
 
-// handleRelays returns a deduplicated list of relay websocket URLs derived from the
+// handleRelays returns a deduplicated list of relay base URLs derived from the
 // configured relays and the known portal site list.
 func handleRelays(w http.ResponseWriter, _ *http.Request) {
 	relays := collectRelayURLs()
@@ -446,10 +448,7 @@ func collectRelayURLs() []string {
 		if raw == "" {
 			return
 		}
-		relay := raw
-		if !strings.HasPrefix(relay, "ws://") && !strings.HasPrefix(relay, "wss://") {
-			relay = deriveRelayFromSite(relay)
-		}
+		relay := deriveRelayFromSite(raw)
 		if relay == "" {
 			return
 		}
@@ -460,13 +459,13 @@ func collectRelayURLs() []string {
 		seen[relay] = struct{}{}
 		out = append(out, relay)
 	}
-	for _, r := range flagServerURLs {
+	for _, r := range sdk.SplitCSV(flagServerURLs) {
 		add(r)
 	}
 	// Sites file may be empty or missing; attempt to load/initialize if needed.
 	sites, err := readSites(sitesJSONPath)
 	if err != nil || !hasNonEmpty(sites) {
-		if fallback, err2 := loadSitesOrInit(sitesJSONPath, flagServerURLs); err2 == nil || len(fallback) > 0 {
+		if fallback, err2 := loadSitesOrInit(sitesJSONPath, sdk.SplitCSV(flagServerURLs)); err2 == nil || len(fallback) > 0 {
 			sites = fallback
 		}
 	}
@@ -520,7 +519,7 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Try to connect/register to each URL before persisting
-		tags := strings.Split(flagTags, ",")
+		tags := sdk.SplitCSV(flagTags)
 		var sanitizedToAdd []string
 		for _, s := range toAdd {
 			s = strings.TrimSpace(s)
@@ -598,7 +597,7 @@ func loadSitesOrInit(path string, bootstraps []string) ([]string, error) {
 	// derive from bootstraps
 	uniq := make(map[string]struct{})
 	for _, b := range bootstraps {
-		for _, s := range strings.Split(b, ",") {
+		for _, s := range sdk.SplitCSV(b) {
 			s = strings.TrimSpace(s)
 			if s == "" {
 				continue

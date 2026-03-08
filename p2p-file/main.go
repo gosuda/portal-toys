@@ -19,10 +19,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
 	libp2p "github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -42,7 +42,7 @@ var (
 	flagStorage     string
 	flagAgentMode   bool
 	flagP2PListen   []string
-	flagServerURLs  []string
+	flagServerURLs  string
 	flagPortalName  string
 	flagPortalHide  bool
 	flagPortalOwner string
@@ -52,14 +52,14 @@ var (
 	flagBinaryDist  string
 )
 
-func defaultRelayList() []string {
+func defaultRelayList() string {
 	for _, key := range []string{"PORTAL_RELAY", "RELAY", "RELAY_URL", "SERVER_URL"} {
 		val := strings.TrimSpace(os.Getenv(key))
 		if val != "" {
-			return strings.Split(val, ",")
+			return val
 		}
 	}
-	return nil
+	return ""
 }
 
 //go:embed static/*
@@ -81,7 +81,7 @@ func init() {
 	flags.StringVar(&flagStorage, "storage", "./p2p-data", "directory used to persist files")
 	flags.BoolVar(&flagAgentMode, "agent", false, "run as headless libp2p agent (no HTTP UI)")
 	flags.StringSliceVar(&flagP2PListen, "p2p-listen", []string{"/ip4/0.0.0.0/tcp/0"}, "libp2p listen multiaddrs (repeatable)")
-	flags.StringSliceVar(&flagServerURLs, "server-url", defaultRelayList(), "relayserver base URL(s); repeat or comma-separated (from env PORTAL_RELAY/RELAY/RELAY_URL/SERVER_URL)")
+	flags.StringVar(&flagServerURLs, "server-url", defaultRelayList(), "relayserver base URL(s); repeat or comma-separated (from env PORTAL_RELAY/RELAY/RELAY_URL/SERVER_URL)")
 	flags.StringVar(&flagPortalName, "name", "p2p-file", "Portal lease display name")
 	flags.BoolVar(&flagPortalHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagPortalDesc, "description", "Portal libp2p file share", "Portal lease description")
@@ -614,19 +614,12 @@ func serveEmbedded(fsys fs.FS, name, contentType string) http.HandlerFunc {
 	}
 }
 
-func cleanServerURLs(in []string) []string {
-	return portalapp.CleanServerURLs(in)
+func cleanServerURLs(in string) []string {
+	return sdk.SplitCSV(in)
 }
 
 func portalTags() []string {
-	tokens := strings.Split(flagPortalTags, ",")
-	out := make([]string, 0, len(tokens))
-	for _, tok := range tokens {
-		if t := strings.TrimSpace(tok); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
+	return sdk.SplitCSV(flagPortalTags)
 }
 
 func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- error) (func(), error) {
@@ -637,30 +630,26 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	if flagCredKey != "" {
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
-		ServerURLs: serverURLs,
-		Name:       flagPortalName,
-		Metadata: types.LeaseMetadata{
-			Description: flagPortalDesc,
-			Owner:       flagPortalOwner,
-			Tags:        portalTags(),
-			Hide:        flagPortalHide,
-		},
+	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagPortalName, types.LeaseMetadata{
+		Description: flagPortalDesc,
+		Owner:       flagPortalOwner,
+		Tags:        portalTags(),
+		Hide:        flagPortalHide,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("portal listen: %w", err)
+		return nil, fmt.Errorf("portal expose: %w", err)
 	}
 	log.Info().
 		Str("name", flagPortalName).
-		Strs("servers", lease.RelayURLs()).
+		Strs("servers", exposure.RelayURLs()).
 		Msg("serving Portal relay")
 	go func() {
-		if err := http.Serve(lease.Listener(), handler); err != nil && err != http.ErrServerClosed {
+		if err := http.Serve(exposure, handler); err != nil && err != http.ErrServerClosed {
 			errCh <- fmt.Errorf("portal http serve: %w", err)
 		}
 	}()
 	return func() {
-		_ = lease.Close()
+		_ = exposure.Close()
 	}, nil
 }
 

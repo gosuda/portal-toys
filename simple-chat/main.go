@@ -4,17 +4,16 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/joho/godotenv"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 	"io/fs"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/joho/godotenv"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
-
+	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
 )
 
@@ -28,7 +27,7 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  []string
+	flagServerURLs  string
 	flagPort        int
 	flagName        string
 	flagDataPath    string
@@ -64,7 +63,7 @@ func getEnvSlice(key string) []string {
 	}
 	// Remove surrounding quotes if present
 	value = strings.Trim(value, "'\"")
-	parts := strings.Split(value, ",")
+	parts := sdk.SplitCSV(value)
 	// Filter out empty strings and trim quotes/whitespace
 	result := make([]string, 0, len(parts))
 	for _, part := range parts {
@@ -82,7 +81,7 @@ func init() {
 	_ = godotenv.Load()
 
 	flags := rootCmd.PersistentFlags()
-	flags.StringSliceVar(&flagServerURLs, "server-url", getEnvSlice("RELAY"), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
+	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat"), "backend display name (from env CHAT_NAME if set)")
 	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
@@ -151,23 +150,23 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
-		ServerURLs: flagServerURLs,
-		Name:       flagName,
-		Metadata: types.LeaseMetadata{
-			Description: flagDescription,
-			Tags:        portalapp.SplitCSV(flagTags),
-			Owner:       flagOwner,
-			Hide:        flagHide,
-		},
+	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+		Description: flagDescription,
+		Tags:        sdk.SplitCSV(flagTags),
+		Owner:       flagOwner,
+		Hide:        flagHide,
 	})
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("expose: %w", err)
 	}
-	if lease != nil {
-		defer func() { _ = lease.Close() }()
+	if exposure != nil {
+		defer func() { _ = exposure.Close() }()
 	}
-	err = portalapp.RunHTTP(ctx, lease, handler, portalapp.LocalAddrFromPort(flagPort))
+	localAddr := ""
+	if flagPort >= 0 {
+		localAddr = fmt.Sprintf(":%d", flagPort)
+	}
+	err = exposure.RunHTTP(ctx, handler, localAddr)
 	hub.closeAll()
 	hub.wait()
 	if store != nil {

@@ -11,12 +11,11 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 
+	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
 )
 
@@ -40,7 +39,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	flags := rootCmd.PersistentFlags()
-	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay site URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
@@ -84,23 +83,27 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", proxy)
 
-	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
-		ServerURLs: flagServerURLs,
-		Name:       flagName,
-		Metadata: types.LeaseMetadata{
-			Description: flagDescription,
-			Tags:        portalapp.SplitCSV(flagTags),
-			Owner:       flagOwner,
-			Hide:        flagHide,
-		},
+	relayURLs, err := sdk.NormalizeRelayURLs(flagServerURLs)
+	if err != nil {
+		return fmt.Errorf("normalize relay urls: %w", err)
+	}
+	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
+		Description: flagDescription,
+		Tags:        sdk.SplitCSV(flagTags),
+		Owner:       flagOwner,
+		Hide:        flagHide,
 	})
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("expose: %w", err)
 	}
-	if lease != nil {
-		defer func() { _ = lease.Close() }()
+	if exposure != nil {
+		defer func() { _ = exposure.Close() }()
 	}
-	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+	localAddr := ""
+	if flagPort >= 0 {
+		localAddr = fmt.Sprintf(":%d", flagPort)
+	}
+	if err := exposure.RunHTTP(ctx, mux, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[ceversi] shutdown complete")

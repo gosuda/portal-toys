@@ -5,6 +5,8 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 	"io"
 	"io/fs"
 	"net/http"
@@ -17,10 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
-
+	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
 )
 
@@ -29,12 +28,12 @@ var staticFS embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "ffmpeg-converter",
-	Short: "Simple ffmpeg file converter (upload → convert → download)",
+	Short: "Simple ffmpeg file converter (upload ??convert ??download)",
 	RunE:  run,
 }
 
 var (
-	flagServerURLs    []string
+	flagServerURLs    string
 	flagPort          int
 	flagName          string
 	flagMaxSizeMB     int64
@@ -47,13 +46,13 @@ var (
 
 func init() {
 	f := rootCmd.PersistentFlags()
-	f.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay websocket URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	f.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
 	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
 	f.StringVar(&flagFFmpegWrapper, "ffmpeg-wrapper", os.Getenv("FFMPEG_WRAPPER"), "optional command prefix to run ffmpeg (e.g. 'docker exec ffmpeg ffmpeg')")
 	f.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
-	f.StringVar(&flagDescription, "description", "Simple ffmpeg file converter (upload → convert → download)", "lease description")
+	f.StringVar(&flagDescription, "description", "Simple ffmpeg file converter (upload ??convert ??download)", "lease description")
 	f.StringVar(&flagOwner, "owner", "FFmpeg Converter", "lease owner")
 	f.StringVar(&flagTags, "tags", "media,ffmpeg", "comma-separated lease tags")
 }
@@ -85,23 +84,23 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/convert", handleConvert)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	lease, err := portalapp.ListenAll(ctx, portalapp.LeaseConfig{
-		ServerURLs: flagServerURLs,
-		Name:       flagName,
-		Metadata: types.LeaseMetadata{
-			Description: flagDescription,
-			Tags:        portalapp.SplitCSV(flagTags),
-			Owner:       flagOwner,
-			Hide:        flagHide,
-		},
+	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+		Description: flagDescription,
+		Tags:        sdk.SplitCSV(flagTags),
+		Owner:       flagOwner,
+		Hide:        flagHide,
 	})
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		return fmt.Errorf("expose: %w", err)
 	}
-	if lease != nil {
-		defer func() { _ = lease.Close() }()
+	if exposure != nil {
+		defer func() { _ = exposure.Close() }()
 	}
-	if err := portalapp.RunHTTP(ctx, lease, mux, portalapp.LocalAddrFromPort(flagPort)); err != nil {
+	localAddr := ""
+	if flagPort >= 0 {
+		localAddr = fmt.Sprintf(":%d", flagPort)
+	}
+	if err := exposure.RunHTTP(ctx, mux, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[ffmpeg] shutdown complete")
