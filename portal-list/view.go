@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gosuda/portal/v2/sdk"
+	"github.com/rs/zerolog/log"
 )
 
 //go:embed static
@@ -367,28 +368,41 @@ func isHealthy(ctx context.Context, client *http.Client, urlStr string) (bool, e
 	return false, fmt.Errorf("%s", resp2.Status)
 }
 
-// handleHealth: direct URL reachability from the in-memory site list.
+func registrationStatusItems() []PortalCard {
+	now := time.Now().UTC().Format(time.RFC3339)
+	sites := gSites.List()
+	items := make([]PortalCard, 0, len(sites))
+	for _, s := range sites {
+		s = sanitizeSiteInput(s)
+		if s == "" {
+			continue
+		}
+		relay := deriveRelayFromSite(s)
+		connected := relay != "" && gPortalMgr.HasRelay(relay)
+		item := PortalCard{
+			Name:      guessNameFromURL(s),
+			Link:      s,
+			Kind:      "relay-lease",
+			Connected: connected,
+			Healthy:   connected,
+			CheckedAt: now,
+		}
+		if !connected {
+			item.Error = "offline: relay lease not registered"
+		}
+		items = append(items, item)
+	}
+	return items
+}
+
+// handleHealth: relay registration status from the in-memory site list.
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	streamMode := false
 	if v := r.URL.Query().Get("stream"); v == "1" || strings.EqualFold(v, "true") {
 		streamMode = true
 	}
-	sites := gSites.List()
-	items := make([]PortalCard, 0, len(sites))
-	for _, s := range sites {
-		s = strings.TrimSpace(s)
-		if s == "" {
-			continue
-		}
-		link := normalizeURL(s)
-		items = append(items, PortalCard{
-			Name:      guessNameFromURL(link),
-			Link:      link,
-			Kind:      "http/1.1",
-			Connected: false,
-		})
-	}
+	items := registrationStatusItems()
 	// Stream results as they are ready when requested
 	if streamMode {
 		flusher, ok := w.(http.Flusher)
@@ -399,8 +413,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
 		w.Header().Set("Cache-Control", "no-cache")
 		enc := json.NewEncoder(w)
-		healthCheckItemsWithCallback(ctx, items, func(pc PortalCard) {
-			// Stop sending if client went away
+		for _, pc := range items {
 			if ctx.Err() != nil {
 				return
 			}
@@ -408,52 +421,22 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
-		})
+		}
 		return
 	}
 
-	checked := healthCheckItems(ctx, items)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(checked)
+	_ = json.NewEncoder(w).Encode(items)
 }
 
-// handleRelays returns a deduplicated list of relay base URLs derived from the
-// configured relays and the known portal site list.
+// handleRelays returns active relay base URLs backed by current leases.
 func handleRelays(w http.ResponseWriter, _ *http.Request) {
-	relays := collectRelayURLs()
+	relays := gPortalMgr.ActiveRelays()
 	if relays == nil {
 		relays = []string{}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(relays)
-}
-
-func collectRelayURLs() []string {
-	seen := make(map[string]struct{})
-	var out []string
-	add := func(raw string) {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			return
-		}
-		relay := deriveRelayFromSite(raw)
-		if relay == "" {
-			return
-		}
-		relay = strings.TrimRight(relay, "/")
-		if _, ok := seen[relay]; ok {
-			return
-		}
-		seen[relay] = struct{}{}
-		out = append(out, relay)
-	}
-	for _, r := range sdk.SplitCSV(flagServerURLs) {
-		add(r)
-	}
-	for _, site := range gSites.List() {
-		add(site)
-	}
-	return out
 }
 
 func guessNameFromURL(s string) string {
@@ -494,8 +477,6 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "missing url", http.StatusBadRequest)
 			return
 		}
-		// Try to connect/register to each URL before adding it to the runtime list.
-		tags := sdk.SplitCSV(flagTags)
 		var sanitizedToAdd []string
 		for _, s := range toAdd {
 			s = strings.TrimSpace(s)
@@ -507,15 +488,18 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, fmt.Sprintf("failed to parse url: %s", s), http.StatusBadRequest)
 				return
 			}
-			// Attempt to connect using sanitized base
-			if _, err := gPortalMgr.ConnectFromSite(san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-				http.Error(w, fmt.Sprintf("failed to connect/register: %v", err), http.StatusBadRequest)
-				return
-			}
 			sanitizedToAdd = append(sanitizedToAdd, san)
 		}
+		merged := gSites.Merge(sanitizedToAdd)
+		// Best-effort immediate registration; retry loop in main.go keeps trying forever.
+		tags := sdk.SplitCSV(flagTags)
+		for _, san := range sanitizedToAdd {
+			if _, err := gPortalMgr.ConnectFromSite(san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+				log.Warn().Err(err).Msgf("[portal-list] register deferred (offline): %s", san)
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(gSites.Merge(sanitizedToAdd))
+		_ = json.NewEncoder(w).Encode(merged)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

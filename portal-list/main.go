@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -40,6 +41,7 @@ var (
 const (
 	siteHealthSweepInterval = 15 * time.Second
 	siteHealthPruneAfter    = 2 * time.Minute
+	relayRetryInterval      = 10 * time.Second
 )
 
 // portalManager keeps active portal client/listeners per relay URL.
@@ -165,6 +167,29 @@ func (m *portalManager) DisconnectSite(siteURL string) bool {
 		relay = siteURL
 	}
 	return m.DisconnectRelay(relay)
+}
+
+func (m *portalManager) HasRelay(relayURL string) bool {
+	normalizedRelay := relayURL
+	if relay, err := sdk.NormalizeRelayURL(relayURL); err == nil {
+		normalizedRelay = relay
+	}
+	key := canonicalRelay(normalizedRelay)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.leases[key]
+	return ok
+}
+
+func (m *portalManager) ActiveRelays() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, 0, len(m.leases))
+	for _, lease := range m.leases {
+		out = append(out, lease.relay)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (m *portalManager) Shutdown() {
@@ -378,6 +403,45 @@ func pruneFailedSitesOnce(ctx context.Context) {
 	}
 }
 
+func monitorRelayRegistration(ctx context.Context) {
+	ticker := time.NewTicker(relayRetryInterval)
+	defer ticker.Stop()
+	for {
+		retryRelayRegistrationOnce(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func retryRelayRegistrationOnce(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	tags := sdk.SplitCSV(flagTags)
+	for _, site := range gSites.List() {
+		if ctx.Err() != nil {
+			return
+		}
+		site = sanitizeSiteInput(site)
+		if site == "" {
+			continue
+		}
+		relay := deriveRelayFromSite(site)
+		if relay == "" || gPortalMgr.HasRelay(relay) {
+			continue
+		}
+		if _, err := gPortalMgr.ConnectFromSite(site, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
+			log.Warn().Err(err).Msgf("[portal-list] relay register retry failed for %s", site)
+			continue
+		}
+		log.Info().Msgf("[portal-list] relay registered by retry loop: %s", relay)
+		time.Sleep(300 * time.Millisecond)
+	}
+}
+
 func init() {
 	flags := rootCmd.PersistentFlags()
 	relay := firstNonEmpty(os.Getenv("RELAY"), os.Getenv("RELAY_URL"), os.Getenv("SERVER_URL"))
@@ -409,27 +473,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	gSites.Init(deriveBootstrapSites(sdk.SplitCSV(flagServerURLs)))
 	gPortalMgr.Init(ctx, mux)
-	// Start simple sequential connections in background (non-blocking)
-	go func() {
-		tags := sdk.SplitCSV(flagTags)
-		for _, relayURL := range sdk.SplitCSV(flagServerURLs) {
-			relayURL = strings.TrimSpace(relayURL)
-			if relayURL == "" {
-				continue
-			}
-			if err := gPortalMgr.ConnectRelay(relayURL, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-				log.Warn().Err(err).Msgf("[portal-list] failed to register on %s", relayURL)
-			}
-			time.Sleep(300 * time.Millisecond)
-		}
-		for _, s := range gSites.List() {
-			if _, err := gPortalMgr.ConnectFromSite(s, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
-				log.Warn().Err(err).Msgf("[portal-list] failed to register via site %s", s)
-			}
-			time.Sleep(300 * time.Millisecond)
-		}
-	}()
-	go monitorSiteHealth(ctx)
+	go monitorRelayRegistration(ctx)
 
 	// Optional local HTTP
 	var httpSrv *http.Server

@@ -1,6 +1,10 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"testing"
 	"time"
@@ -73,5 +77,64 @@ func TestDeriveBootstrapSitesDedupes(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("unexpected bootstrap sites: got %v want %v", got, want)
+	}
+}
+
+func TestRegistrationStatusItemsUsesLeaseMap(t *testing.T) {
+	gSites = siteRegistry{}
+	gPortalMgr = portalManager{}
+	gSites.Init([]string{
+		"https://online.example.com/",
+		"https://offline.example.com/",
+	})
+	gPortalMgr.leases = map[string]*portalLease{
+		canonicalRelay("https://online.example.com"): {
+			relay: "https://online.example.com",
+		},
+	}
+
+	items := registrationStatusItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+
+	status := map[string]bool{}
+	for _, it := range items {
+		status[it.Link] = it.Healthy
+	}
+
+	if !status["https://online.example.com/"] {
+		t.Fatalf("online site must be healthy by lease-map status")
+	}
+	if status["https://offline.example.com/"] {
+		t.Fatalf("offline site must not be healthy without lease-map entry")
+	}
+}
+
+func TestHandleSitesKeepsOfflineSiteWhenRegistrationFails(t *testing.T) {
+	gSites = siteRegistry{}
+	gPortalMgr = portalManager{} // handler intentionally nil -> registration fails
+	h := http.HandlerFunc(handleSites)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sites", bytes.NewBufferString(`{"url":"https://retry.example.com/"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var got []string
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(got) != 1 || got[0] != "https://retry.example.com/" {
+		t.Fatalf("unexpected sites after post: %v", got)
+	}
+
+	list := gSites.List()
+	if len(list) != 1 || list[0] != "https://retry.example.com/" {
+		t.Fatalf("site should remain tracked for retry, got %v", list)
 	}
 }
