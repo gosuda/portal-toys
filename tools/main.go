@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"io/fs"
 	"net/http"
 	"os"
@@ -14,10 +11,9 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
-
-//go:embed static
-var staticFS embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "tools",

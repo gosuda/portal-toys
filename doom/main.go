@@ -2,24 +2,18 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
 	"syscall"
-
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
-
-//go:embed doom/public/*
-var doomAssets embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "doom",
@@ -87,17 +81,4 @@ func runDoom(cmd *cobra.Command, args []string) error {
 	}
 	log.Info().Msg("[doom] shutdown complete")
 	return nil
-}
-
-func withStaticHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Doom assets contain wasm + JS, so disable sniffing and cache non-HTML responses.
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		if path.Ext(r.URL.Path) == ".html" || r.URL.Path == "/" {
-			w.Header().Set("Cache-Control", "no-cache")
-		} else {
-			w.Header().Set("Cache-Control", "public, max-age=86400")
-		}
-		next.ServeHTTP(w, r)
-	})
 }

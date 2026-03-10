@@ -2,11 +2,7 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 	"io/fs"
 	"os"
 	"os/signal"
@@ -15,10 +11,10 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/joho/godotenv"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
-
-//go:embed static
-var embeddedStatic embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "simple-chat",
@@ -38,43 +34,6 @@ var (
 	flagOwner       string
 	flagAdminUIDs   []string
 )
-
-// getEnv returns the environment variable value or the default value if not set
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// getEnvBool returns the environment variable as a boolean or the default value if not set
-func getEnvBool(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		return value == "true" || value == "1" || value == "yes"
-	}
-	return defaultValue
-}
-
-// getEnvSlice returns a comma-separated environment variable as a string slice, filtering empty strings
-func getEnvSlice(key string) []string {
-	value := os.Getenv(key)
-	if value == "" {
-		return nil
-	}
-	// Remove surrounding quotes if present
-	value = strings.Trim(value, "'\"")
-	parts := sdk.SplitCSV(value)
-	// Filter out empty strings and trim quotes/whitespace
-	result := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		trimmed = strings.Trim(trimmed, "'\"")
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
-}
 
 func init() {
 	// Load .env file FIRST, before any getEnv/getEnvSlice calls

@@ -2,24 +2,18 @@ package main
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
 	"syscall"
-
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
-
-//go:embed static
-var emulatorAssets embed.FS
 
 var rootCmd = &cobra.Command{
 	Use:   "emulatorjs",
@@ -94,21 +88,4 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	}
 	log.Info().Msg("[emulatorjs] shutdown complete")
 	return nil
-}
-
-func withStaticHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set appropriate headers for static assets
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-
-		ext := path.Ext(r.URL.Path)
-		if ext == ".html" || r.URL.Path == "/" {
-			w.Header().Set("Cache-Control", "no-cache")
-		} else {
-			// Cache JS, CSS, WASM, images for 1 day
-			w.Header().Set("Cache-Control", "public, max-age=86400")
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }

@@ -12,11 +12,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/rs/zerolog/log"
-	"github.com/spf13/cobra"
-
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/rs/zerolog/log"
+	"github.com/spf13/cobra"
 )
 
 var (
