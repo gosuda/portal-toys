@@ -4,7 +4,7 @@ portal-toys is a collection of small Portal demos. The repository is focused on 
 
 ## Why This Repo
 - Small, self-contained apps that are easy to read and modify.
-- Consistent CLI flags across demos such as `--server-url`, `--name`, and `--port`.
+- Consistent CLI flags across demos such as `--server-url`, `--default-relays`, `--name`, and `--port`.
 - Works both locally and over relays.
 
 For non-Go apps, use `portal-tunnel` instead of maintaining separate language-specific examples in this repo.
@@ -13,7 +13,8 @@ For non-Go apps, use `portal-tunnel` instead of maintaining separate language-sp
 - A Portal relay URL. Learn more: https://github.com/gosuda/portal
 
 ## Quick Start
-- Start: `go run ./rolling-paper --server-url https://portal.gosuda.org/ --name my-rolling --port 8081`
+- Start: `go run ./rolling-paper --name my-rolling --port 8081`
+- Optional relay override: `go run ./rolling-paper --server-url https://portal.gosuda.org/ --default-relays=false`
 - Local access: open `http://127.0.0.1:8081`
 - Relay access: open the registered name from your relay UI
 
@@ -44,7 +45,7 @@ For non-Go apps, use `portal-tunnel` instead of maintaining separate language-sp
 - After successful connection, your service appears in the relay UI under the chosen `--name`.
 
 ## Troubleshooting
-- Relay unreachable: check `--server-url` and network/firewall.
+- Relay unreachable: check `--server-url` / `--default-relays` and network/firewall.
 - Local port busy: change `--port` or close the conflicting process.
 - Tunnel not found: run `make tunnel-install`.
 - Go build issues: ensure a recent Go toolchain and run commands from the repo root.

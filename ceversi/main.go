@@ -14,20 +14,22 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
 
 var (
-	flagServerURLs  []string
-	flagPort        int
-	flagBackendPort int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
-	flagCServerPath string
+	flagServerURLs    []string
+	flagDefaultRelays bool
+	flagPort          int
+	flagBackendPort   int
+	flagName          string
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
+	flagCServerPath   string
 )
 
 var rootCmd = &cobra.Command{
@@ -39,6 +41,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay site URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
@@ -82,13 +85,13 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", proxy)
 
-	relayURLs, err := sdk.NormalizeRelayURLs(flagServerURLs)
-	if err != nil {
-		return fmt.Errorf("normalize relay urls: %w", err)
+	relayURLs := append([]string(nil), flagServerURLs...)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
 	}
 	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
 		Description: flagDescription,
-		Tags:        sdk.SplitCSV(flagTags),
+		Tags:        utils.SplitCSV(flagTags),
 		Owner:       flagOwner,
 		Hide:        flagHide,
 	})

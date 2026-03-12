@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -337,13 +338,7 @@ func buildFFmpegCmd(ctx context.Context, ffArgs ...string) *exec.Cmd {
 		return exec.CommandContext(ctx, "ffmpeg", ffArgs...)
 	}
 	toks := strings.Fields(flagFFmpegWrapper)
-	hasFF := false
-	for _, t := range toks {
-		if t == "ffmpeg" {
-			hasFF = true
-			break
-		}
-	}
+	hasFF := slices.Contains(toks, "ffmpeg")
 	var argv []string
 	argv = append(argv, toks...)
 	if !hasFF {

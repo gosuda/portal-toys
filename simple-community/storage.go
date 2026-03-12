@@ -206,24 +206,15 @@ func ListPostsPaged(page, perPage int) (out []*Post, currentPage, totalPages int
 	if total == 0 {
 		return []*Post{}, 1, 1
 	}
-	totalPages = (total + perPage - 1) / perPage
-	if totalPages < 1 {
-		totalPages = 1
-	}
+	totalPages = max((total+perPage-1)/perPage, 1)
 	if page < 1 {
 		page = 1
 	}
 	if page > totalPages {
 		page = totalPages
 	}
-	start := (page - 1) * perPage
-	if start > total {
-		start = total
-	}
-	end := start + perPage
-	if end > total {
-		end = total
-	}
+	start := min((page-1)*perPage, total)
+	end := min(start+perPage, total)
 	out = make([]*Post, 0, end-start)
 	for _, id := range order[start:end] {
 		if p, ok := posts[id]; ok {

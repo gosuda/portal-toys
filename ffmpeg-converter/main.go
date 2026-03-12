@@ -12,6 +12,7 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +25,7 @@ var rootCmd = &cobra.Command{
 
 var (
 	flagServerURLs    string
+	flagDefaultRelays bool
 	flagPort          int
 	flagName          string
 	flagMaxSizeMB     int64
@@ -37,6 +39,7 @@ var (
 func init() {
 	f := rootCmd.PersistentFlags()
 	f.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	f.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
@@ -74,9 +77,13 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/convert", handleConvert)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+	relayURLs := utils.SplitCSV(flagServerURLs)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	}
+	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
 		Description: flagDescription,
-		Tags:        sdk.SplitCSV(flagTags),
+		Tags:        utils.SplitCSV(flagTags),
 		Owner:       flagOwner,
 		Hide:        flagHide,
 	})

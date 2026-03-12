@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gosuda/portal/v2/sdk"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -21,24 +22,23 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagPortalBase  string
-	flagPort        int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagOwner       string
-	flagTags        string
-	flagThumbnail   string
+	flagServerURLs    string
+	flagDefaultRelays bool
+	flagPortalBase    string
+	flagPort          int
+	flagName          string
+	flagHide          bool
+	flagDescription   string
+	flagOwner         string
+	flagTags          string
+	flagThumbnail     string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	relay := firstNonEmpty(os.Getenv("RELAY"), os.Getenv("RELAY_URL"), os.Getenv("SERVER_URL"))
-	if relay == "" {
-		relay = "https://portal.gosuda.org/"
-	}
 	flags.StringVar(&flagServerURLs, "server-url", relay, "relay base URL(s); repeat or comma-separated")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
@@ -61,7 +61,11 @@ func run(cmd *cobra.Command, args []string) error {
 
 	mux := NewHandler()
 
-	gSites.Init(deriveBootstrapSites(sdk.SplitCSV(flagServerURLs)))
+	relayURLs := utils.SplitCSV(flagServerURLs)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	}
+	gSites.Init(deriveBootstrapSites(relayURLs))
 	gPortalMgr.Init(ctx, mux)
 	go monitorRelayRegistration(ctx)
 

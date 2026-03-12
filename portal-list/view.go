@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gosuda/portal/v2/sdk"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,9 +31,13 @@ func NewHandler() http.Handler {
 
 	// info (for UI)
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
+		relayURLs := utils.SplitCSV(flagServerURLs)
+		if flagDefaultRelays {
+			relayURLs = sdk.WithDefaultRelayURLs(context.Background(), relayURLs...)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"server_urls": sdk.SplitCSV(flagServerURLs),
+			"server_urls": relayURLs,
 			"portal_base": flagPortalBase,
 			"sites":       gSites.List(),
 			"name":        flagName,
@@ -63,9 +68,9 @@ func handlePortals(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("all") == "1" {
 		sites := gSites.List()
 		type agg struct {
-			Base string      `json:"base"`
-			Data interface{} `json:"data"`
-			Err  string      `json:"err,omitempty"`
+			Base string `json:"base"`
+			Data any    `json:"data"`
+			Err  string `json:"err,omitempty"`
 		}
 		out := make([]agg, 0, len(sites))
 		for _, s := range sites {
@@ -288,7 +293,7 @@ func healthCheckItemsWithCallback(ctx context.Context, items []PortalCard, cb fu
 		}(i)
 	}
 	// Wait for all
-	for i := 0; i < len(out); i++ {
+	for range out {
 		<-done
 	}
 	return out
@@ -492,7 +497,7 @@ func handleSites(w http.ResponseWriter, r *http.Request) {
 		}
 		merged := gSites.Merge(sanitizedToAdd)
 		// Best-effort immediate registration; retry loop in main.go keeps trying forever.
-		tags := sdk.SplitCSV(flagTags)
+		tags := utils.SplitCSV(flagTags)
 		for _, san := range sanitizedToAdd {
 			if _, err := gPortalMgr.ConnectFromSite(san, flagName, flagDescription, flagHide, flagOwner, tags); err != nil {
 				log.Warn().Err(err).Msgf("[portal-list] register deferred (offline): %s", san)

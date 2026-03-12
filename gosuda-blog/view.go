@@ -132,8 +132,8 @@ func serveFileWithOptionalRewrite(w http.ResponseWriter, r *http.Request, p stri
 func fileServerWithSPA(dir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// If under /peer/{token} without trailing slash, redirect to add '/'
-		if strings.HasPrefix(r.URL.Path, "/peer/") {
-			rest := strings.TrimPrefix(r.URL.Path, "/peer/")
+		if after, ok := strings.CutPrefix(r.URL.Path, "/peer/"); ok {
+			rest := after
 			if !strings.Contains(rest, "/") {
 				http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
 				return
@@ -141,8 +141,8 @@ func fileServerWithSPA(dir string) http.Handler {
 		}
 		// Normalize path; if under /peer/{token}/..., strip the prefix so assets map to dir
 		effectivePath := r.URL.Path
-		if strings.HasPrefix(effectivePath, "/peer/") {
-			rest := strings.TrimPrefix(effectivePath, "/peer/")
+		if after, ok := strings.CutPrefix(effectivePath, "/peer/"); ok {
+			rest := after
 			if i := strings.IndexByte(rest, '/'); i >= 0 {
 				// token := rest[:i]
 				suffix := rest[i:] // includes leading '/'

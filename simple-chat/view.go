@@ -56,7 +56,7 @@ func sanitizeString(s string, maxLen int) string {
 // writeJSON writes a JSON-encoded message to the websocket connection.
 // Unlike gorilla's default WriteJSON, this disables HTML escaping to preserve
 // characters like <, >, &, etc. in their original form.
-func writeJSON(conn *websocket.Conn, v interface{}) error {
+func writeJSON(conn *websocket.Conn, v any) error {
 	w, err := conn.NextWriter(websocket.TextMessage)
 	if err != nil {
 		return err
@@ -567,8 +567,8 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 
 			// Admin-only commands
 			if h.isAdmin(req.UID) {
-				if strings.HasPrefix(req.Text, "/block ") {
-					targetUID := strings.TrimSpace(strings.TrimPrefix(req.Text, "/block "))
+				if after, ok := strings.CutPrefix(req.Text, "/block "); ok {
+					targetUID := strings.TrimSpace(after)
 					h.blockUser(targetUID)
 					// Notify admin
 					mu.Lock()
@@ -582,8 +582,8 @@ func handleWS(w http.ResponseWriter, r *http.Request, h *hub) {
 					mu.Unlock()
 					continue
 				}
-				if strings.HasPrefix(req.Text, "/unblock ") {
-					targetUID := strings.TrimSpace(strings.TrimPrefix(req.Text, "/unblock "))
+				if after, ok := strings.CutPrefix(req.Text, "/unblock "); ok {
+					targetUID := strings.TrimSpace(after)
 					h.unblockUser(targetUID)
 					// Notify admin
 					mu.Lock()

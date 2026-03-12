@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -97,7 +98,10 @@ func (a *app) handleInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	storagePath, _ := filepath.Abs(a.store.dir)
 	serverURLs := cleanServerURLs(flagServerURLs)
-	resp := map[string]interface{}{
+	if flagDefaultRelays {
+		serverURLs = sdk.WithDefaultRelayURLs(context.Background(), serverURLs...)
+	}
+	resp := map[string]any{
 		"peerId":       a.host.ID().String(),
 		"addresses":    multiaddrs(a.host),
 		"files":        a.store.List(),
@@ -114,7 +118,7 @@ func (a *app) handleInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) handleFiles(w http.ResponseWriter, r *http.Request) {
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"files": a.store.List(),
 	})
 }
@@ -135,7 +139,7 @@ func (a *app) handleUpload(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"file": meta.Public(),
 	})
 }
@@ -176,7 +180,7 @@ func (a *app) handleConnect(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadGateway, fmt.Errorf("connect peer: %w", err))
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"connected": info.ID.String(),
 	})
 }
@@ -199,7 +203,7 @@ func (a *app) handleRequestFile(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadGateway, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"file": meta.Public(),
 	})
 }
@@ -217,7 +221,7 @@ func (a *app) handleListRemote(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadGateway, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"files": files,
 	})
 }
@@ -231,7 +235,7 @@ func (a *app) handleLaunchAgent(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"status": "launched",
 	})
 }
@@ -245,7 +249,7 @@ func (a *app) handleStopAgent(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err)
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	respondJSON(w, http.StatusOK, map[string]any{
 		"status": "stopped",
 	})
 }
@@ -421,7 +425,7 @@ func sendStreamError(stream network.Stream, err error) {
 	_ = json.NewEncoder(stream).Encode(p2pResponse{OK: false, Error: err.Error()})
 }
 
-func respondJSON(w http.ResponseWriter, status int, v interface{}) {
+func respondJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
@@ -455,22 +459,25 @@ func serveEmbedded(fsys fs.FS, name, contentType string) http.HandlerFunc {
 }
 
 func cleanServerURLs(in string) []string {
-	return sdk.SplitCSV(in)
+	return utils.SplitCSV(in)
 }
 
 func portalTags() []string {
-	return sdk.SplitCSV(flagPortalTags)
+	return utils.SplitCSV(flagPortalTags)
 }
 
 func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- error) (func(), error) {
 	serverURLs := cleanServerURLs(flagServerURLs)
+	if flagDefaultRelays {
+		serverURLs = sdk.WithDefaultRelayURLs(ctx, serverURLs...)
+	}
 	if len(serverURLs) == 0 {
 		return nil, nil
 	}
 	if flagCredKey != "" {
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagPortalName, types.LeaseMetadata{
+	exposure, err := sdk.Expose(ctx, serverURLs, flagPortalName, types.LeaseMetadata{
 		Description: flagPortalDesc,
 		Owner:       flagPortalOwner,
 		Tags:        portalTags(),

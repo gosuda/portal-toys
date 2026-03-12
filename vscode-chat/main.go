@@ -13,6 +13,7 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -24,19 +25,21 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagName        string
-	flagTargetHost  string
-	flagTargetPort  int
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
+	flagServerURLs    string
+	flagDefaultRelays bool
+	flagName          string
+	flagTargetHost    string
+	flagTargetPort    int
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.StringVar(&flagName, "name", "vscode-relay", "Display name shown on server UI")
 	flags.StringVar(&flagTargetHost, "target-host", "127.0.0.1", "Local host where VSCode Web listens")
 	flags.IntVar(&flagTargetPort, "target-port", 8100, "Local port where VSCode Web listens")
@@ -68,8 +71,8 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 		req.URL.Host = backendURL.Host
 		// Strip relay peer prefix if present
 		const prefix = "/peer/"
-		if strings.HasPrefix(req.URL.Path, prefix) {
-			rest := strings.TrimPrefix(req.URL.Path, prefix)
+		if after, ok := strings.CutPrefix(req.URL.Path, prefix); ok {
+			rest := after
 			if i := strings.IndexByte(rest, '/'); i >= 0 {
 				req.URL.Path = rest[i:]
 			}
@@ -81,9 +84,13 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 		req.Header.Set("X-Forwarded-Proto", "http")
 	}
 
-	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+	relayURLs := utils.SplitCSV(flagServerURLs)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	}
+	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
 		Description: flagDescription,
-		Tags:        sdk.SplitCSV(flagTags),
+		Tags:        utils.SplitCSV(flagTags),
 		Owner:       flagOwner,
 		Hide:        flagHide,
 	})

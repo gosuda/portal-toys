@@ -11,6 +11,7 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -23,16 +24,17 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagPort        int
-	flagName        string
-	flagDataPath    string
-	flagCredKey     string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
-	flagAdminUIDs   []string
+	flagServerURLs    string
+	flagDefaultRelays bool
+	flagPort          int
+	flagName          string
+	flagDataPath      string
+	flagCredKey       string
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
+	flagAdminUIDs     []string
 )
 
 func init() {
@@ -41,6 +43,7 @@ func init() {
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat"), "backend display name (from env CHAT_NAME if set)")
 	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
@@ -109,9 +112,13 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+	relayURLs := utils.SplitCSV(flagServerURLs)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	}
+	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
 		Description: flagDescription,
-		Tags:        sdk.SplitCSV(flagTags),
+		Tags:        utils.SplitCSV(flagTags),
 		Owner:       flagOwner,
 		Hide:        flagHide,
 	})

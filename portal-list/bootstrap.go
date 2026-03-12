@@ -12,6 +12,7 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -73,7 +74,7 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 		return fmt.Errorf("portal manager not initialized")
 	}
 	ctx := m.context()
-	normalizedRelay, err := sdk.NormalizeRelayURL(relayURL)
+	normalizedRelay, err := utils.NormalizeRelayURL(relayURL)
 	if err != nil {
 		return fmt.Errorf("normalize relay: %w", err)
 	}
@@ -106,22 +107,14 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 }
 
 func (m *portalManager) ConnectFromSite(siteURL string, name, description string, hide bool, owner string, tags []string) (string, error) {
-	relay, err := sdk.NormalizeRelayURL(siteURL)
-	if err != nil {
-		return "", fmt.Errorf("invalid site URL: %s", siteURL)
-	}
-	if err := m.ConnectRelay(relay, name, description, hide, owner, tags); err != nil {
+	if err := m.ConnectRelay(siteURL, name, description, hide, owner, tags); err != nil {
 		return "", err
 	}
-	return relay, nil
+	return siteURL, nil
 }
 
 func (m *portalManager) DisconnectRelay(relayURL string) bool {
-	normalizedRelay := relayURL
-	if relay, err := sdk.NormalizeRelayURL(relayURL); err == nil {
-		normalizedRelay = relay
-	}
-	key := canonicalRelay(normalizedRelay)
+	key := canonicalRelay(relayURL)
 
 	m.mu.Lock()
 	lease := m.leases[key]
@@ -149,11 +142,7 @@ func (m *portalManager) DisconnectSite(siteURL string) bool {
 }
 
 func (m *portalManager) HasRelay(relayURL string) bool {
-	normalizedRelay := relayURL
-	if relay, err := sdk.NormalizeRelayURL(relayURL); err == nil {
-		normalizedRelay = relay
-	}
-	key := canonicalRelay(normalizedRelay)
+	key := canonicalRelay(relayURL)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	_, ok := m.leases[key]
@@ -351,10 +340,7 @@ func pruneFailedSitesOnce(ctx context.Context) {
 		return
 	}
 
-	rounds := (len(items) + 31) / 32
-	if rounds < 1 {
-		rounds = 1
-	}
+	rounds := max((len(items)+31)/32, 1)
 	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(rounds*3+1)*time.Second)
 	defer cancel()
 
@@ -399,7 +385,7 @@ func retryRelayRegistrationOnce(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
-	tags := sdk.SplitCSV(flagTags)
+	tags := utils.SplitCSV(flagTags)
 	for _, site := range gSites.List() {
 		if ctx.Err() != nil {
 			return
@@ -422,22 +408,18 @@ func retryRelayRegistrationOnce(ctx context.Context) {
 }
 
 func derivePortalBase(relay string) string {
-	relayURLs := sdk.SplitCSV(firstNonEmpty(relay, ""))
+	relayURLs := utils.SplitCSV(firstNonEmpty(relay, ""))
 	first := ""
 	if len(relayURLs) > 0 {
 		first = strings.TrimSpace(relayURLs[0])
 	}
 	if first == "" {
-		return "https://portal.gosuda.org/"
+		return ""
 	}
-	normalized, err := sdk.NormalizeRelayURL(first)
-	if err != nil {
-		return "https://portal.gosuda.org/"
+	if !strings.HasSuffix(first, "/") {
+		return first + "/"
 	}
-	if !strings.HasSuffix(normalized, "/") {
-		return normalized + "/"
-	}
-	return normalized
+	return first
 }
 
 func firstNonEmpty(vals ...string) string {

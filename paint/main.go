@@ -14,6 +14,7 @@ import (
 
 	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/types"
+	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -25,18 +26,20 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagPort        int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
+	flagServerURLs    string
+	flagDefaultRelays bool
+	flagPort          int
+	flagName          string
+	flagHide          bool
+	flagDescription   string
+	flagTags          string
+	flagOwner         string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "paint", "backend display name")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -96,7 +99,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 		id := fmt.Sprintf("%d", time.Now().UnixNano())
 		images.put(id, buf, ct)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"id":"%s"}`, id)))
+		_, _ = w.Write(fmt.Appendf(nil, `{"id":"%s"}`, id))
 	})
 
 	// Serve stored images
@@ -119,9 +122,13 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/ws", canvas.handleWS)
 
-	exposure, err := sdk.Expose(ctx, sdk.SplitCSV(flagServerURLs), flagName, types.LeaseMetadata{
+	relayURLs := utils.SplitCSV(flagServerURLs)
+	if flagDefaultRelays {
+		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	}
+	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
 		Description: flagDescription,
-		Tags:        sdk.SplitCSV(flagTags),
+		Tags:        utils.SplitCSV(flagTags),
 		Owner:       flagOwner,
 		Hide:        flagHide,
 	})

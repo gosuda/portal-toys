@@ -90,7 +90,7 @@ func BuildDumpFromHistory(history [][]byte) Dump {
 func ParseDump(r io.Reader) (Dump, error) {
 	dec := json.NewDecoder(r)
 	// decode into map[string][]any and coerce to []string
-	var raw map[string][]interface{}
+	var raw map[string][]any
 	if err := dec.Decode(&raw); err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func ParseDump(r io.Reader) (Dump, error) {
 				if t != "" {
 					out[nick] = append(out[nick], t)
 				}
-			case map[string]interface{}:
+			case map[string]any:
 				if u, ok := t["url"].(string); ok && u != "" {
 					out[nick] = append(out[nick], u)
 				}

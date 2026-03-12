@@ -317,7 +317,7 @@ func NewHandler(name string, hub *drawHub) http.Handler {
 		now := time.Now().UnixMilli()
 		for nick, arr := range d {
 			for _, url := range arr {
-				msg := map[string]interface{}{"t": "ytq-add", "url": url, "by": nick, "ts": now}
+				msg := map[string]any{"t": "ytq-add", "url": url, "by": nick, "ts": now}
 				b, _ := json.Marshal(msg)
 				hub.broadcast <- b
 				added++

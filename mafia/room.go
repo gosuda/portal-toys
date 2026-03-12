@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -609,7 +610,7 @@ func (r *Room) pushRoster() {
 }
 
 func (r *Room) sendState(c *Client) {
-	snapshot := map[string]interface{}{
+	snapshot := map[string]any{
 		"phase":  r.state.Phase,
 		"active": r.state.Active,
 		"day":    r.state.DayCount,
@@ -711,10 +712,8 @@ func (r *Room) findDetective() string {
 }
 
 func appendUnique(slice []string, v string) []string {
-	for _, existing := range slice {
-		if existing == v {
-			return slice
-		}
+	if slices.Contains(slice, v) {
+		return slice
 	}
 	return append(slice, v)
 }

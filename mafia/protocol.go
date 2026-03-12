@@ -30,6 +30,6 @@ type ServerEvent struct {
 	Body   string          `json:"body,omitempty"`
 	Room   string          `json:"room,omitempty"`
 	Phase  string          `json:"phase,omitempty"`
-	State  interface{}     `json:"state,omitempty"`
+	State  any             `json:"state,omitempty"`
 	Author string          `json:"author,omitempty"`
 }

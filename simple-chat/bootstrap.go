@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gosuda/portal/v2/sdk"
+	"github.com/gosuda/portal/v2/utils"
 )
 
 //go:embed static
@@ -35,7 +35,7 @@ func getEnvSlice(key string) []string {
 	}
 	// Remove surrounding quotes if present
 	value = strings.Trim(value, "'\"")
-	parts := sdk.SplitCSV(value)
+	parts := utils.SplitCSV(value)
 	// Filter out empty strings and trim quotes/whitespace
 	result := make([]string, 0, len(parts))
 	for _, part := range parts {
