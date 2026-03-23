@@ -38,7 +38,7 @@ func init() {
 	flags := rootCmd.PersistentFlags()
 	relay := firstNonEmpty(os.Getenv("RELAY"), os.Getenv("RELAY_URL"), os.Getenv("SERVER_URL"))
 	flags.StringVar(&flagServerURLs, "server-url", relay, "relay base URL(s); repeat or comma-separated")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
@@ -61,9 +61,9 @@ func run(cmd *cobra.Command, args []string) error {
 
 	mux := NewHandler()
 
-	relayURLs := utils.SplitCSV(flagServerURLs)
-	if flagDefaultRelays {
-		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
+	relayURLs, err := sdk.ResolveRelayURLs(ctx, utils.SplitCSV(flagServerURLs), flagDefaultRelays)
+	if err != nil {
+		return fmt.Errorf("resolve relay urls: %w", err)
 	}
 	gSites.Init(deriveBootstrapSites(relayURLs))
 	gPortalMgr.Init(ctx, mux)

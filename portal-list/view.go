@@ -31,9 +31,9 @@ func NewHandler() http.Handler {
 
 	// info (for UI)
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
-		relayURLs := utils.SplitCSV(flagServerURLs)
-		if flagDefaultRelays {
-			relayURLs = sdk.WithDefaultRelayURLs(context.Background(), relayURLs...)
+		relayURLs, err := sdk.ResolveRelayURLs(context.Background(), utils.SplitCSV(flagServerURLs), flagDefaultRelays)
+		if err != nil {
+			relayURLs = utils.SplitCSV(flagServerURLs)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

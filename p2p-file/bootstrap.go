@@ -97,9 +97,9 @@ func (a *app) handleInfo(w http.ResponseWriter, r *http.Request) {
 		binarySize = info.Size()
 	}
 	storagePath, _ := filepath.Abs(a.store.dir)
-	serverURLs := cleanServerURLs(flagServerURLs)
-	if flagDefaultRelays {
-		serverURLs = sdk.WithDefaultRelayURLs(context.Background(), serverURLs...)
+	serverURLs, err := sdk.ResolveRelayURLs(context.Background(), cleanServerURLs(flagServerURLs), flagDefaultRelays)
+	if err != nil {
+		serverURLs = cleanServerURLs(flagServerURLs)
 	}
 	resp := map[string]any{
 		"peerId":       a.host.ID().String(),
@@ -467,9 +467,9 @@ func portalTags() []string {
 }
 
 func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- error) (func(), error) {
-	serverURLs := cleanServerURLs(flagServerURLs)
-	if flagDefaultRelays {
-		serverURLs = sdk.WithDefaultRelayURLs(ctx, serverURLs...)
+	serverURLs, err := sdk.ResolveRelayURLs(ctx, cleanServerURLs(flagServerURLs), flagDefaultRelays)
+	if err != nil {
+		return nil, fmt.Errorf("resolve relay urls: %w", err)
 	}
 	if len(serverURLs) == 0 {
 		return nil, nil
@@ -477,18 +477,22 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	if flagCredKey != "" {
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := sdk.Expose(ctx, serverURLs, flagPortalName, types.LeaseMetadata{
-		Description: flagPortalDesc,
-		Owner:       flagPortalOwner,
-		Tags:        portalTags(),
-		Hide:        flagPortalHide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs: serverURLs,
+		Name:      flagPortalName,
+		Metadata: types.LeaseMetadata{
+			Description: flagPortalDesc,
+			Owner:       flagPortalOwner,
+			Tags:        portalTags(),
+			Hide:        flagPortalHide,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("portal expose: %w", err)
 	}
 	log.Info().
 		Str("name", flagPortalName).
-		Strs("servers", exposure.RelayURLs()).
+		Strs("servers", exposure.ActiveRelayURLs()).
 		Msg("serving Portal relay")
 	go func() {
 		if err := http.Serve(exposure, handler); err != nil && err != http.ErrServerClosed {

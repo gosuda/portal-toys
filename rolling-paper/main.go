@@ -38,7 +38,7 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
@@ -75,15 +75,16 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	}
 	staticHandler = http.FileServer(http.FS(sub))
 
-	relayURLs := utils.SplitCSV(flagServerURLs)
-	if flagDefaultRelays {
-		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
-	}
-	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
-		Description: flagDescription,
-		Tags:        utils.SplitCSV(flagTags),
-		Owner:       flagOwner,
-		Hide:        flagHide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs:           utils.SplitCSV(flagServerURLs),
+		DefaultRelayEnabled: flagDefaultRelays,
+		Name:                flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        utils.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("expose: %w", err)

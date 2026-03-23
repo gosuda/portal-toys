@@ -84,12 +84,16 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 		m.mu.Unlock()
 		return nil
 	}
-	exposure, err := sdk.Expose(ctx, []string{normalizedRelay}, name, types.LeaseMetadata{
-		Description: description,
-		Owner:       owner,
-		Thumbnail:   flagThumbnail,
-		Tags:        tags,
-		Hide:        hide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs: []string{normalizedRelay},
+		Name:      name,
+		Metadata: types.LeaseMetadata{
+			Description: description,
+			Owner:       owner,
+			Thumbnail:   flagThumbnail,
+			Tags:        tags,
+			Hide:        hide,
+		},
 	})
 	if err != nil {
 		m.mu.Unlock()

@@ -41,7 +41,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay site URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
@@ -85,15 +85,16 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", proxy)
 
-	relayURLs := append([]string(nil), flagServerURLs...)
-	if flagDefaultRelays {
-		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
-	}
-	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
-		Description: flagDescription,
-		Tags:        utils.SplitCSV(flagTags),
-		Owner:       flagOwner,
-		Hide:        flagHide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs:           append([]string(nil), flagServerURLs...),
+		DefaultRelayEnabled: flagDefaultRelays,
+		Name:                flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        utils.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("expose: %w", err)

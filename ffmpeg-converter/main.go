@@ -39,7 +39,7 @@ var (
 func init() {
 	f := rootCmd.PersistentFlags()
 	f.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	f.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	f.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
@@ -77,15 +77,16 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/convert", handleConvert)
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	relayURLs := utils.SplitCSV(flagServerURLs)
-	if flagDefaultRelays {
-		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
-	}
-	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
-		Description: flagDescription,
-		Tags:        utils.SplitCSV(flagTags),
-		Owner:       flagOwner,
-		Hide:        flagHide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs:           utils.SplitCSV(flagServerURLs),
+		DefaultRelayEnabled: flagDefaultRelays,
+		Name:                flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        utils.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("expose: %w", err)

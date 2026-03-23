@@ -43,7 +43,7 @@ func init() {
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat"), "backend display name (from env CHAT_NAME if set)")
 	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
@@ -112,15 +112,16 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	relayURLs := utils.SplitCSV(flagServerURLs)
-	if flagDefaultRelays {
-		relayURLs = sdk.WithDefaultRelayURLs(ctx, relayURLs...)
-	}
-	exposure, err := sdk.Expose(ctx, relayURLs, flagName, types.LeaseMetadata{
-		Description: flagDescription,
-		Tags:        utils.SplitCSV(flagTags),
-		Owner:       flagOwner,
-		Hide:        flagHide,
+	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+		RelayURLs:           utils.SplitCSV(flagServerURLs),
+		DefaultRelayEnabled: flagDefaultRelays,
+		Name:                flagName,
+		Metadata: types.LeaseMetadata{
+			Description: flagDescription,
+			Tags:        utils.SplitCSV(flagTags),
+			Owner:       flagOwner,
+			Hide:        flagHide,
+		},
 	})
 	if err != nil {
 		return fmt.Errorf("expose: %w", err)

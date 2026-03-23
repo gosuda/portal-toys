@@ -50,7 +50,7 @@ func init() {
 	flags.BoolVar(&flagAgentMode, "agent", false, "run as headless libp2p agent (no HTTP UI)")
 	flags.StringSliceVar(&flagP2PListen, "p2p-listen", []string{"/ip4/0.0.0.0/tcp/0"}, "libp2p listen multiaddrs (repeatable)")
 	flags.StringVar(&flagServerURLs, "server-url", defaultRelayList(), "relayserver base URL(s); repeat or comma-separated (from env PORTAL_RELAY/RELAY/RELAY_URL/SERVER_URL)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ParseBoolEnv("DEFAULT_RELAYS", true), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
 	flags.StringVar(&flagPortalName, "name", "p2p-file", "Portal lease display name")
 	flags.BoolVar(&flagPortalHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagPortalDesc, "description", "Portal libp2p file share", "Portal lease description")
