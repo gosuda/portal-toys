@@ -21,20 +21,22 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs    string
-	flagDefaultRelays bool
-	flagPort          int
-	flagName          string
-	flagHide          bool
-	flagDescription   string
-	flagTags          string
-	flagOwner         string
+	flagServerURLs  string
+	flagDiscovery   bool
+	flagBanMITM     bool
+	flagPort        int
+	flagName        string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "chatter-bbs", "backend display name")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -64,9 +66,10 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	handler := NewHandler(displayAddr, flagName, func() string { return "Connected" })
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:           utils.SplitCSV(flagServerURLs),
-		DefaultRelayEnabled: flagDefaultRelays,
-		Name:                flagName,
+		RelayURLs: utils.SplitCSV(flagServerURLs),
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
+		Name:      flagName,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

@@ -20,16 +20,17 @@ import (
 )
 
 var (
-	flagServerURLs    []string
-	flagDefaultRelays bool
-	flagPort          int
-	flagBackendPort   int
-	flagName          string
-	flagHide          bool
-	flagDescription   string
-	flagTags          string
-	flagOwner         string
-	flagCServerPath   string
+	flagServerURLs  []string
+	flagDiscovery   bool
+	flagBanMITM     bool
+	flagPort        int
+	flagBackendPort int
+	flagName        string
+	flagHide        bool
+	flagDescription string
+	flagTags        string
+	flagOwner       string
+	flagCServerPath string
 )
 
 var rootCmd = &cobra.Command{
@@ -41,7 +42,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay site URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
@@ -86,9 +88,10 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", proxy)
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:           append([]string(nil), flagServerURLs...),
-		DefaultRelayEnabled: flagDefaultRelays,
-		Name:                flagName,
+		RelayURLs: append([]string(nil), flagServerURLs...),
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
+		Name:      flagName,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

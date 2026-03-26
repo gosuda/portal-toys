@@ -25,7 +25,8 @@ var rootCmd = &cobra.Command{
 
 var (
 	flagServerURLs    string
-	flagDefaultRelays bool
+	flagDiscovery     bool
+	flagBanMITM       bool
 	flagPort          int
 	flagName          string
 	flagMaxSizeMB     int64
@@ -39,7 +40,8 @@ var (
 func init() {
 	f := rootCmd.PersistentFlags()
 	f.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	f.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	f.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	f.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
@@ -78,9 +80,10 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:           utils.SplitCSV(flagServerURLs),
-		DefaultRelayEnabled: flagDefaultRelays,
-		Name:                flagName,
+		RelayURLs: utils.SplitCSV(flagServerURLs),
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
+		Name:      flagName,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

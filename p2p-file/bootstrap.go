@@ -97,7 +97,7 @@ func (a *app) handleInfo(w http.ResponseWriter, r *http.Request) {
 		binarySize = info.Size()
 	}
 	storagePath, _ := filepath.Abs(a.store.dir)
-	serverURLs, err := sdk.ResolveRelayURLs(context.Background(), cleanServerURLs(flagServerURLs), flagDefaultRelays)
+	serverURLs, err := utils.ResolvePortalRelayURLs(context.Background(), cleanServerURLs(flagServerURLs), flagDiscovery)
 	if err != nil {
 		serverURLs = cleanServerURLs(flagServerURLs)
 	}
@@ -467,11 +467,8 @@ func portalTags() []string {
 }
 
 func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- error) (func(), error) {
-	serverURLs, err := sdk.ResolveRelayURLs(ctx, cleanServerURLs(flagServerURLs), flagDefaultRelays)
-	if err != nil {
-		return nil, fmt.Errorf("resolve relay urls: %w", err)
-	}
-	if len(serverURLs) == 0 {
+	serverURLs := cleanServerURLs(flagServerURLs)
+	if len(serverURLs) == 0 && !flagDiscovery {
 		return nil, nil
 	}
 	if flagCredKey != "" {
@@ -479,6 +476,8 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	}
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
 		RelayURLs: serverURLs,
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
 		Name:      flagPortalName,
 		Metadata: types.LeaseMetadata{
 			Description: flagPortalDesc,

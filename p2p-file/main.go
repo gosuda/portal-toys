@@ -18,19 +18,20 @@ import (
 )
 
 var (
-	flagHTTPAddr      string
-	flagStorage       string
-	flagAgentMode     bool
-	flagP2PListen     []string
-	flagServerURLs    string
-	flagDefaultRelays bool
-	flagPortalName    string
-	flagPortalHide    bool
-	flagPortalOwner   string
-	flagPortalTags    string
-	flagPortalDesc    string
-	flagCredKey       string
-	flagBinaryDist    string
+	flagHTTPAddr    string
+	flagStorage     string
+	flagAgentMode   bool
+	flagP2PListen   []string
+	flagServerURLs  string
+	flagDiscovery   bool
+	flagBanMITM     bool
+	flagPortalName  string
+	flagPortalHide  bool
+	flagPortalOwner string
+	flagPortalTags  string
+	flagPortalDesc  string
+	flagCredKey     string
+	flagBinaryDist  string
 )
 
 var rootCmd = &cobra.Command{
@@ -50,7 +51,8 @@ func init() {
 	flags.BoolVar(&flagAgentMode, "agent", false, "run as headless libp2p agent (no HTTP UI)")
 	flags.StringSliceVar(&flagP2PListen, "p2p-listen", []string{"/ip4/0.0.0.0/tcp/0"}, "libp2p listen multiaddrs (repeatable)")
 	flags.StringVar(&flagServerURLs, "server-url", defaultRelayList(), "relayserver base URL(s); repeat or comma-separated (from env PORTAL_RELAY/RELAY/RELAY_URL/SERVER_URL)")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.StringVar(&flagPortalName, "name", "p2p-file", "Portal lease display name")
 	flags.BoolVar(&flagPortalHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagPortalDesc, "description", "Portal libp2p file share", "Portal lease description")

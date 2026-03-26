@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 )
@@ -31,7 +30,7 @@ func NewHandler() http.Handler {
 
 	// info (for UI)
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
-		relayURLs, err := sdk.ResolveRelayURLs(context.Background(), utils.SplitCSV(flagServerURLs), flagDefaultRelays)
+		relayURLs, err := utils.ResolvePortalRelayURLs(context.Background(), utils.SplitCSV(flagServerURLs), flagDiscovery)
 		if err != nil {
 			relayURLs = utils.SplitCSV(flagServerURLs)
 		}

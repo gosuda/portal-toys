@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal/v2/sdk"
 	"github.com/gosuda/portal/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -22,23 +21,25 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs    string
-	flagDefaultRelays bool
-	flagPortalBase    string
-	flagPort          int
-	flagName          string
-	flagHide          bool
-	flagDescription   string
-	flagOwner         string
-	flagTags          string
-	flagThumbnail     string
+	flagServerURLs  string
+	flagDiscovery   bool
+	flagBanMITM     bool
+	flagPortalBase  string
+	flagPort        int
+	flagName        string
+	flagHide        bool
+	flagDescription string
+	flagOwner       string
+	flagTags        string
+	flagThumbnail   string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	relay := firstNonEmpty(os.Getenv("RELAY"), os.Getenv("RELAY_URL"), os.Getenv("SERVER_URL"))
 	flags.StringVar(&flagServerURLs, "server-url", relay, "relay base URL(s); repeat or comma-separated")
-	flags.BoolVar(&flagDefaultRelays, "default-relays", utils.ResolveBoolEnv(true, "DEFAULT_RELAYS"), "include repository registry.json default relays [env: DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
@@ -61,7 +62,7 @@ func run(cmd *cobra.Command, args []string) error {
 
 	mux := NewHandler()
 
-	relayURLs, err := sdk.ResolveRelayURLs(ctx, utils.SplitCSV(flagServerURLs), flagDefaultRelays)
+	relayURLs, err := utils.ResolvePortalRelayURLs(ctx, utils.SplitCSV(flagServerURLs), flagDiscovery)
 	if err != nil {
 		return fmt.Errorf("resolve relay urls: %w", err)
 	}
