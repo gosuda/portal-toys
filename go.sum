@@ -156,6 +156,8 @@ github.com/gosuda/portal/v2 v2.0.6 h1:WTBiNDfQCmkGgN90tUgZO07s5Ks1TD8jATDVuzbGVq
 github.com/gosuda/portal/v2 v2.0.6/go.mod h1:NYFEEmFiKc/1Rh9/dG75BmuI/zBj+6VRbo+v4/gbrtE=
 github.com/gosuda/portal/v2 v2.0.7 h1:BErh1a1e061Ry97QDeYVyeWkY6LGDaIq9Rk3IS6yX5c=
 github.com/gosuda/portal/v2 v2.0.7/go.mod h1:NYFEEmFiKc/1Rh9/dG75BmuI/zBj+6VRbo+v4/gbrtE=
+github.com/gosuda/portal/v2 v2.0.8 h1:OJ8e+k90YOtq+LJKidogsz9Dshz0XCeLqLSsM0KKZkc=
+github.com/gosuda/portal/v2 v2.0.8/go.mod h1:lO6lIB8CankqziNzY6u4buwJBflaSfctSDy195hLLyQ=
 github.com/gregjones/httpcache v0.0.0-20180305231024-9cad4c3443a7/go.mod h1:FecbI9+v66THATjSRHfNgh1IVFe/9kFxbXtjV0ctIMA=
 github.com/grpc-ecosystem/grpc-gateway v1.5.0/go.mod h1:RSKVYQBd5MCa4OVpNdGskqpgL2+G+NZTnrVHpWWfpdw=
 github.com/huin/goupnp v1.3.0 h1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=
@@ -653,6 +655,8 @@ golang.org/x/time v0.5.0 h1:o7cqy6amK/52YcAKIPlM3a+Fpj35zvRj2TP+e1xFSfk=
 golang.org/x/time v0.5.0/go.mod h1:3BpzKBy/shNhVucY/MWOyx10tF3SFh9QdLuxbVysPQM=
 golang.org/x/time v0.12.0 h1:ScB/8o8olJvc+CQPWrK3fPZNfh7qgwCrY0zJmoEQLSE=
 golang.org/x/time v0.12.0/go.mod h1:CDIdPxbZBQxdj6cxyCIdrNogrJKMJ7pr37NYpMcMDSg=
+golang.org/x/time v0.14.0 h1:MRx4UaLrDotUKUdCIqzPC48t1Y9hANFKIRpNx+Te8PI=
+golang.org/x/time v0.14.0/go.mod h1:eL/Oa2bBBK0TkX57Fyni+NgnyQQN4LitPmob2Hjnqw4=
 golang.org/x/tools v0.0.0-20180828015842-6cd1fcedba52/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
 golang.org/x/tools v0.0.0-20181030000716-a0a13e073c7b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
