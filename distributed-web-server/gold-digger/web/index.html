@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>99.99% 순금을 노려라!</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+      }
+      body {
+        margin: 0;
+        background: radial-gradient(circle at top, #1f2636, #080a11);
+        color: #f8f8fb;
+        min-height: 100vh;
+        padding: 2rem;
+      }
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 0.75rem;
+        letter-spacing: 0.04em;
+      }
+      section {
+        background: rgba(15, 18, 28, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(16px);
+      }
+      label {
+        display: block;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.35rem;
+        color: #9da7c2;
+      }
+      input,
+      select {
+        width: 100%;
+        padding: 0.65rem 0.85rem;
+        border-radius: 0.65rem;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        background: rgba(5, 7, 12, 0.65);
+        color: #f5f5ff;
+        margin-bottom: 0.85rem;
+      }
+      button {
+        background: linear-gradient(120deg, #ffd86f, #f7a93a);
+        border: none;
+        color: #111;
+        border-radius: 999px;
+        padding: 0.65rem 1.5rem;
+        font-weight: 700;
+        cursor: pointer;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 20px rgba(247, 169, 58, 0.3);
+      }
+      .split {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 1rem;
+      }
+      .log {
+        min-height: 160px;
+        background: rgba(0, 0, 0, 0.6);
+        font-family: "JetBrains Mono", "Fira Code", monospace;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        overflow-y: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th,
+      td {
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      th {
+        text-align: left;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #a3abc4;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background: rgba(255, 255, 255, 0.12);
+      }
+      .wallet {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0.15rem 0 1rem;
+      }
+      @media (max-width: 640px) {
+        body {
+          padding: 1rem;
+        }
+        section {
+          padding: 1rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>99.99% 순금을 노려라!</h1>
+      <p>정련 성공/실패를 베팅하고 VS 매치와 배팅으로 순위를 올려 보세요.</p>
+    </header>
+
+    <section class="split">
+      <div>
+        <h2>회원가입</h2>
+        <form id="signup-form">
+          <label>아이디</label>
+          <input type="text" id="signup-username" required />
+          <label>비밀번호</label>
+          <input type="password" id="signup-password" required />
+          <button type="submit">가입</button>
+        </form>
+      </div>
+      <div>
+        <h2>로그인</h2>
+        <form id="signin-form">
+          <label>아이디</label>
+          <input type="text" id="signin-username" required />
+          <label>비밀번호</label>
+          <input type="password" id="signin-password" required />
+          <button type="submit">로그인</button>
+        </form>
+        <p class="pill">현재 토큰: <span id="token-preview">없음</span></p>
+      </div>
+      <div>
+        <h2>지갑</h2>
+        <div class="wallet"><span id="wallet-balance">0</span> pt</div>
+        <button id="status-btn">현재 상태 갱신</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>정련 시뮬레이션</h2>
+      <form id="refine-form" class="split">
+        <div>
+          <label>베팅 대상</label>
+          <select id="refine-choice">
+            <option value="success">정련 성공</option>
+            <option value="fail">정련 실패</option>
+          </select>
+        </div>
+        <div>
+          <label>베팅 금액</label>
+          <input type="number" id="refine-stake" min="1" value="50" required />
+        </div>
+        <div style="align-self: end">
+          <button type="submit">정련 베팅</button>
+        </div>
+      </form>
+      <div id="refine-result" class="pill"></div>
+    </section>
+
+    <section class="split">
+      <div>
+        <h2>VS 대전</h2>
+        <button id="queue-btn">VS 대기열 등록 / 매칭</button>
+        <form id="vs-move-form">
+          <label>Match ID</label>
+          <input type="number" id="vs-match-id" min="1" required />
+          <label>예측 값</label>
+          <input type="number" id="vs-guess" min="40" max="100" step="0.1" />
+          <button type="submit">VS 예측 제출</button>
+        </form>
+        <div id="match-info"></div>
+      </div>
+      <div>
+        <h2>배팅</h2>
+        <form id="bet-form">
+          <label>Match ID</label>
+          <input type="number" id="bet-match" min="1" required />
+          <label>대상 (A/B 또는 사용자명)</label>
+          <input type="text" id="bet-target" placeholder="A 또는 B" required />
+          <label>이율 선택</label>
+          <select id="bet-tier">
+            <option value="5">5% 이율 / 실패 시 -5%</option>
+            <option value="10">10% 이율 / 실패 시 -15%</option>
+            <option value="20">20% 이율 / 실패 시 -30%</option>
+            <option value="30">30% 이율 / 실패 시 -40%</option>
+          </select>
+          <label>베팅 금액</label>
+          <input type="number" id="bet-amount" min="1" value="50" required />
+          <button type="submit">베팅 진행</button>
+        </form>
+        <div id="bet-log"></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>리더보드</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>순위</th>
+            <th>플레이어</th>
+            <th>지갑</th>
+            <th>정련 누적</th>
+            <th>최근 로그인</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>응답 로그</h2>
+      <div class="log" id="console"></div>
+    </section>
+
+    <script>
+      const apiBase =
+        window.API_ENDPOINT ||
+        (window.location.origin.includes("8090")
+          ? window.location.origin.replace("8090", "8080") + "/ingest"
+          : "http://localhost:8080/ingest");
+      const consoleBox = document.getElementById("console");
+      const walletBox = document.getElementById("wallet-balance");
+      const tokenPreview = document.getElementById("token-preview");
+      const refineResult = document.getElementById("refine-result");
+      const leaderboardBody = document.getElementById("leaderboard-body");
+      const matchInfoBox = document.getElementById("match-info");
+      const betLog = document.getElementById("bet-log");
+
+      const forms = {
+        signup: document.getElementById("signup-form"),
+        signin: document.getElementById("signin-form"),
+        refine: document.getElementById("refine-form"),
+        vsMove: document.getElementById("vs-move-form"),
+        bet: document.getElementById("bet-form"),
+      };
+
+      let token = localStorage.getItem("goldToken") || "";
+      updateToken(token);
+
+      async function callAPI(action, payload = {}) {
+        const body = { action, ...payload };
+        if (token) {
+          body.token = token;
+        }
+        const res = await fetch(apiBase, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        handleResponse(data);
+        return data;
+      }
+
+      function log(text) {
+        const time = new Date().toLocaleTimeString();
+        const p = document.createElement("div");
+        p.textContent = `[${time}] ${text}`;
+        consoleBox.prepend(p);
+      }
+
+      function updateToken(next) {
+        if (!next) {
+          tokenPreview.textContent = "없음";
+          return;
+        }
+        token = next;
+        localStorage.setItem("goldToken", token);
+        tokenPreview.textContent = `${token.slice(0, 8)}...`;
+      }
+
+      function handleResponse(resp) {
+        if (resp.message) {
+          log(resp.message);
+        }
+        if (resp.token) {
+          updateToken(resp.token);
+        }
+        if (resp.wallet) {
+          walletBox.textContent = resp.wallet.balance;
+        }
+        if (resp.attempt) {
+          const delta =
+            resp.attempt.delta >= 0
+              ? `+${resp.attempt.delta}`
+              : resp.attempt.delta;
+          refineResult.textContent = `[${
+            resp.attempt.choice
+          }] ${resp.attempt.stake}pt / 성공 확률 ${
+            resp.attempt.chance
+          }% → 결과 ${resp.attempt.result.toUpperCase()} (${delta}pt, 잔액 ${
+            resp.attempt.balance
+          }pt)`;
+        }
+        if (resp.leaderboard) {
+          leaderboardBody.innerHTML = resp.leaderboard
+            .map(
+              (row) => `
+              <tr>
+                <td>${row.rank}</td>
+                <td>${row.username}</td>
+                <td>${row.wallet}</td>
+                <td>${row.totalPoints}</td>
+                <td>${row.lastLogin || "-"}</td>
+              </tr>`
+            )
+            .join("\n");
+        }
+        if (resp.match) {
+          document.getElementById("vs-match-id").value = resp.match.id;
+          matchInfoBox.innerHTML = `
+            <p>상태: <strong>${resp.match.status}</strong></p>
+            <p>나: ${resp.match.you || "-"} / 상대: ${resp.match.opponent || "-"}</p>
+            <p>내 예측: ${resp.match.yourGuess || "-"} / 상대 예측: ${
+            resp.match.opponentGuess || "-"
+          }</p>
+            <p>실제 값: ${resp.match.actual || "-"} / 승자: ${
+            resp.match.winner || "-"
+          }</p>`;
+        } else {
+          matchInfoBox.textContent = "진행 중인 매치 없음";
+        }
+        if (resp.bets) {
+          betLog.innerHTML =
+            "<h3>최근 베팅</h3>" +
+            resp.bets
+              .map(
+                (b) =>
+                  `<p>#${b.matchId} ${b.target} (${b.tier}) : ${
+                    b.state
+                  } ${b.delta >= 0 ? "+" : ""}${b.delta}</p>`
+              )
+              .join("");
+        }
+      }
+
+      forms.signup.addEventListener("submit", (e) => {
+        e.preventDefault();
+        callAPI("signup", {
+          username: document.getElementById("signup-username").value,
+          password: document.getElementById("signup-password").value,
+        });
+      });
+
+      forms.signin.addEventListener("submit", (e) => {
+        e.preventDefault();
+        callAPI("signin", {
+          username: document.getElementById("signin-username").value,
+          password: document.getElementById("signin-password").value,
+        });
+      });
+
+      forms.refine.addEventListener("submit", (e) => {
+        e.preventDefault();
+        callAPI("refine", {
+          choice: document.getElementById("refine-choice").value,
+          stake: Number(document.getElementById("refine-stake").value),
+        });
+      });
+
+      document.getElementById("status-btn").addEventListener("click", () =>
+        callAPI("status")
+      );
+
+      document
+        .getElementById("queue-btn")
+        .addEventListener("click", () => callAPI("vs_queue"));
+
+      forms.vsMove.addEventListener("submit", (e) => {
+        e.preventDefault();
+        callAPI("vs_move", {
+          matchId: Number(document.getElementById("vs-match-id").value),
+          guess: Number(document.getElementById("vs-guess").value),
+        });
+      });
+
+      forms.bet.addEventListener("submit", (e) => {
+        e.preventDefault();
+        callAPI("vs_bet", {
+          matchId: Number(document.getElementById("bet-match").value),
+          betTarget: document.getElementById("bet-target").value,
+          betTier: Number(document.getElementById("bet-tier").value),
+          betAmount: Number(document.getElementById("bet-amount").value),
+        });
+      });
+
+      // 초기 데이터를 한 번 불러옵니다.
+      callAPI("status");
+    </script>
+  </body>
+</html>

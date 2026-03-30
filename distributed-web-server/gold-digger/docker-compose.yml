@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  manager:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: manager
+    environment:
+      - WORKERS=http://worker:8081
+      - MANAGER_ADDR=:8080
+      - MANAGER_MAX_INFLIGHT=128
+      - MANAGER_DISABLE_RELAY=true
+    ports:
+      - "8080:8080"
+    depends_on:
+      - worker
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: worker
+    environment:
+      - WORKER_PORT=8081
+      - TARGET_BINARY=/opt/gold-digger
+      - WORKER_MAX_PARALLEL=1
+      - GOLD_DIGGER_DB=/data/gold-digger.db
+    volumes:
+      - gold-data:/data
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+
+  ui:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./web:/usr/share/nginx/html:ro
+    ports:
+      - "8090:80"
+    depends_on:
+      - manager
+    restart: unless-stopped
+
+volumes:
+  gold-data:

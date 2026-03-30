@@ -123,6 +123,10 @@ Exposed endpoints:
 * Manager API: `http://localhost:8080/ingest`
 * Worker registry view: `http://localhost:8080/workers`
 
+### Gold Digger Sample Game
+
+The `gold-digger/` folder ships with a fully playable "99.99% 순금을 노려라!" scenario that replaces the sample shell binary with a secure gacha-style refinement game. Run `docker compose up --build` inside that directory to launch a manager + worker pair wired to the new Go binary **plus** an nginx container serving `gold-digger/web/index.html`. The browser app (http://localhost:8090) exposes signup/login forms, refinement controls, real-time leaderboards, VS queuing, and betting tiers (5/10/20/30% yield with asymmetric penalties). Everything still talks to the manager’s `/ingest` endpoint, so you can also script against the JSON API (`signup`, `signin`, `refine`, `status`, `vs_queue`, `vs_move`, `vs_bet`). See `gold-digger/README.md` for the full story flow and wire protocol.
+
 ### Telemetry API
 
 * `GET /workers` – Manager-side snapshot including load and metrics.

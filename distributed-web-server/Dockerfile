@@ -7,11 +7,13 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/manager ./manager
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/worker ./worker
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/gold-digger ./gold-digger
 
 FROM alpine:3.19 AS runtime-base
 RUN apk add --no-cache ca-certificates bash
 COPY target_binary.sh /opt/target_binary.sh
-RUN chmod +x /opt/target_binary.sh
+COPY --from=builder /out/gold-digger /opt/gold-digger
+RUN chmod +x /opt/target_binary.sh /opt/gold-digger
 
 FROM runtime-base AS manager
 COPY --from=builder /out/manager /usr/local/bin/manager
