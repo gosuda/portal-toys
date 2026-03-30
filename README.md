@@ -22,6 +22,7 @@ For non-Go apps, use `portal-tunnel` instead of maintaining separate language-sp
 - [chatter-bbs](chatter-bbs)
 - [ceversi](ceversi)
 - [doom](doom)
+- [distributed-web-server](distributed-web-server)
 - [emulator-js](emulator-js)
 - [ffmpeg-converter](ffmpeg-converter)
 - [gosuda-blog](gosuda-blog)
