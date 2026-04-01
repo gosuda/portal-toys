@@ -61,7 +61,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 		RelayURLs: utils.SplitCSV(flagServerURLs),
 		BanMITM:   flagBanMITM,
 		Discovery: flagDiscovery,
-		Name:      flagName,
+		Identity:  types.Identity{Name: flagName},
 		Metadata: types.LeaseMetadata{
 			Description: "Portal demo: multi-room mafia game",
 			Owner:       "Mafia",
