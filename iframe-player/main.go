@@ -84,7 +84,7 @@ func runIframePlayer(cmd *cobra.Command, args []string) error {
 		RelayURLs: utils.SplitCSV(flagServerURLs),
 		BanMITM:   flagBanMITM,
 		Discovery: flagDiscovery,
-		Identity:  types.Identity{Name: flagName},
+		Name:      flagName,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

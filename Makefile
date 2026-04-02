@@ -3,8 +3,8 @@
 BIN_DIR   := $(CURDIR)/bin
 BIN       := $(BIN_DIR)/portal-tunnel$(if $(filter Windows_NT,$(OS)),.exe,)
 PKG       := github.com/gosuda/portal/v2/cmd/portal-tunnel
-VERSION   := v2.0.1
-GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)@$(VERSION)
+# portal-tunnel is pinned to v2.1.1 through the root go.mod require/replace.
+GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)
 # Unified relay configuration: prefer RELAY, then RELAY_URL, else default
 RELAY ?= https://portal.thumbgo.kr/relay
 PORT ?= 8080

@@ -46,7 +46,7 @@ func init() {
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
 	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(false, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
-	flags.IntVar(&flagPort, "port", 3000, "optional local HTTP port (negative to disable)")
+	flags.IntVar(&flagPort, "port", 3005, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat-demo"), "backend display name (from env CHAT_NAME if set)")
 	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
 	flags.StringVar(&flagDescription, "description", getEnv("CHAT_DESCRIPTION", "Portal demo chat"), "lease description (from env CHAT_DESCRIPTION if set)")
@@ -118,7 +118,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 		RelayURLs: utils.SplitCSV(flagServerURLs),
 		BanMITM:   flagBanMITM,
 		Discovery: flagDiscovery,
-		Identity:  types.Identity{Name: flagName},
+		Name:      flagName,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),
