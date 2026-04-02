@@ -21,17 +21,18 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagPortalBase  string
-	flagPort        int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagOwner       string
-	flagTags        string
-	flagThumbnail   string
+	flagServerURLs   string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagPortalBase   string
+	flagPort         int
+	flagName         string
+	flagIdentityPath string
+	flagHide         bool
+	flagDescription  string
+	flagOwner        string
+	flagTags         string
+	flagThumbnail    string
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	flags.StringVar(&flagPortalBase, "portal-base", derivePortalBase(relay), "portal site base URL (optional, used only for SSR listing)")
 	flags.IntVar(&flagPort, "port", 8099, "local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "portal-list", "backend display name")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagDescription, "description", "Portal list viewer (online status)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Portal", "lease owner")

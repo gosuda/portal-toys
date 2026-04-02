@@ -85,9 +85,10 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 		return nil
 	}
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: []string{normalizedRelay},
-		BanMITM:   flagBanMITM,
-		Name:      name,
+		RelayURLs:    []string{normalizedRelay},
+		BanMITM:      flagBanMITM,
+		Name:         name,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: description,
 			Owner:       owner,

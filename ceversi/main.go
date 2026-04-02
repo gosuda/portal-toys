@@ -20,17 +20,18 @@ import (
 )
 
 var (
-	flagServerURLs  []string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagPort        int
-	flagBackendPort int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
-	flagCServerPath string
+	flagServerURLs   []string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagPort         int
+	flagBackendPort  int
+	flagName         string
+	flagIdentityPath string
+	flagHide         bool
+	flagDescription  string
+	flagTags         string
+	flagOwner        string
+	flagCServerPath  string
 )
 
 var rootCmd = &cobra.Command{
@@ -47,6 +48,7 @@ func init() {
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagDescription, "description", "Simple Othello/Reversi game written in C", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Ceversi", "lease owner")
@@ -88,10 +90,11 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", proxy)
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: append([]string(nil), flagServerURLs...),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    append([]string(nil), flagServerURLs...),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

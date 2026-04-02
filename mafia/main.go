@@ -21,13 +21,14 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs string
-	flagDiscovery  bool
-	flagBanMITM    bool
-	flagPort       int
-	flagName       string
-	flagCredKey    string
-	flagAuthKey    string
+	flagServerURLs   string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagPort         int
+	flagName         string
+	flagIdentityPath string
+	flagCredKey      string
+	flagAuthKey      string
 )
 
 func init() {
@@ -37,6 +38,7 @@ func init() {
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "mafia", "backend display name")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.StringVar(&flagCredKey, "cred-key", "", "optional credential key to use for the listener (base64 encoded)")
 	flags.StringVar(&flagAuthKey, "ws-auth-key", os.Getenv("MAFIA_WS_AUTH"), "optional shared secret required from clients via X-Mafia-Key header")
 }
@@ -58,10 +60,11 @@ func runServer(cmd *cobra.Command, args []string) error {
 		log.Warn().Msg("[mafia] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: "Portal demo: multi-room mafia game",
 			Owner:       "Mafia",

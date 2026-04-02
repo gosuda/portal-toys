@@ -24,18 +24,19 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagPort        int
-	flagName        string
-	flagDataPath    string
-	flagCredKey     string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
-	flagAdminUIDs   []string
+	flagServerURLs   string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagPort         int
+	flagName         string
+	flagIdentityPath string
+	flagDataPath     string
+	flagCredKey      string
+	flagHide         bool
+	flagDescription  string
+	flagTags         string
+	flagOwner        string
+	flagAdminUIDs    []string
 )
 
 func init() {
@@ -44,10 +45,11 @@ func init() {
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(false, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 3005, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat-demo"), "backend display name (from env CHAT_NAME if set)")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagHide, "hide", getEnvBool("CHAT_HIDE", false), "hide this lease from portal listings (from env CHAT_HIDE if set)")
 	flags.StringVar(&flagDescription, "description", getEnv("CHAT_DESCRIPTION", "Portal demo chat"), "lease description (from env CHAT_DESCRIPTION if set)")
 	flags.StringVar(&flagOwner, "owner", getEnv("CHAT_OWNER", "Simple Chat"), "lease owner (from env CHAT_OWNER if set)")
@@ -115,10 +117,11 @@ func runChat(cmd *cobra.Command, args []string) error {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

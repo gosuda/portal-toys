@@ -23,15 +23,16 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagPort        int
-	flagName        string
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
+	flagServerURLs   string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagPort         int
+	flagName         string
+	flagIdentityPath string
+	flagHide         bool
+	flagDescription  string
+	flagTags         string
+	flagOwner        string
 )
 
 func init() {
@@ -41,6 +42,7 @@ func init() {
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "emulator-js", "backend display name")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagDescription, "description", "Portal demo: EmulatorJS (served over portal HTTP backend)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "EmulatorJS", "lease owner")
@@ -73,10 +75,11 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	mux.Handle("/docs/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

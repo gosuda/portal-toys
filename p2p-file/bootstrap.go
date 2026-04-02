@@ -475,10 +475,11 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: serverURLs,
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagPortalName,
+		RelayURLs:    serverURLs,
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagPortalName,
+		IdentityPath: flagPortalIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagPortalDesc,
 			Owner:       flagPortalOwner,

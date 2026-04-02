@@ -55,6 +55,7 @@ var (
 	flagBanMITM      bool
 	flagPort         int
 	flagName         string
+	flagIdentityPath string
 	flagDescription  string
 	flagOwner        string
 	flagTags         string
@@ -76,6 +77,7 @@ func init() {
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", parseIntEnv("MANAGER_PORT", 8080), "local HTTP port for the manager + portal binding [env: MANAGER_PORT]")
 	flags.StringVar(&flagName, "name", getEnv("MANAGER_NAME", "distributed-web-manager"), "lease display name [env: MANAGER_NAME]")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.StringVar(&flagDescription, "description", getEnv("MANAGER_DESCRIPTION", "High-performance distributed web manager"), "lease description [env: MANAGER_DESCRIPTION]")
 	flags.StringVar(&flagOwner, "owner", getEnv("MANAGER_OWNER", "Distributed Manager"), "lease owner label [env: MANAGER_OWNER]")
 	flags.StringVar(&flagTags, "tags", getEnv("MANAGER_TAGS", "distributed,worker,manager"), "comma-separated tags [env: MANAGER_TAGS]")
@@ -1045,10 +1047,11 @@ func runManagerCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

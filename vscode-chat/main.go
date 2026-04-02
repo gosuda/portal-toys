@@ -25,16 +25,17 @@ var rootCmd = &cobra.Command{
 }
 
 var (
-	flagServerURLs  string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagName        string
-	flagTargetHost  string
-	flagTargetPort  int
-	flagHide        bool
-	flagDescription string
-	flagTags        string
-	flagOwner       string
+	flagServerURLs   string
+	flagDiscovery    bool
+	flagBanMITM      bool
+	flagName         string
+	flagIdentityPath string
+	flagTargetHost   string
+	flagTargetPort   int
+	flagHide         bool
+	flagDescription  string
+	flagTags         string
+	flagOwner        string
 )
 
 func init() {
@@ -43,6 +44,7 @@ func init() {
 	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.StringVar(&flagName, "name", "vscode-relay", "Display name shown on server UI")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.StringVar(&flagTargetHost, "target-host", "127.0.0.1", "Local host where VSCode Web listens")
 	flags.IntVar(&flagTargetPort, "target-port", 8100, "Local port where VSCode Web listens")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -87,10 +89,11 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 	}
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

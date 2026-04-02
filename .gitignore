@@ -36,3 +36,4 @@ db
 bin
 data
 node_modules
+identity.json

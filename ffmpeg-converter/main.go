@@ -29,6 +29,7 @@ var (
 	flagBanMITM       bool
 	flagPort          int
 	flagName          string
+	flagIdentityPath  string
 	flagMaxSizeMB     int64
 	flagFFmpegWrapper string
 	flagHide          bool
@@ -44,6 +45,7 @@ func init() {
 	f.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	f.IntVar(&flagPort, "port", -1, "optional local HTTP port")
 	f.StringVar(&flagName, "name", "ffmpeg-converter", "display name for relay lease")
+	f.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	f.Int64Var(&flagMaxSizeMB, "max-mb", 200, "max upload size in MB")
 	f.StringVar(&flagFFmpegWrapper, "ffmpeg-wrapper", os.Getenv("FFMPEG_WRAPPER"), "optional command prefix to run ffmpeg (e.g. 'docker exec ffmpeg ffmpeg')")
 	f.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -80,10 +82,11 @@ func run(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),

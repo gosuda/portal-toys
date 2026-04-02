@@ -18,20 +18,21 @@ import (
 )
 
 var (
-	flagHTTPAddr    string
-	flagStorage     string
-	flagAgentMode   bool
-	flagP2PListen   []string
-	flagServerURLs  string
-	flagDiscovery   bool
-	flagBanMITM     bool
-	flagPortalName  string
-	flagPortalHide  bool
-	flagPortalOwner string
-	flagPortalTags  string
-	flagPortalDesc  string
-	flagCredKey     string
-	flagBinaryDist  string
+	flagHTTPAddr           string
+	flagStorage            string
+	flagAgentMode          bool
+	flagP2PListen          []string
+	flagServerURLs         string
+	flagDiscovery          bool
+	flagBanMITM            bool
+	flagPortalName         string
+	flagPortalIdentityPath string
+	flagPortalHide         bool
+	flagPortalOwner        string
+	flagPortalTags         string
+	flagPortalDesc         string
+	flagCredKey            string
+	flagBinaryDist         string
 )
 
 var rootCmd = &cobra.Command{
@@ -54,6 +55,7 @@ func init() {
 	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.StringVar(&flagPortalName, "name", "p2p-file", "Portal lease display name")
+	flags.StringVar(&flagPortalIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagPortalHide, "hide", false, "hide this lease from portal listings")
 	flags.StringVar(&flagPortalDesc, "description", "Portal libp2p file share", "Portal lease description")
 	flags.StringVar(&flagPortalOwner, "owner", "P2P File", "Portal lease owner")

@@ -28,6 +28,7 @@ var (
 	flagBanMITM       bool
 	flagPort          int
 	flagName          string
+	flagIdentityPath  string
 	flagVoteThreshold int
 	flagMaxLen        int
 	flagHide          bool
@@ -43,6 +44,7 @@ func init() {
 	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 3000, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "rolling-paper", "backend display name")
+	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.IntVar(&flagVoteThreshold, "delete-threshold", 3, "votes required to delete (>=1)")
 	flags.IntVar(&flagMaxLen, "max-len", 2500, "maximum message length in characters (>=1)")
 	flags.BoolVar(&flagHide, "hide", false, "hide this lease from portal listings")
@@ -78,10 +80,11 @@ func runRollingPaper(cmd *cobra.Command, args []string) error {
 	staticHandler = http.FileServer(http.FS(sub))
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs: utils.SplitCSV(flagServerURLs),
-		BanMITM:   flagBanMITM,
-		Discovery: flagDiscovery,
-		Name:      flagName,
+		RelayURLs:    utils.SplitCSV(flagServerURLs),
+		BanMITM:      flagBanMITM,
+		Discovery:    flagDiscovery,
+		Name:         flagName,
+		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),
