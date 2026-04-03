@@ -78,8 +78,8 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gosuda/keyless_tls v0.0.1-0.20260304212324-7733f8366abc h1:aS9LQ35x6EtrGKCmOWRj6Y9aQ2l5hP8dVva4oxB9VEg=
 github.com/gosuda/keyless_tls v0.0.1-0.20260304212324-7733f8366abc/go.mod h1:BOhUZgiAAQzxKO3QcC4fCXgd/+lqxgIu1OyIYTqtta8=
-github.com/gosuda/portal-tunnel/v2 v2.1.1 h1:aUGE+e668cyYQpHTE+qf8JLo1nT7RrYIkuYXGs+j9Oo=
-github.com/gosuda/portal-tunnel/v2 v2.1.1/go.mod h1:dFmGGY70+N7kmQTq8yoIiRVrbGpQSTBsRvcs+J1XSIs=
+github.com/gosuda/portal-tunnel/v2 v2.1.2-0.20260403064421-440cea4f22c6 h1:lVDQ7vC8AdAec7qiZILohsA1huWTP+KhZMGdGNB/2rg=
+github.com/gosuda/portal-tunnel/v2 v2.1.2-0.20260403064421-440cea4f22c6/go.mod h1:dFmGGY70+N7kmQTq8yoIiRVrbGpQSTBsRvcs+J1XSIs=
 github.com/holiman/uint256 v1.3.2 h1:a9EgMPSC1AAaj1SZL5zIQD3WbwTuHrMGOerLjGmM/TA=
 github.com/holiman/uint256 v1.3.2/go.mod h1:EOMSn4q6Nyt9P6efbI3bueV4e1b3dGlUCXeiRV4ng7E=
 github.com/huin/goupnp v1.3.0 h1:UvLUlWDNpoUdYzb2TCn+MuTWtcjXKSza2n6CBdQ0xXc=

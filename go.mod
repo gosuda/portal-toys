@@ -2,7 +2,7 @@ module github.com/gosuda/portal-toys
 
 go 1.26.1
 
-replace github.com/gosuda/portal/v2 => github.com/gosuda/portal-tunnel/v2 v2.1.1
+replace github.com/gosuda/portal/v2 => github.com/gosuda/portal-tunnel/v2 v2.1.2-0.20260403064421-440cea4f22c6
 
 require (
 	github.com/cockroachdb/pebble/v2 v2.1.4
