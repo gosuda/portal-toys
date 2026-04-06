@@ -2,7 +2,7 @@
 
 BIN_DIR   := $(CURDIR)/bin
 BIN       := $(BIN_DIR)/portal-tunnel$(if $(filter Windows_NT,$(OS)),.exe,)
-PKG       := github.com/gosuda/portal/v2/cmd/portal-tunnel
+PKG       := github.com/gosuda/portal-tunnel/v2/cmd/portal-tunnel
 # portal-tunnel is pinned to v2.1.1 through the root go.mod require/replace.
 GOINSTALL := $(if $(filter Windows_NT,$(OS)),set "GOBIN=$(BIN_DIR)" &&,GOBIN="$(BIN_DIR)") go install $(PKG)
 # Unified relay configuration: prefer RELAY, then RELAY_URL, else default

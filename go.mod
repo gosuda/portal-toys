@@ -2,13 +2,11 @@ module github.com/gosuda/portal-toys
 
 go 1.26.1
 
-replace github.com/gosuda/portal/v2 => github.com/gosuda/portal-tunnel/v2 v2.1.1
-
 require (
 	github.com/cockroachdb/pebble/v2 v2.1.4
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gorilla/websocket v1.5.3
-	github.com/gosuda/portal/v2 v2.1.1
+	github.com/gosuda/portal-tunnel/v2 v2.1.3
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.48.0
 	github.com/multiformats/go-multiaddr v0.16.0
@@ -22,6 +20,7 @@ require (
 	github.com/DataDog/zstd v1.5.7 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 // indirect
+	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

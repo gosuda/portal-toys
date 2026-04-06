@@ -12,9 +12,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -43,8 +44,8 @@ var rootCmd = &cobra.Command{
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringSliceVar(&flagServerURLs, "server-url", strings.Split(os.Getenv("RELAY"), ","), "relay site URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 31744, "optional local HTTP port (negative to disable)")
 	flags.IntVar(&flagBackendPort, "backend-port", 31745, "C server port")
 	flags.StringVar(&flagName, "name", "ceversi", "backend display name")
@@ -89,7 +90,7 @@ func runCeversi(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", proxy)
 
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
 		RelayURLs:    append([]string(nil), flagServerURLs...),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,

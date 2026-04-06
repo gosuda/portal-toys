@@ -118,16 +118,21 @@ function handleMessage(msg) {
             }
             break;
         case 'gameStart':
-            // Set flag and wait for roomState update with isPlaying info
             waitingForGameStart = true;
             showScreen('game');
             initGameState();
+            if (msg.room && msg.room.inGame) {
+                updateRoomState(msg);
+                waitingForGameStart = false;
+                actuallyStartGame();
+            }
             break;
         case 'gameEnded':
             // Game ended (player left), return to room
             if (msg.error) {
                 alert(msg.error);
             }
+            waitingForGameStart = false;
             isReady = false;
             isPlaying = false;
             readyBtn.textContent = 'Ready';
@@ -320,7 +325,9 @@ function leaveRoom() {
         playerId: playerId
     });
     currentRoomId = null;
+    waitingForGameStart = false;
     isReady = false;
+    isPlaying = false;
     showScreen('lobby');
     refreshRooms();
 }
@@ -346,11 +353,14 @@ function requestStartGame() {
 
 function updateRoomState(msg) {
     if (!msg.room) return;
+    const players = Array.isArray(msg.players) && msg.players.length > 0
+        ? msg.players
+        : (Array.isArray(msg.room.players) ? msg.room.players : []);
 
     roomTitle.textContent = msg.room.name;
 
     // Check if current player is playing
-    const me = msg.players.find(p => p.id === playerId);
+    const me = players.find(p => p.id === playerId);
     if (me) {
         isPlaying = me.isPlaying;
     }
@@ -366,7 +376,7 @@ function updateRoomState(msg) {
     }
 
     roomPlayerList.innerHTML = '';
-    msg.players.forEach(p => {
+    players.forEach(p => {
         const div = document.createElement('div');
         div.className = 'player-item ' + (p.ready ? 'ready' : 'not-ready');
         const hostBadge = p.id === msg.room.hostId ? ' 👑' : '';
@@ -378,10 +388,10 @@ function updateRoomState(msg) {
     });
 
     if (currentScreen === 'game') {
-        updateGamePlayerList(msg.players);
-        updateMatchInfo(msg.players);
+        updateGamePlayerList(players);
+        updateMatchInfo(players);
         // Draw both players' boards
-        drawPlayerBoards(msg.players);
+        drawPlayerBoards(players);
     }
 }
 

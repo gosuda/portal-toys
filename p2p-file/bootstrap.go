@@ -17,9 +17,10 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -97,9 +98,9 @@ func (a *app) handleInfo(w http.ResponseWriter, r *http.Request) {
 		binarySize = info.Size()
 	}
 	storagePath, _ := filepath.Abs(a.store.dir)
-	serverURLs, err := utils.ResolvePortalRelayURLs(context.Background(), cleanServerURLs(flagServerURLs), flagDiscovery)
+	serverURLs, err := portalapp.ResolveRelayURLs(context.Background(), cleanServerURLs(flagServerURLs), flagDiscovery, nil)
 	if err != nil {
-		serverURLs = cleanServerURLs(flagServerURLs)
+		serverURLs = nil
 	}
 	resp := map[string]any{
 		"peerId":       a.host.ID().String(),
@@ -474,7 +475,7 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	if flagCredKey != "" {
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
 		RelayURLs:    serverURLs,
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,

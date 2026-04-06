@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 )
 
 //go:embed static

@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/joho/godotenv"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/rs/zerolog"

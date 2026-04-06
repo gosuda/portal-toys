@@ -8,9 +8,10 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -38,8 +39,8 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", -1, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "gosuda-blog", "Display name shown on server UI")
 	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
@@ -74,7 +75,7 @@ func runBlog(cmd *cobra.Command, args []string) error {
 	// Serve static files (with SPA friendly behavior)
 	mux.Handle("/", fileServerWithSPA(flagDir))
 
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
