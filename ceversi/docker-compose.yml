@@ -1,6 +1,10 @@
 version: '3.8'
 services:
   ceversi:
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 30s
+    network_mode: "host"
     build: .
     ports:
       - "31744:31744"
