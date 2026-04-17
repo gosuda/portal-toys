@@ -19,7 +19,7 @@ func TestResolveRelayURLsFiltersIncompatibleRelays(t *testing.T) {
 			return
 		}
 		portalutils.WriteAPIData(w, http.StatusOK, types.DomainResponse{
-			ProtocolVersion: types.ProtocolVersion,
+			ProtocolVersion: types.SDKVersion,
 			ReleaseVersion:  "test",
 		})
 	}))
