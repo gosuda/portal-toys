@@ -479,7 +479,6 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 		RelayURLs:    serverURLs,
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
-		Name:         flagPortalName,
 		IdentityPath: flagPortalIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagPortalDesc,

@@ -84,10 +84,9 @@ func runIframePlayer(cmd *cobra.Command, args []string) error {
 	handler := stripPeer(baseHandler)
 
 	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:    utils.SplitCSV(flagServerURLs),
-		BanMITM:      flagBanMITM,
-		Discovery:    flagDiscovery,
-		Name:         flagName,
+		RelayURLs: utils.SplitCSV(flagServerURLs),
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,

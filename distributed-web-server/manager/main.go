@@ -73,16 +73,31 @@ func init() {
 	_ = godotenv.Load()
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relay base URL(s); repeat or comma-separated (env RELAY)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", parseIntEnv("MANAGER_PORT", 8080), "local HTTP port for the manager + portal binding [env: MANAGER_PORT]")
 	flags.StringVar(&flagName, "name", getEnv("MANAGER_NAME", "distributed-web-manager"), "lease display name [env: MANAGER_NAME]")
 	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.StringVar(&flagDescription, "description", getEnv("MANAGER_DESCRIPTION", "High-performance distributed web manager"), "lease description [env: MANAGER_DESCRIPTION]")
 	flags.StringVar(&flagOwner, "owner", getEnv("MANAGER_OWNER", "Distributed Manager"), "lease owner label [env: MANAGER_OWNER]")
 	flags.StringVar(&flagTags, "tags", getEnv("MANAGER_TAGS", "distributed,worker,manager"), "comma-separated tags [env: MANAGER_TAGS]")
-	flags.BoolVar(&flagHide, "hide", utils.ResolveBoolEnv(false, "MANAGER_HIDE"), "hide lease from listings [env: MANAGER_HIDE]")
-	flags.BoolVar(&flagDisableRelay, "disable-relay", utils.ResolveBoolEnv(false, "MANAGER_DISABLE_RELAY"), "skip portal registration; serve local HTTP only [env: MANAGER_DISABLE_RELAY]")
+	flags.BoolVar(&flagHide, "hide", ResolveBoolEnv(false, "MANAGER_HIDE"), "hide lease from listings [env: MANAGER_HIDE]")
+	flags.BoolVar(&flagDisableRelay, "disable-relay", ResolveBoolEnv(false, "MANAGER_DISABLE_RELAY"), "skip portal registration; serve local HTTP only [env: MANAGER_DISABLE_RELAY]")
+}
+
+func ResolveBoolEnv(fallback bool, envNames ...string) bool {
+	for _, envName := range envNames {
+		raw := strings.TrimSpace(os.Getenv(envName))
+		if raw == "" {
+			continue
+		}
+		parsed, err := strconv.ParseBool(raw)
+		if err != nil {
+			return fallback
+		}
+		return parsed
+	}
+	return fallback
 }
 
 type workerMetrics struct {
@@ -1047,10 +1062,9 @@ func runManagerCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:    utils.SplitCSV(flagServerURLs),
-		BanMITM:      flagBanMITM,
-		Discovery:    flagDiscovery,
-		Name:         flagName,
+		RelayURLs: utils.SplitCSV(flagServerURLs),
+		BanMITM:   flagBanMITM,
+		Discovery: flagDiscovery,
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
