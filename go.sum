@@ -160,6 +160,8 @@ github.com/gosuda/keyless_tls v0.0.2-0.20260507061030-5128be6b5008 h1:KuP/5VlPJw
 github.com/gosuda/keyless_tls v0.0.2-0.20260507061030-5128be6b5008/go.mod h1:BOhUZgiAAQzxKO3QcC4fCXgd/+lqxgIu1OyIYTqtta8=
 github.com/gosuda/portal-tunnel/v2 v2.2.5 h1:SsFh+stzqjYL7Lvx2LL0BWwEYsIHgx5z/a7Ba/EhEkA=
 github.com/gosuda/portal-tunnel/v2 v2.2.5/go.mod h1:ve6h+9FJMQbWGfLEPSWSvmw1MUrrlhdFCKmQ+KKfrPU=
+github.com/gosuda/portal-tunnel/v2 v2.3.0 h1:j2ckW3/GucX2GqxHSv3j5ILlDVQr9riPkV67fDeru9w=
+github.com/gosuda/portal-tunnel/v2 v2.3.0/go.mod h1:Jphr5sM8mBySmqLCfUNUDOjbPosXSsOKP79AOnXd/OY=
 github.com/gosuda/x402-facilitator v0.0.0-20260413025142-cb6c4794b9a5 h1:lFZ+IYBiGRrFgBJl0NX2u/KAAX3Epj2y3vkJnbYWdLg=
 github.com/gosuda/x402-facilitator v0.0.0-20260413025142-cb6c4794b9a5/go.mod h1:rcqknkHCWwkH9EIDlGAAIvAZkYv3U6q4wPvYKwt7ynU=
 github.com/grafana/pyroscope-go v1.2.7 h1:VWBBlqxjyR0Cwk2W6UrE8CdcdD80GOFNutj0Kb1T8ac=
