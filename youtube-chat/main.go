@@ -85,6 +85,7 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 	handler := stripPeer(baseHandler)
 
 	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+		Identity:     types.Identity{Name: flagName},
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,

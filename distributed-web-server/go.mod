@@ -6,7 +6,7 @@ replace github.com/gosuda/portal-tunnel/v2 => github.com/gosuda/portal-tunnel/v2
 
 require (
 	github.com/gabriel-vasile/mimetype v1.4.13
-	github.com/gosuda/portal-tunnel/v2 v2.1.5
+	github.com/gosuda/portal-tunnel/v2 v2.3.0
 	github.com/joho/godotenv v1.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/rs/zerolog v1.35.0
