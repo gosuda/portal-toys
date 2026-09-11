@@ -1,10 +1,10 @@
 ## Multi-stage build: Go binary + ffmpeg runtime
 
-FROM golang:1.25 AS build
+FROM golang:1.27 AS build
 WORKDIR /src
 
 # Copy Go module files and download deps first (better caching)
-COPY ../go.mod ../go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the rest of the repo (for go:embed and local packages)
@@ -12,7 +12,7 @@ COPY . .
 
 # Build static binary for linux
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -o /out/ffmpeg-converter .
+	go build -o /out/ffmpeg-converter ./ffmpeg-converter
 
 # Final image with ffmpeg installed
 FROM jrottenberg/ffmpeg:6.0-ubuntu
