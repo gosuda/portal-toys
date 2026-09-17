@@ -34,6 +34,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 )
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal demo: collaborative youtube chat (relay HTTP backend)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "YouTube Chat", "lease owner")
 	flags.StringVar(&flagTags, "tags", "chat,youtube", "comma-separated lease tags")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/42/YouTube_icon_%282013-2017%29.png/960px-YouTube_icon_%282013-2017%29.png", "thumbnail URL for this lease")
 }
 
 func main() {
@@ -92,6 +94,7 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,

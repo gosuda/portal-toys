@@ -37,6 +37,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 	flagAdminUIDs    []string
 )
 
@@ -55,6 +56,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", getEnv("CHAT_DESCRIPTION", "Portal demo chat"), "lease description (from env CHAT_DESCRIPTION if set)")
 	flags.StringVar(&flagOwner, "owner", getEnv("CHAT_OWNER", "Simple Chat"), "lease owner (from env CHAT_OWNER if set)")
 	flags.StringVar(&flagTags, "tags", getEnv("CHAT_TAGS", "chat,simple"), "comma-separated lease tags (from env CHAT_TAGS if set)")
+	flags.StringVar(&flagThumbnail, "thumbnail", getEnv("CHAT_THUMBNAIL", "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Chat-bubble-front-color.png/960px-Chat-bubble-front-color.png"), "thumbnail URL for this lease (from env CHAT_THUMBNAIL if set)")
 	flags.StringVar(&flagDataPath, "data-path", getEnv("CHAT_DATA_PATH", ""), "optional directory to persist chat history via PebbleDB (from env CHAT_DATA_PATH if set)")
 	flags.StringVar(&flagCredKey, "cred-key", getEnv("CHAT_CRED_KEY", ""), "optional credential key to use for the listener (base64 encoded) (from env CHAT_CRED_KEY if set)")
 	flags.StringSliceVar(&flagAdminUIDs, "admin-uid", getEnvSlice("CHAT_ADMIN_UIDS"), "comma-separated list of admin UIDs (from env CHAT_ADMIN_UIDS if set)")
@@ -125,6 +127,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
@@ -138,7 +141,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	}
 	localAddr := ""
 	if flagPort >= 0 {
-		localAddr = fmt.Sprintf("localhost:%d", flagPort)
+		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
 	err = sdk.RunHTTP(ctx, exposure, handler, localAddr)
 	hub.closeAll()
