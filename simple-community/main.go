@@ -70,7 +70,7 @@ func runCommunity(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -93,7 +93,7 @@ func runCommunity(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, router, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, router, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[community] shutdown complete")

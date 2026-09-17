@@ -60,7 +60,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[mafia] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -84,7 +84,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	mgr.Close()
 	if err != nil {
 		return err

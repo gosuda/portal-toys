@@ -59,7 +59,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	defer stop()
 
 	handler := NewHandler(flagName)
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -82,7 +82,7 @@ func runClient(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, handler, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, handler, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[client] shutdown complete")

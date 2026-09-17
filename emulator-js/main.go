@@ -75,7 +75,7 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	mux.Handle("/data/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 	mux.Handle("/docs/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -98,7 +98,7 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, mux, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, mux, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[emulatorjs] shutdown complete")

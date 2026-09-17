@@ -127,7 +127,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/ws", canvas.handleWS)
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -150,7 +150,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	canvas.closeAll()
 	canvas.wait()
 	if err != nil {

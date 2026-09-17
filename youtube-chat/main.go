@@ -84,7 +84,7 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 	}
 	handler := stripPeer(baseHandler)
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		Identity:     types.Identity{Name: flagName},
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
@@ -107,7 +107,7 @@ func runYouTubeChat(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, handler, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, handler, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[ytchat] shutdown complete")
