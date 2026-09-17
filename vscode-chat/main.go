@@ -89,7 +89,7 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 		req.Header.Set("X-Forwarded-Proto", "http")
 	}
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -108,7 +108,7 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 	if exposure != nil {
 		defer func() { _ = exposure.Close() }()
 	}
-	if err := exposure.RunHTTP(ctx, proxy, ""); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, proxy, ""); err != nil {
 		return err
 	}
 	log.Info().Msg("[vscode-relay] shutdown complete")

@@ -35,6 +35,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 )
 
 func init() {
@@ -49,6 +50,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal multiplayer tetris", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Tetris", "lease owner")
 	flags.StringVar(&flagTags, "tags", "game,tetris", "comma-separated lease tags")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Tetris_logo.png/960px-Tetris_logo.png", "thumbnail URL for this lease")
 }
 
 func main() {
@@ -129,7 +131,7 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	})
 	mux.Handle("/", staticFS)
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -137,6 +139,7 @@ func runTetris(cmd *cobra.Command, args []string) error {
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
@@ -152,7 +155,7 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	server.closeAll()
 	server.wait()
 	if err != nil {

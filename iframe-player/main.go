@@ -83,7 +83,7 @@ func runIframePlayer(cmd *cobra.Command, args []string) error {
 	}
 	handler := stripPeer(baseHandler)
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -106,7 +106,7 @@ func runIframePlayer(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, handler, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, handler, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[iframe] shutdown complete")

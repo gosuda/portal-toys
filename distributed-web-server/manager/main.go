@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
@@ -1061,7 +1062,7 @@ func runManagerCmd(cmd *cobra.Command, args []string) error {
 		return mgr.runLocal(ctx, handler, cfg.ListenAddr)
 	}
 
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -1085,7 +1086,7 @@ func runManagerCmd(cmd *cobra.Command, args []string) error {
 		Strs("workers", cfg.WorkerEndpoints).
 		Msg("manager registered with portal relay")
 
-	if err := exposure.RunHTTP(ctx, handler, cfg.ListenAddr); err != nil && !errors.Is(err, context.Canceled) {
+	if err := sdk.RunHTTP(ctx, exposure, handler, cfg.ListenAddr); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
 	logger.Info().Msg("manager shutdown complete")

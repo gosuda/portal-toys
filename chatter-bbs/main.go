@@ -68,7 +68,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	}
 	handler := NewHandler(displayAddr, flagName, func() string { return "Connected" })
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -87,7 +87,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	if exposure != nil {
 		defer func() { _ = exposure.Close() }()
 	}
-	if err := exposure.RunHTTP(ctx, handler, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, handler, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[chatter-bbs] shutdown complete")

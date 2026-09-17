@@ -11,12 +11,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gosuda/portal-tunnel/v2/portal/discovery"
+	"github.com/gosuda/portal-tunnel/v2/portal/identity"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 )
 
 const relayCompatibilityTimeout = 5 * time.Second
+
+// ExposeConfig carries the toy-facing exposure settings. Identity file
+// resolution and relay URL resolution happen here because sdk.Expose
+// expects an already-resolved identity (it never creates or persists
+// keys) and concrete relay URLs.
+type ExposeConfig struct {
+	RelayURLs    []string
+	Discovery    bool
+	BanMITM      bool
+	Identity     types.Identity
+	IdentityPath string
+	Metadata     types.LeaseMetadata
+}
 
 func ResolveBoolEnv(fallback bool, envNames ...string) bool {
 	for _, envName := range envNames {
@@ -34,12 +49,12 @@ func ResolveBoolEnv(fallback bool, envNames ...string) bool {
 }
 
 // ResolveRelayURLs expands the configured relay inputs using discovery.
-func ResolveRelayURLs(ctx context.Context, relayURLs []string, discovery bool, _ []byte) ([]string, error) {
+func ResolveRelayURLs(ctx context.Context, relayURLs []string, useDiscovery bool, _ []byte) ([]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	resolved, err := utils.ResolvePortalRelayURLs(relayURLs, discovery)
+	resolved, err := discovery.ResolveRelayURLs(relayURLs, useDiscovery)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +65,24 @@ func ResolveRelayURLs(ctx context.Context, relayURLs []string, discovery bool, _
 	return filterCompatibleRelayURLs(ctx, resolved)
 }
 
-func Expose(ctx context.Context, cfg sdk.ExposeConfig) (*sdk.Exposure, error) {
-	return sdk.Expose(ctx, cfg)
+// Expose resolves the toy identity and relay membership, then hands them
+// to the portal SDK.
+func Expose(ctx context.Context, cfg ExposeConfig) (*sdk.Exposure, error) {
+	listenerIdentity, err := identity.LoadOrCreate(cfg.Identity.Name, "", cfg.IdentityPath, "")
+	if err != nil {
+		return nil, fmt.Errorf("resolve identity: %w", err)
+	}
+
+	relayURLs, err := discovery.ResolveRelayURLs(cfg.RelayURLs, cfg.Discovery)
+	if err != nil {
+		return nil, err
+	}
+
+	opts := []sdk.Option{sdk.WithMetadata(cfg.Metadata)}
+	if cfg.BanMITM {
+		opts = append(opts, sdk.WithMITMProtection(true))
+	}
+	return sdk.Expose(ctx, listenerIdentity, relayURLs, opts...)
 }
 
 func filterCompatibleRelayURLs(ctx context.Context, relayURLs []string) ([]string, error) {
