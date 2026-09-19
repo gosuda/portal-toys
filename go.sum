@@ -175,10 +175,16 @@ github.com/gorilla/websocket v1.5.3 h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aN
 github.com/gorilla/websocket v1.5.3/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/gosuda/keyless_tls v0.0.2-0.20260507061030-5128be6b5008 h1:KuP/5VlPJwqZNyAV5U60C/j8Pc5O8ENkWPTgP7mEvj0=
 github.com/gosuda/keyless_tls v0.0.2-0.20260507061030-5128be6b5008/go.mod h1:BOhUZgiAAQzxKO3QcC4fCXgd/+lqxgIu1OyIYTqtta8=
+github.com/gosuda/keyless_tls v0.0.4-0.20260919135918-b58f4ae3ae41 h1:ijG3C9ff8d/i9ycKT1bupWczSb2SmKPseapa4Fn9biU=
+github.com/gosuda/keyless_tls v0.0.4-0.20260919135918-b58f4ae3ae41/go.mod h1:Kymj8rE/o2D0LVW3dMiXd14P9aVr0wx3oAWO4jBThYo=
 github.com/gosuda/portal-tunnel/v2 v2.4.0 h1:a/lLg67ri1Y5/MQQv2k/ew2GQBtBC/ZDDFRmLoNx+pA=
 github.com/gosuda/portal-tunnel/v2 v2.4.0/go.mod h1:Vhbe7G3GCulxXFHx1mcFQn0Q9tejYaK5tgzREFgLQjM=
+github.com/gosuda/portal-tunnel/v2 v2.4.4-0.20260919150855-ca52c7c907ec h1:2ncVKFNzI5dHkJ2tIkLfhbWaaPQn98WBjbY6p6cTdKI=
+github.com/gosuda/portal-tunnel/v2 v2.4.4-0.20260919150855-ca52c7c907ec/go.mod h1:tz6Z6Xii1TRMnk2Z4bv7wk3/mBuLWFZFeaS+mPuRZnk=
 github.com/gosuda/x402-facilitator v0.0.4 h1:EMW2xG6EVlphVYc2t7mIW7aimEkpjfIzwSpZ7I+VFx4=
 github.com/gosuda/x402-facilitator v0.0.4/go.mod h1:gTLrERyBeXt1BN6ax7INhx2WQnhfS/oE0MFZ8/l5Ra0=
+github.com/gosuda/x402-facilitator v0.0.5-0.20260918144508-4423ff00e0f5 h1:GCOTLWjAlY3Cnzn1NmhH5+YMUD1wyNiMn5Xq3tpfnkk=
+github.com/gosuda/x402-facilitator v0.0.5-0.20260918144508-4423ff00e0f5/go.mod h1:TW7ZCwpeo6gUcPoJKXEMSv+29HAzXmPHqvG21NIl0/g=
 github.com/grafana/pyroscope-go v1.2.7 h1:VWBBlqxjyR0Cwk2W6UrE8CdcdD80GOFNutj0Kb1T8ac=
 github.com/grafana/pyroscope-go v1.2.7/go.mod h1:o/bpSLiJYYP6HQtvcoVKiE9s5RiNgjYTj1DhiddP2Pc=
 github.com/grafana/pyroscope-go/godeltaprof v0.1.9 h1:c1Us8i6eSmkW+Ez05d3co8kasnuOY813tbMN8i/a3Og=

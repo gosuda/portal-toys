@@ -11,10 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/libp2p/go-libp2p"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var (

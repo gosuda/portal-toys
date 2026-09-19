@@ -9,10 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{

@@ -15,9 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 //go:embed static

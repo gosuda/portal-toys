@@ -7,12 +7,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -68,7 +69,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	}
 	handler := NewHandler(displayAddr, flagName, func() string { return "Connected" })
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -87,7 +88,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	if exposure != nil {
 		defer func() { _ = exposure.Close() }()
 	}
-	if err := exposure.RunHTTP(ctx, handler, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, handler, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[chatter-bbs] shutdown complete")

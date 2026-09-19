@@ -6,7 +6,7 @@ require (
 	github.com/cockroachdb/pebble/v2 v2.1.7
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/gorilla/websocket v1.5.3
-	github.com/gosuda/portal-tunnel/v2 v2.4.0
+	github.com/gosuda/portal-tunnel/v2 v2.4.4-0.20260919150855-ca52c7c907ec
 	github.com/joho/godotenv v1.5.1
 	github.com/libp2p/go-libp2p v0.48.0
 	github.com/multiformats/go-multiaddr v0.16.0
@@ -65,8 +65,8 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gosuda/keyless_tls v0.0.2-0.20260507061030-5128be6b5008 // indirect
-	github.com/gosuda/x402-facilitator v0.0.4 // indirect
+	github.com/gosuda/keyless_tls v0.0.4-0.20260919135918-b58f4ae3ae41 // indirect
+	github.com/gosuda/x402-facilitator v0.0.5-0.20260918144508-4423ff00e0f5 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

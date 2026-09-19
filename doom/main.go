@@ -9,12 +9,13 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -68,7 +69,7 @@ func runDoom(cmd *cobra.Command, args []string) error {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.Handle("/", withStaticHeaders(http.FileServer(http.FS(staticFS))))
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -91,7 +92,7 @@ func runDoom(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, mux, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, mux, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[doom] shutdown complete")

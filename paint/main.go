@@ -12,12 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -127,7 +128,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	mux.Handle("/", http.FileServer(http.FS(staticFS)))
 	mux.HandleFunc("/ws", canvas.handleWS)
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -150,7 +151,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	canvas.closeAll()
 	canvas.wait()
 	if err != nil {

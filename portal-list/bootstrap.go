@@ -10,11 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 const (
@@ -85,7 +86,7 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 		m.mu.Unlock()
 		return nil
 	}
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    []string{normalizedRelay},
 		BanMITM:      flagBanMITM,
 		Identity:     types.Identity{Name: name},

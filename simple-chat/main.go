@@ -9,13 +9,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -117,7 +118,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -140,7 +141,7 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf("localhost:%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, handler, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, handler, localAddr)
 	hub.closeAll()
 	hub.wait()
 	if store != nil {

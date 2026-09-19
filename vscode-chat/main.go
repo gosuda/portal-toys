@@ -11,12 +11,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
+
+	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -89,7 +90,7 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 		req.Header.Set("X-Forwarded-Proto", "http")
 	}
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
@@ -108,7 +109,7 @@ func runVSCodeRelay(cmd *cobra.Command, args []string) error {
 	if exposure != nil {
 		defer func() { _ = exposure.Close() }()
 	}
-	if err := exposure.RunHTTP(ctx, proxy, ""); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, proxy, ""); err != nil {
 		return err
 	}
 	log.Info().Msg("[vscode-relay] shutdown complete")
