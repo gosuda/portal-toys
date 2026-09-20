@@ -139,7 +139,9 @@ func runChat(cmd *cobra.Command, args []string) error {
 	}
 	localAddr := ""
 	if flagPort >= 0 {
-		localAddr = fmt.Sprintf("localhost:%d", flagPort)
+		// Bind all interfaces: a "localhost:%d" bind is unreachable through the
+		// docker port publish (container gets connections on its eth0 address).
+		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
 	err = sdk.RunHTTP(ctx, exposure, handler, localAddr)
 	hub.closeAll()
