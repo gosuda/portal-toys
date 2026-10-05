@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gosuda/portal-tunnel/v2/portal/discovery"
+	"github.com/gosuda/portal-tunnel/v2/portal/identity"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
@@ -34,12 +36,12 @@ func ResolveBoolEnv(fallback bool, envNames ...string) bool {
 }
 
 // ResolveRelayURLs expands the configured relay inputs using discovery.
-func ResolveRelayURLs(ctx context.Context, relayURLs []string, discovery bool, _ []byte) ([]string, error) {
+func ResolveRelayURLs(ctx context.Context, relayURLs []string, discoveryMode bool, _ []byte) ([]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	resolved, err := utils.ResolvePortalRelayURLs(relayURLs, discovery)
+	resolved, err := discovery.ResolveRelayURLs(relayURLs, discoveryMode)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +52,81 @@ func ResolveRelayURLs(ctx context.Context, relayURLs []string, discovery bool, _
 	return filterCompatibleRelayURLs(ctx, resolved)
 }
 
-func Expose(ctx context.Context, cfg sdk.ExposeConfig) (*sdk.Exposure, error) {
-	return sdk.Expose(ctx, cfg)
+type ExposeConfig struct {
+	RelayURLs       []string
+	Discovery       bool
+	Identity        types.Identity
+	IdentityPath    string
+	IdentityJSON    string
+	TargetAddr      string
+	UDPAddr         string
+	UDPEnabled      bool
+	TCPEnabled      bool
+	BanMITM         bool
+	MaxActiveRelays int
+	Metadata        types.LeaseMetadata
+}
+
+type Exposure struct {
+	*sdk.Exposure
+}
+
+func (e *Exposure) RunHTTP(ctx context.Context, handler http.Handler, localAddr string) error {
+	if e == nil || e.Exposure == nil {
+		return errors.New("portalapp: exposure is nil")
+	}
+	return sdk.RunHTTP(ctx, e.Exposure, handler, localAddr)
+}
+func (e *Exposure) ActiveRelayURLs() []string {
+	if e == nil || e.Exposure == nil {
+		return nil
+	}
+	return e.ActiveRelays()
+}
+
+func Expose(ctx context.Context, cfg ExposeConfig) (*Exposure, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	id := cfg.Identity
+	if strings.TrimSpace(id.Address) == "" ||
+		strings.TrimSpace(id.PublicKey) == "" ||
+		strings.TrimSpace(id.PrivateKey) == "" {
+		var err error
+		id, err = identity.LoadOrCreate(cfg.Identity.Name, cfg.TargetAddr, cfg.IdentityPath, cfg.IdentityJSON)
+		if err != nil {
+			return nil, fmt.Errorf("load or create identity: %w", err)
+		}
+	}
+
+	relays, err := ResolveRelayURLs(ctx, cfg.RelayURLs, cfg.Discovery, nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve relay urls: %w", err)
+	}
+
+	var opts []sdk.Option
+	if cfg.Discovery {
+		opts = append(opts, sdk.WithDiscovery(cfg.MaxActiveRelays))
+	}
+	if cfg.UDPEnabled {
+		opts = append(opts, sdk.WithUDP())
+	}
+	if cfg.TCPEnabled {
+		opts = append(opts, sdk.WithTCP())
+	}
+	if cfg.BanMITM {
+		opts = append(opts, sdk.WithMITMProtection(true))
+	}
+	if cfg.Metadata.Description != "" || len(cfg.Metadata.Tags) > 0 || cfg.Metadata.Owner != "" || cfg.Metadata.Hide || cfg.Metadata.Thumbnail != "" {
+		opts = append(opts, sdk.WithMetadata(cfg.Metadata))
+	}
+
+	rawExp, err := sdk.Expose(ctx, id, relays, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return &Exposure{Exposure: rawExp}, nil
 }
 
 func filterCompatibleRelayURLs(ctx context.Context, relayURLs []string) ([]string, error) {

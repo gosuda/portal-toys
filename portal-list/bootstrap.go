@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -33,7 +32,7 @@ type portalManager struct {
 
 type portalLease struct {
 	relay    string
-	exposure *sdk.Exposure
+	exposure *portalapp.Exposure
 }
 
 type siteFailureTracker struct {
@@ -85,7 +84,7 @@ func (m *portalManager) ConnectRelay(relayURL string, name, description string, 
 		m.mu.Unlock()
 		return nil
 	}
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    []string{normalizedRelay},
 		BanMITM:      flagBanMITM,
 		Identity:     types.Identity{Name: name},

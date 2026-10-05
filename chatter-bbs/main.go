@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -68,7 +67,7 @@ func runChatter(cmd *cobra.Command, args []string) error {
 	}
 	handler := NewHandler(displayAddr, flagName, func() string { return "Connected" })
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,

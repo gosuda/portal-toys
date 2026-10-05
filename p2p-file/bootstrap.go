@@ -18,7 +18,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -475,7 +474,7 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	if flagCredKey != "" {
 		log.Warn().Msg("p2p-file: --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    serverURLs,
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,

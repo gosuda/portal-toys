@@ -10,7 +10,6 @@ import (
 	"syscall"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
-	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -75,7 +74,7 @@ func runEmulator(cmd *cobra.Command, args []string) error {
 	mux.Handle("/data/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 	mux.Handle("/docs/", withStaticHeaders(http.FileServer(http.FS(emulatorAssets))))
 
-	exposure, err := portalapp.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
