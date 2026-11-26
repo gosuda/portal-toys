@@ -492,7 +492,7 @@ func startPortalBridge(ctx context.Context, handler http.Handler, errCh chan<- e
 	}
 	log.Info().
 		Str("name", flagPortalName).
-		Strs("servers", exposure.ActiveRelayURLs()).
+		Strs("servers", exposure.ActiveRelays()).
 		Msg("serving Portal relay")
 	go func() {
 		if err := http.Serve(exposure, handler); err != nil && err != http.ErrServerClosed {

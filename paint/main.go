@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -36,6 +37,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 )
 
 func init() {
@@ -50,6 +52,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal demo: collaborative paint", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Paint", "lease owner")
 	flags.StringVar(&flagTags, "tags", "collab,paint", "comma-separated lease tags")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2f/Paint_palette_icon_from_the_Noun_Project.svg/960px-Paint_palette_icon_from_the_Noun_Project.svg.png", "thumbnail URL for this lease")
 }
 
 func main() {
@@ -134,6 +137,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
@@ -149,7 +153,7 @@ func runPaint(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	canvas.closeAll()
 	canvas.wait()
 	if err != nil {

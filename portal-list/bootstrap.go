@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -32,7 +33,7 @@ type portalManager struct {
 
 type portalLease struct {
 	relay    string
-	exposure *portalapp.Exposure
+	exposure *sdk.Exposure
 }
 
 type siteFailureTracker struct {

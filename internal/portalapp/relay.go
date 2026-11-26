@@ -67,24 +67,7 @@ type ExposeConfig struct {
 	Metadata        types.LeaseMetadata
 }
 
-type Exposure struct {
-	*sdk.Exposure
-}
-
-func (e *Exposure) RunHTTP(ctx context.Context, handler http.Handler, localAddr string) error {
-	if e == nil || e.Exposure == nil {
-		return errors.New("portalapp: exposure is nil")
-	}
-	return sdk.RunHTTP(ctx, e.Exposure, handler, localAddr)
-}
-func (e *Exposure) ActiveRelayURLs() []string {
-	if e == nil || e.Exposure == nil {
-		return nil
-	}
-	return e.ActiveRelays()
-}
-
-func Expose(ctx context.Context, cfg ExposeConfig) (*Exposure, error) {
+func Expose(ctx context.Context, cfg ExposeConfig) (*sdk.Exposure, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -100,7 +83,9 @@ func Expose(ctx context.Context, cfg ExposeConfig) (*Exposure, error) {
 		}
 	}
 
-	relays, err := ResolveRelayURLs(ctx, cfg.RelayURLs, cfg.Discovery, nil)
+	// Only configured relays are explicit. The SDK owns bootstrap discovery
+	// and applies MaxActiveRelays to auto-selected candidates.
+	relays, err := ResolveRelayURLs(ctx, cfg.RelayURLs, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("resolve relay urls: %w", err)
 	}
@@ -122,11 +107,7 @@ func Expose(ctx context.Context, cfg ExposeConfig) (*Exposure, error) {
 		opts = append(opts, sdk.WithMetadata(cfg.Metadata))
 	}
 
-	rawExp, err := sdk.Expose(ctx, id, relays, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &Exposure{Exposure: rawExp}, nil
+	return sdk.Expose(ctx, id, relays, opts...)
 }
 
 func filterCompatibleRelayURLs(ctx context.Context, relayURLs []string) ([]string, error) {

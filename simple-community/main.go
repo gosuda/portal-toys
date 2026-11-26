@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
@@ -92,7 +93,7 @@ func runCommunity(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	if err := exposure.RunHTTP(ctx, router, localAddr); err != nil {
+	if err := sdk.RunHTTP(ctx, exposure, router, localAddr); err != nil {
 		return err
 	}
 	log.Info().Msg("[community] shutdown complete")
