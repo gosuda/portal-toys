@@ -20,19 +20,6 @@ import (
 
 const relayCompatibilityTimeout = 5 * time.Second
 
-// ExposeConfig carries the toy-facing exposure settings. Identity file
-// resolution and relay URL resolution happen here because sdk.Expose
-// expects an already-resolved identity (it never creates or persists
-// keys) and concrete relay URLs.
-type ExposeConfig struct {
-	RelayURLs    []string
-	Discovery    bool
-	BanMITM      bool
-	Identity     types.Identity
-	IdentityPath string
-	Metadata     types.LeaseMetadata
-}
-
 func ResolveBoolEnv(fallback bool, envNames ...string) bool {
 	for _, envName := range envNames {
 		raw := strings.TrimSpace(os.Getenv(envName))
@@ -49,12 +36,12 @@ func ResolveBoolEnv(fallback bool, envNames ...string) bool {
 }
 
 // ResolveRelayURLs expands the configured relay inputs using discovery.
-func ResolveRelayURLs(ctx context.Context, relayURLs []string, useDiscovery bool, _ []byte) ([]string, error) {
+func ResolveRelayURLs(ctx context.Context, relayURLs []string, discoveryMode bool, _ []byte) ([]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	resolved, err := discovery.ResolveRelayURLs(relayURLs, useDiscovery)
+	resolved, err := discovery.ResolveRelayURLs(relayURLs, discoveryMode)
 	if err != nil {
 		return nil, err
 	}
@@ -65,24 +52,62 @@ func ResolveRelayURLs(ctx context.Context, relayURLs []string, useDiscovery bool
 	return filterCompatibleRelayURLs(ctx, resolved)
 }
 
-// Expose resolves the toy identity and relay membership, then hands them
-// to the portal SDK.
+type ExposeConfig struct {
+	RelayURLs       []string
+	Discovery       bool
+	Identity        types.Identity
+	IdentityPath    string
+	IdentityJSON    string
+	TargetAddr      string
+	UDPAddr         string
+	UDPEnabled      bool
+	TCPEnabled      bool
+	BanMITM         bool
+	MaxActiveRelays int
+	Metadata        types.LeaseMetadata
+}
+
 func Expose(ctx context.Context, cfg ExposeConfig) (*sdk.Exposure, error) {
-	listenerIdentity, err := identity.LoadOrCreate(cfg.Identity.Name, "", cfg.IdentityPath, "")
-	if err != nil {
-		return nil, fmt.Errorf("resolve identity: %w", err)
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
-	relayURLs, err := discovery.ResolveRelayURLs(cfg.RelayURLs, cfg.Discovery)
-	if err != nil {
-		return nil, err
+	id := cfg.Identity
+	if strings.TrimSpace(id.Address) == "" ||
+		strings.TrimSpace(id.PublicKey) == "" ||
+		strings.TrimSpace(id.PrivateKey) == "" {
+		var err error
+		id, err = identity.LoadOrCreate(cfg.Identity.Name, cfg.TargetAddr, cfg.IdentityPath, cfg.IdentityJSON)
+		if err != nil {
+			return nil, fmt.Errorf("load or create identity: %w", err)
+		}
 	}
 
-	opts := []sdk.Option{sdk.WithMetadata(cfg.Metadata)}
+	// Only configured relays are explicit. The SDK owns bootstrap discovery
+	// and applies MaxActiveRelays to auto-selected candidates.
+	relays, err := ResolveRelayURLs(ctx, cfg.RelayURLs, false, nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve relay urls: %w", err)
+	}
+
+	var opts []sdk.Option
+	if cfg.Discovery {
+		opts = append(opts, sdk.WithDiscovery(cfg.MaxActiveRelays))
+	}
+	if cfg.UDPEnabled {
+		opts = append(opts, sdk.WithUDP())
+	}
+	if cfg.TCPEnabled {
+		opts = append(opts, sdk.WithTCP())
+	}
 	if cfg.BanMITM {
 		opts = append(opts, sdk.WithMITMProtection(true))
 	}
-	return sdk.Expose(ctx, listenerIdentity, relayURLs, opts...)
+	if cfg.Metadata.Description != "" || len(cfg.Metadata.Tags) > 0 || cfg.Metadata.Owner != "" || cfg.Metadata.Hide || cfg.Metadata.Thumbnail != "" {
+		opts = append(opts, sdk.WithMetadata(cfg.Metadata))
+	}
+
+	return sdk.Expose(ctx, id, relays, opts...)
 }
 
 func filterCompatibleRelayURLs(ctx context.Context, relayURLs []string) ([]string, error) {
