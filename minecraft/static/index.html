@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minecraft Server — Portal Toy</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .container {
+    background: #16213e;
+    border: 2px solid #0f3460;
+    border-radius: 8px;
+    padding: 32px;
+    max-width: 480px;
+    width: 90%;
+  }
+  h1 {
+    color: #53a653;
+    font-size: 20px;
+    margin-bottom: 24px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .status-badge.online { background: #2d6a2d; color: #7cfc7c; }
+  .status-badge.offline { background: #6a2d2d; color: #fc7c7c; }
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #0f3460;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { color: #8888aa; font-size: 13px; }
+  .info-value { color: #e0e0e0; font-size: 14px; font-weight: bold; }
+  .connect-box {
+    margin-top: 20px;
+    background: #0f3460;
+    border-radius: 6px;
+    padding: 16px;
+    text-align: center;
+  }
+  .connect-label { color: #8888aa; font-size: 12px; margin-bottom: 8px; }
+  .connect-addr {
+    color: #53a653;
+    font-size: 18px;
+    font-weight: bold;
+    word-break: break-all;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: background 0.2s;
+  }
+  .connect-addr:hover { background: #1a1a3e; }
+  .copy-hint { color: #666; font-size: 11px; margin-top: 6px; }
+  .copied { color: #53a653 !important; }
+  .error-msg { color: #fc7c7c; font-size: 13px; margin-top: 8px; text-align: center; }
+  .loading { color: #8888aa; text-align: center; padding: 40px 0; }
+  .motd { color: #aaaacc; font-style: italic; }
+  .server-icon {
+    width: 64px;
+    height: 64px;
+    image-rendering: pixelated;
+    border-radius: 4px;
+    border: 2px solid #0f3460;
+  }
+  .header-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #0f3460;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>&#9878; Minecraft Server</h1>
+  <div id="content">
+    <div class="loading">Loading server status...</div>
+  </div>
+</div>
+<script>
+async function loadStatus() {
+  const el = document.getElementById('content');
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    if (data.online) {
+      el.innerHTML = `
+        ${data.favicon ? `
+        <div class="header-row">
+          <img class="server-icon" src="${data.favicon}" alt="Server Icon">
+          <div>
+            <div class="status-badge online">Online</div>
+            <div class="motd" style="margin-top:6px">${esc(data.motd || 'N/A')}</div>
+          </div>
+        </div>` : `
+        <div class="info-row">
+          <span class="info-label">Status</span>
+          <span class="status-badge online">Online</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">MOTD</span>
+          <span class="info-value motd">${esc(data.motd || 'N/A')}</span>
+        </div>`}
+        <div class="info-row">
+          <span class="info-label">Players</span>
+          <span class="info-value">${data.players} / ${data.max_players}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Version</span>
+          <span class="info-value">${esc(data.version || 'N/A')}</span>
+        </div>
+        ${data.tcp_addr ? `
+        <div class="connect-box">
+          <div class="connect-label">Server Address</div>
+          <div class="connect-addr" onclick="copyAddr(this)" title="Click to copy">${esc(data.tcp_addr)}</div>
+          <div class="copy-hint" id="copy-hint">Click to copy</div>
+        </div>` : ''}
+      `;
+    } else {
+      el.innerHTML = `
+        <div class="info-row">
+          <span class="info-label">Status</span>
+          <span class="status-badge offline">Offline</span>
+        </div>
+        <div class="error-msg">${esc(data.error || 'Server is not responding')}</div>
+        ${data.tcp_addr ? `
+        <div class="connect-box">
+          <div class="connect-label">Server Address (when online)</div>
+          <div class="connect-addr" onclick="copyAddr(this)" title="Click to copy">${esc(data.tcp_addr)}</div>
+          <div class="copy-hint" id="copy-hint">Click to copy</div>
+        </div>` : ''}
+      `;
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="error-msg">Failed to load status: ${esc(e.message)}</div>`;
+  }
+}
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+function copyAddr(el) {
+  navigator.clipboard.writeText(el.textContent.trim()).then(() => {
+    const hint = document.getElementById('copy-hint');
+    if (hint) { hint.textContent = 'Copied!'; hint.classList.add('copied'); }
+    setTimeout(() => {
+      if (hint) { hint.textContent = 'Click to copy'; hint.classList.remove('copied'); }
+    }, 2000);
+  });
+}
+loadStatus();
+</script>
+</body>
+</html>
