@@ -15,7 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 )
 
@@ -30,9 +31,9 @@ func NewHandler() http.Handler {
 
 	// info (for UI)
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
-		relayURLs, err := utils.ResolvePortalRelayURLs(context.Background(), utils.SplitCSV(flagServerURLs), flagDiscovery)
+		relayURLs, err := portalapp.ResolveRelayURLs(context.Background(), utils.SplitCSV(flagServerURLs), flagDiscovery, nil)
 		if err != nil {
-			relayURLs = utils.SplitCSV(flagServerURLs)
+			relayURLs = []string{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{

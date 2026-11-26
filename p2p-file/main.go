@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/libp2p/go-libp2p"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -52,8 +52,8 @@ func init() {
 	flags.BoolVar(&flagAgentMode, "agent", false, "run as headless libp2p agent (no HTTP UI)")
 	flags.StringSliceVar(&flagP2PListen, "p2p-listen", []string{"/ip4/0.0.0.0/tcp/0"}, "libp2p listen multiaddrs (repeatable)")
 	flags.StringVar(&flagServerURLs, "server-url", defaultRelayList(), "relayserver base URL(s); repeat or comma-separated (from env PORTAL_RELAY/RELAY/RELAY_URL/SERVER_URL)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.StringVar(&flagPortalName, "name", "p2p-file", "Portal lease display name")
 	flags.StringVar(&flagPortalIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
 	flags.BoolVar(&flagPortalHide, "hide", false, "hide this lease from portal listings")

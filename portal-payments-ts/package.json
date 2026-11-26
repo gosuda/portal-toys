@@ -1,0 +1,21 @@
+{
+  "name": "portal-payments-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "dev:tunnel": "bash scripts/dev-tunnel.sh",
+    "dev:tunnel:mainnet": "bash scripts/dev-tunnel.sh --mainnet",
+    "tunnel:testnet": "bash scripts/dev-tunnel.sh",
+    "tunnel:mainnet": "bash scripts/dev-tunnel.sh --mainnet",
+    "expose:testnet": "portal expose --name portal-payments-ts --http-route \"/paid=http://127.0.0.1:3000/paid GET:0.01\" --http-route \"/api=http://127.0.0.1:3000/api\" --http-route \"/=http://127.0.0.1:3000\" --x402-testnet --x402-pay-to",
+    "expose:mainnet": "portal expose --name portal-payments-ts --http-route \"/paid=http://127.0.0.1:3000/paid GET:0.01\" --http-route \"/api=http://127.0.0.1:3000/api\" --http-route \"/=http://127.0.0.1:3000\" --x402-pay-to"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

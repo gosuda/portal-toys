@@ -1,4 +1,5 @@
 #include "utils.h"
+#include "memory.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,11 @@ char *read_file_content(const char *path) {
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *buf = malloc(len + 1);
+    char *buf = cev_mem_alloc(len + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
     fread(buf, 1, len, f);
     buf[len] = '\0';
     fclose(f);

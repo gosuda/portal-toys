@@ -26,6 +26,12 @@ make                 # builds ./server
 ```
 Feel free to customize `docker-compose.yml` or `Makefile` if you’re targeting something exotic.
 
+### Systemd install (apt-based distros)
+```bash
+sudo ./install.sh
+```
+This script mirrors the Docker build steps on the host, installs the binary + assets into `/opt/ceversi`, and drops a `ceversi.service` unit so `systemd` keeps it alive. Manage it with `systemctl status|restart ceversi.service` and tail logs via `journalctl -u ceversi.service -f`.
+
 ## Project Map
 - `src/` – the C engine (handlers, utils, DB glue).
 - `public/` + `index.html` – the chill front-end.

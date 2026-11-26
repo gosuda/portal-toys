@@ -10,9 +10,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -34,13 +35,14 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 )
 
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", os.Getenv("RELAY"), "relay base URL(s); repeat or comma-separated (from env RELAY/RELAY_URL if set)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(false, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(false, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 3000, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", "example-tetris", "backend display name")
 	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
@@ -48,6 +50,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal multiplayer tetris", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Tetris", "lease owner")
 	flags.StringVar(&flagTags, "tags", "game,tetris", "comma-separated lease tags")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/46/Tetris_logo.png/960px-Tetris_logo.png", "thumbnail URL for this lease")
 }
 
 func main() {
@@ -128,14 +131,15 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	})
 	mux.Handle("/", staticFS)
 
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
-		Name:         flagName,
+		Identity:     types.Identity{Name: flagName},
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
@@ -151,7 +155,7 @@ func runTetris(cmd *cobra.Command, args []string) error {
 	if flagPort >= 0 {
 		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, mux, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, mux, localAddr)
 	server.closeAll()
 	server.wait()
 	if err != nil {

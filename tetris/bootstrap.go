@@ -236,15 +236,15 @@ func (r *Room) broadcast(msg Message) {
 	}
 }
 
-func (r *Room) broadcastRoomState() {
+func (r *Room) snapshotStateMessage(messageType string) Message {
 	r.mu.RLock()
 	players := r.getPlayerStates()
 	inGame := r.inGame
 	hostID := r.hostID
 	r.mu.RUnlock()
 
-	msg := Message{
-		Type:    "roomState",
+	return Message{
+		Type:    messageType,
 		Players: players,
 		Room: &RoomInfo{
 			ID:          r.id,
@@ -256,8 +256,10 @@ func (r *Room) broadcastRoomState() {
 			Players:     players,
 		},
 	}
+}
 
-	r.broadcast(msg)
+func (r *Room) broadcastRoomState() {
+	r.broadcast(r.snapshotStateMessage("roomState"))
 }
 
 func (r *Room) checkAllReady() bool {
@@ -301,7 +303,9 @@ func (r *Room) startGame() {
 	}
 	r.mu.Unlock()
 
-	r.broadcast(Message{Type: "gameStart"})
+	// Include the fresh room/player snapshot in gameStart so clients can begin
+	// even if the follow-up roomState is delayed.
+	r.broadcast(r.snapshotStateMessage("gameStart"))
 	r.broadcastRoomState()
 }
 

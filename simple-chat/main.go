@@ -9,9 +9,10 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
@@ -36,6 +37,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 	flagAdminUIDs    []string
 )
 
@@ -45,8 +47,8 @@ func init() {
 
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relayserver base URL(s); repeat or comma-separated (from env RELAY if set)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "include registry relays and enable relay discovery [env: DISCOVERY, DEFAULT_RELAYS]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay when MITM self-probe detects TLS termination [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 3005, "optional local HTTP port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("CHAT_NAME", "simple-chat-demo"), "backend display name (from env CHAT_NAME if set)")
 	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "optional path to load/save the portal identity")
@@ -54,6 +56,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", getEnv("CHAT_DESCRIPTION", "Portal demo chat"), "lease description (from env CHAT_DESCRIPTION if set)")
 	flags.StringVar(&flagOwner, "owner", getEnv("CHAT_OWNER", "Simple Chat"), "lease owner (from env CHAT_OWNER if set)")
 	flags.StringVar(&flagTags, "tags", getEnv("CHAT_TAGS", "chat,simple"), "comma-separated lease tags (from env CHAT_TAGS if set)")
+	flags.StringVar(&flagThumbnail, "thumbnail", getEnv("CHAT_THUMBNAIL", "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1f/Chat-bubble-front-color.png/960px-Chat-bubble-front-color.png"), "thumbnail URL for this lease (from env CHAT_THUMBNAIL if set)")
 	flags.StringVar(&flagDataPath, "data-path", getEnv("CHAT_DATA_PATH", ""), "optional directory to persist chat history via PebbleDB (from env CHAT_DATA_PATH if set)")
 	flags.StringVar(&flagCredKey, "cred-key", getEnv("CHAT_CRED_KEY", ""), "optional credential key to use for the listener (base64 encoded) (from env CHAT_CRED_KEY if set)")
 	flags.StringSliceVar(&flagAdminUIDs, "admin-uid", getEnvSlice("CHAT_ADMIN_UIDS"), "comma-separated list of admin UIDs (from env CHAT_ADMIN_UIDS if set)")
@@ -116,14 +119,15 @@ func runChat(cmd *cobra.Command, args []string) error {
 	if flagCredKey != "" {
 		log.Warn().Msg("[chat] --cred-key is no longer supported with the current portal SDK and will be ignored")
 	}
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
+	exposure, err := portalapp.Expose(ctx, portalapp.ExposeConfig{
 		RelayURLs:    utils.SplitCSV(flagServerURLs),
 		BanMITM:      flagBanMITM,
 		Discovery:    flagDiscovery,
-		Name:         flagName,
+		Identity:     types.Identity{Name: flagName},
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
@@ -137,9 +141,9 @@ func runChat(cmd *cobra.Command, args []string) error {
 	}
 	localAddr := ""
 	if flagPort >= 0 {
-		localAddr = fmt.Sprintf("localhost:%d", flagPort)
+		localAddr = fmt.Sprintf(":%d", flagPort)
 	}
-	err = exposure.RunHTTP(ctx, handler, localAddr)
+	err = sdk.RunHTTP(ctx, exposure, handler, localAddr)
 	hub.closeAll()
 	hub.wait()
 	if store != nil {

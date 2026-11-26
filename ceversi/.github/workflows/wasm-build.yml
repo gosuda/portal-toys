@@ -1,0 +1,30 @@
+name: Build Betting WASM
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang
+
+      - name: Build wasm
+        run: make wasm
+
+      - name: Verify JS syntax
+        run: node --check public/script.js
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: betting-logic-wasm
+          path: public/betting_logic.wasm

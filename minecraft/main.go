@@ -14,9 +14,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gosuda/portal/v2/sdk"
-	"github.com/gosuda/portal/v2/types"
-	"github.com/gosuda/portal/v2/utils"
+	"github.com/gosuda/portal-toys/internal/portalapp"
+	"github.com/gosuda/portal-tunnel/v2/portal/identity"
+	"github.com/gosuda/portal-tunnel/v2/sdk"
+	"github.com/gosuda/portal-tunnel/v2/types"
+	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 )
@@ -45,8 +47,8 @@ var (
 func init() {
 	flags := rootCmd.PersistentFlags()
 	flags.StringVar(&flagServerURLs, "server-url", getEnv("RELAY", ""), "relay base URL(s); comma-separated (env: RELAY)")
-	flags.BoolVar(&flagDiscovery, "discovery", utils.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "enable relay discovery [env: DISCOVERY]")
-	flags.BoolVar(&flagBanMITM, "ban-mitm", utils.ResolveBoolEnv(false, "BAN_MITM"), "ban relay on MITM detection [env: BAN_MITM]")
+	flags.BoolVar(&flagDiscovery, "discovery", portalapp.ResolveBoolEnv(true, "DISCOVERY", "DEFAULT_RELAYS"), "enable relay discovery [env: DISCOVERY]")
+	flags.BoolVar(&flagBanMITM, "ban-mitm", portalapp.ResolveBoolEnv(false, "BAN_MITM"), "ban relay on MITM detection [env: BAN_MITM]")
 	flags.IntVar(&flagPort, "port", 3000, "local HTTP dashboard port (negative to disable)")
 	flags.StringVar(&flagName, "name", getEnv("MC_NAME", "minecraft"), "service display name (env: MC_NAME)")
 	flags.StringVar(&flagIdentityPath, "identity-path", "identity.json", "path to load/save portal identity")
@@ -90,22 +92,26 @@ func runMinecraft(cmd *cobra.Command, args []string) error {
 		}()
 	}
 
-	// Expose via portal SDK with TCP port routing
-	exposure, err := sdk.Expose(ctx, sdk.ExposeConfig{
-		RelayURLs:    utils.SplitCSV(flagServerURLs),
-		TCPEnabled:   true,
-		TargetAddr:   flagMCAddr,
-		Discovery:    flagDiscovery,
-		BanMITM:      flagBanMITM,
-		Name:         flagName,
-		IdentityPath: flagIdentityPath,
-		Metadata: types.LeaseMetadata{
+	// Expose via the current SDK. Identity persistence belongs to the caller;
+	// the SDK owns TCP allocation and discovered relay membership.
+	listenerIdentity, err := identity.LoadOrCreate(flagName, flagMCAddr, flagIdentityPath, "")
+	if err != nil {
+		return fmt.Errorf("resolve identity: %w", err)
+	}
+	opts := []sdk.Option{
+		sdk.WithTCP(),
+		sdk.WithMITMProtection(flagBanMITM),
+		sdk.WithMetadata(types.LeaseMetadata{
 			Description: flagDescription,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
-		},
-	})
+		}),
+	}
+	if flagDiscovery {
+		opts = append(opts, sdk.WithDiscovery(0))
+	}
+	exposure, err := sdk.Expose(ctx, listenerIdentity, utils.SplitCSV(flagServerURLs), opts...)
 	if err != nil {
 		return fmt.Errorf("expose: %w", err)
 	}
@@ -118,7 +124,7 @@ func runMinecraft(cmd *cobra.Command, args []string) error {
 	log.Info().
 		Str("mc_addr", flagMCAddr).
 		Str("tcp_addr", flagTCPAddr).
-		Strs("relays", exposure.ActiveRelayURLs()).
+		Strs("relays", exposure.ActiveRelays()).
 		Msg("[minecraft] portal tunnel started; proxying MC connections")
 
 	// Close exposure on context cancellation

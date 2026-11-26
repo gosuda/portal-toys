@@ -1,0 +1,6 @@
+.git
+bin
+logs
+run
+**/node_modules
+**/*.log

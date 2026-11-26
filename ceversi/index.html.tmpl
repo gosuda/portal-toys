@@ -16,8 +16,9 @@
             </div>
             
             <div class="nav-links">
-                <a href="#" class="active" onclick="showView('lobby')">Play</a>
-                <a href="#" onclick="showRankings()">Rank</a>
+                <a id="nav-play" href="#" class="active" onclick="showView('lobby'); return false;">Play</a>
+                <a id="nav-rank" href="#" onclick="showRankings(); return false;">Rank</a>
+                <a id="nav-betting" href="#" onclick="showBettingZone(); return false;">Betting</a>
                 
                 <div id="auth-controls">
                     <button class="btn btn-primary btn-sm" onclick="showAuthModal()">Login</button>
@@ -62,6 +63,10 @@
                             <button class="btn btn-primary" onclick="startLocalGame('othello')">Othello</button>
                             <button class="btn btn-outline" onclick="startLocalGame('reversi')">Reversi</button>
                         </div>
+                        <div class="form-group">
+                            <label>SinglePlayer Sessions</label>
+                            <div id="single-session-list" style="font-size:0.85rem; color:var(--text-secondary);">Loading singleplayer sessions...</div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -76,6 +81,10 @@
                         <div class="button-group">
                             <button class="btn btn-primary" onclick="startMultiplayerGame('othello')">Join Othello</button>
                             <button class="btn btn-outline" onclick="startMultiplayerGame('reversi')">Join Reversi</button>
+                        </div>
+                        <div class="form-group">
+                            <label>Multiplayer Rooms</label>
+                            <div id="multi-session-list" style="font-size:0.85rem; color:var(--text-secondary);">Loading rooms...</div>
                         </div>
                     </div>
                 </div>
@@ -99,6 +108,63 @@
                     </table>
                 </div>
                 <div style="margin-top: 1rem; text-align: center;">
+                    <button class="btn btn-outline" onclick="showView('lobby')">Back</button>
+                </div>
+            </div>
+
+
+            <div id="betting-zone" class="view-container hidden">
+                <div class="hero-section">
+                    <h2>Betting Zone</h2>
+                    <p>Virtual money starts at 1000 points. Auto reset only when points reach -1000.</p>
+                </div>
+                <div class="card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+                        <div>
+                            <strong>My Points:</strong> <span id="betting-points">-</span>
+                        </div>
+                    </div>
+                    <div style="margin-top:1rem;font-size:0.85rem;color:var(--text-secondary);">10 slots total (4 Easy / 3 Medium / 3 Hard). Slots stay fixed until server reset.</div>
+                    <div id="betting-slots" style="margin-top:1rem; display:grid; gap:0.8rem;"></div>
+                    <div style="margin-top:1rem;">
+                        <h3 style="margin-bottom:0.6rem;">Betting Point Rank</h3>
+                        <table style="width:100%; text-align:left; border-collapse:collapse;">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--border-color);">
+                                    <th style="padding:8px;">Rank</th>
+                                    <th style="padding:8px;">Identity</th>
+                                    <th style="padding:8px;">Points</th>
+                                </tr>
+                            </thead>
+                            <tbody id="betting-rankings-body"></tbody>
+                        </table>
+                    </div>
+                    <div style="margin-top:1rem;">
+                        <h3 style="margin-bottom:0.6rem;">Multiplayer Prediction Bet</h3>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                            <input type="number" id="mp-bet-room" min="1" placeholder="Room" style="max-width:90px;">
+                            <input type="number" id="mp-bet-amount" min="1" value="100" style="max-width:100px;">
+                            <button class="btn btn-primary btn-sm" onclick="placeMultiplayerBet(1)">Bet P1</button>
+                            <button class="btn btn-outline btn-sm" onclick="placeMultiplayerBet(2)">Bet P2</button>
+                            <button class="btn btn-outline btn-sm" onclick="loadMultiplayerBetHistory()">Refresh History</button>
+                        </div>
+                        <div id="mp-bet-preview" style="margin-top:0.5rem;font-size:0.85rem;color:var(--text-secondary);">
+                            예상 포인트 변동을 표시합니다.
+                        </div>
+                        <table style="width:100%; margin-top:0.7rem; text-align:left; border-collapse:collapse;">
+                            <thead>
+                                <tr style="border-bottom:1px solid var(--border-color);">
+                                    <th style="padding:6px;">Room</th>
+                                    <th style="padding:6px;">Target</th>
+                                    <th style="padding:6px;">Amount</th>
+                                    <th style="padding:6px;">Settled</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mp-bet-history-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div style="margin-top:1rem; text-align:center;">
                     <button class="btn btn-outline" onclick="showView('lobby')">Back</button>
                 </div>
             </div>
