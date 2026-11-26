@@ -5,10 +5,41 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/gosuda/portal-tunnel/v2/portal/identity"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	portalutils "github.com/gosuda/portal-tunnel/v2/utils"
 )
+
+func TestExposeLeavesBootstrapSelectionToDiscovery(t *testing.T) {
+	// An unverified bootstrap must remain a discovery candidate, not an
+	// explicit listener that bypasses MaxActiveRelays.
+	bootstrap := httptest.NewTLSServer(http.NotFoundHandler())
+	t.Cleanup(bootstrap.Close)
+	previous := types.BootstrapRelays
+	types.BootstrapRelays = []string{bootstrap.URL}
+	t.Cleanup(func() { types.BootstrapRelays = previous })
+
+	id, err := identity.Generate("discovery-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	exposure, err := Expose(ctx, ExposeConfig{
+		Identity:        id,
+		Discovery:       true,
+		MaxActiveRelays: 1,
+	})
+	if err != nil {
+		t.Fatalf("Expose() error = %v", err)
+	}
+	defer exposure.Close()
+	if relays := exposure.Relays(); len(relays) != 0 {
+		t.Fatalf("unverified bootstrap became an explicit listener: %+v", relays)
+	}
+}
 
 func TestResolveRelayURLsFiltersIncompatibleRelays(t *testing.T) {
 	t.Parallel()

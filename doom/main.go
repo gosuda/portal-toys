@@ -9,13 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/gosuda/portal-toys/internal/portalapp"
 	"github.com/gosuda/portal-tunnel/v2/sdk"
 	"github.com/gosuda/portal-tunnel/v2/types"
 	"github.com/gosuda/portal-tunnel/v2/utils"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
-
-	"github.com/gosuda/portal-toys/internal/portalapp"
 )
 
 var rootCmd = &cobra.Command{
@@ -35,6 +34,7 @@ var (
 	flagDescription  string
 	flagTags         string
 	flagOwner        string
+	flagThumbnail    string
 )
 
 func init() {
@@ -49,6 +49,7 @@ func init() {
 	flags.StringVar(&flagDescription, "description", "Portal demo: Doom (served over portal HTTP backend)", "lease description")
 	flags.StringVar(&flagOwner, "owner", "Doom", "lease owner")
 	flags.StringVar(&flagTags, "tags", "game,doom", "comma-separated lease tags")
+	flags.StringVar(&flagThumbnail, "thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Doom_logo.png/960px-Doom_logo.png", "thumbnail URL for this lease")
 }
 
 func main() {
@@ -77,6 +78,7 @@ func runDoom(cmd *cobra.Command, args []string) error {
 		IdentityPath: flagIdentityPath,
 		Metadata: types.LeaseMetadata{
 			Description: flagDescription,
+			Thumbnail:   flagThumbnail,
 			Tags:        utils.SplitCSV(flagTags),
 			Owner:       flagOwner,
 			Hide:        flagHide,
